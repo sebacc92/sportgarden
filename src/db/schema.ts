@@ -50,6 +50,9 @@ export const bookings = sqliteTable("bookings", {
   })
     .notNull()
     .default("PENDING"),
+  preferenceId: text("preference_id"),
+  paymentId: text("payment_id"),
+  extras: text("extras", { mode: "json" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(strftime('%s', 'now'))`),

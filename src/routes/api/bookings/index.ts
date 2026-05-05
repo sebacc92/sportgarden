@@ -94,6 +94,7 @@ export const useGuestBookingAction = routeAction$(
       totalPrice,
       paidAmount: 0,
       paymentStatus: "PENDING",
+      extras: data.extras ? JSON.stringify(data.extras) : null,
     });
 
     await db.insert(guestRequests).values({
@@ -101,6 +102,7 @@ export const useGuestBookingAction = routeAction$(
       bookingId,
       name: data.guestName,
       phone: data.guestPhone,
+      email: data.guestEmail || null,
     });
 
     return { success: true, bookingId };
@@ -109,9 +111,11 @@ export const useGuestBookingAction = routeAction$(
     pitchId: z.string().min(1),
     guestName: z.string().min(2),
     guestPhone: z.string().min(8),
-    date: z.string(), // YYYY-MM-DD
-    time: z.string(), // HH:mm
-    duration: z.coerce.number().min(30), // minutes
+    guestEmail: z.string().email().optional().or(z.literal("")),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido"),
+    time: z.string().regex(/^\d{2}:\d{2}$/, "Formato de hora inválido"),
+    duration: z.coerce.number().min(30),
+    extras: z.array(z.string()).optional(),
   })
 );
 
@@ -188,15 +192,17 @@ export const useUserBookingAction = routeAction$(
       totalPrice,
       paidAmount,
       paymentStatus,
+      extras: data.extras ? JSON.stringify(data.extras) : null,
     });
 
     return { success: true, bookingId };
   },
   zod$({
     pitchId: z.string().min(1),
-    date: z.string(), // YYYY-MM-DD
-    time: z.string(), // HH:mm
-    duration: z.coerce.number().min(30), // minutes
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido"),
+    time: z.string().regex(/^\d{2}:\d{2}$/, "Formato de hora inválido"),
+    duration: z.coerce.number().min(30),
     paymentOption: z.enum(["LATER", "SENA", "TOTAL"]),
+    extras: z.array(z.string()).optional(),
   })
 );

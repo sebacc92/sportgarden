@@ -54,12 +54,18 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
   const dateStr = requestEvent.url.searchParams.get("date");
   const viewStr = requestEvent.url.searchParams.get("view") || "day"; // "day", "week", "month"
 
+  if (!dateStr) {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    throw requestEvent.redirect(302, `?date=${yyyy}-${mm}-${dd}&view=${viewStr}`);
+  }
+
   let selectedDate = new Date();
-  if (dateStr) {
-    const [year, month, day] = dateStr.split("-").map(Number);
-    if (year && month && day) {
-      selectedDate = new Date(year, month - 1, day);
-    }
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (year && month && day) {
+    selectedDate = new Date(year, month - 1, day);
   }
 
   let startDate = new Date(selectedDate);
@@ -135,9 +141,9 @@ export default component$(() => {
   const updateStatusAction = useUpdateBookingStatusAction();
   const nav = useNavigate();
 
-  const CALENDAR_START_HOUR = 0; // 00:00
-  const CALENDAR_END_HOUR = 24; // 00:00 next day
-  const PIXELS_PER_HOUR = 60; // Adjusted for 24h view
+  const CALENDAR_START_HOUR = 0;
+  const CALENDAR_END_HOUR = 24;
+  const PIXELS_PER_HOUR = 140;
 
   const hours = Array.from(
     { length: CALENDAR_END_HOUR - CALENDAR_START_HOUR },
@@ -390,6 +396,7 @@ export default component$(() => {
                       >
                         {pitchBookings.map(({ booking, user, guest }) => {
                           const customerName = guest?.name || user?.name || "Desconocido";
+                          const customerPhone = guest?.phone || user?.phone || "";
                           return (
                             <BookingSlot
                               key={booking.id}
@@ -398,6 +405,7 @@ export default component$(() => {
                               endTime={booking.endTime}
                               status={booking.status}
                               customerName={customerName}
+                              customerPhone={customerPhone}
                               calendarStartHour={CALENDAR_START_HOUR}
                               pixelsPerHour={PIXELS_PER_HOUR}
                               onClick$={handleBookingClick}
@@ -496,6 +504,7 @@ export default component$(() => {
                       >
                         {dayBookings.map(({ booking, user, guest }) => {
                           const customerName = guest?.name || user?.name || "Desconocido";
+                          const customerPhone = guest?.phone || user?.phone || "";
                           const pitchName = calendarData.value.pitches.find(p => p.id === booking.pitchId)?.name || "Cancha";
                           return (
                             <BookingSlot
@@ -505,6 +514,7 @@ export default component$(() => {
                               endTime={booking.endTime}
                               status={booking.status}
                               customerName={customerName}
+                              customerPhone={customerPhone}
                               pitchName={pitchName}
                               calendarStartHour={CALENDAR_START_HOUR}
                               pixelsPerHour={PIXELS_PER_HOUR}

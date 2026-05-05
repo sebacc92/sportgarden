@@ -6,6 +6,7 @@ export type BookingSlotProps = {
   endTime: Date;
   status: "PENDING_APPROVAL" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
   customerName: string;
+  customerPhone?: string | null;
   pitchName?: string;
   calendarStartHour: number;
   pixelsPerHour: number;
@@ -38,7 +39,7 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
     <div
       onClick$={() => props.onClick$ && props.onClick$(props.id)}
       class={[
-        "absolute left-1 right-1 rounded-lg border-l-4 p-2 text-xs shadow-sm overflow-hidden flex flex-col transition-all hover:z-20 hover:shadow-md hover:scale-[1.02] cursor-pointer",
+        "absolute left-1 right-1 rounded-lg border-l-4 p-2.5 text-sm shadow-sm overflow-hidden flex flex-col transition-all hover:z-20 hover:shadow-md hover:scale-[1.02] cursor-pointer",
         statusColors[props.status],
       ]}
       style={{
@@ -48,16 +49,21 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
     >
       <div class="flex justify-between items-start gap-1">
         <div class="font-bold truncate leading-tight flex-1">{props.customerName}</div>
-        <div class="text-[9px] font-black uppercase tracking-wider opacity-60 shrink-0 bg-black/5 px-1 rounded">
+        <div class="text-[10px] font-black uppercase tracking-wider opacity-60 shrink-0 bg-black/5 px-1.5 py-0.5 rounded">
           {statusLabels[props.status]}
         </div>
       </div>
+      {props.customerPhone && (
+        <div class="text-xs opacity-80 truncate">
+          {props.customerPhone}
+        </div>
+      )}
       {props.pitchName && (
-        <div class="text-[10px] font-semibold opacity-70 mt-0.5 truncate uppercase tracking-tight">
+        <div class="text-xs font-semibold opacity-70 mt-0.5 truncate uppercase tracking-tight">
           {props.pitchName}
         </div>
       )}
-      <div class="opacity-70 mt-auto font-medium text-[10px]">
+      <div class="opacity-70 mt-auto font-medium text-xs">
         {props.startTime.toLocaleTimeString("es-AR", {
           hour: "2-digit",
           minute: "2-digit",

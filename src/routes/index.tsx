@@ -59,6 +59,24 @@ export default component$(() => {
   const occupiedSlots = useSignal<{startTime: string, endTime: string}[]>([]);
   const isCheckingAvailability = useSignal(false);
   
+  const currentStep = useSignal(1);
+  const selectedExtras = useSignal<string[]>([]);
+
+  const toggleExtra = $((extra: string) => {
+    if (selectedExtras.value.includes(extra)) {
+      selectedExtras.value = selectedExtras.value.filter((e) => e !== extra);
+    } else {
+      selectedExtras.value = [...selectedExtras.value, extra];
+    }
+  });
+
+  const nextStep = $(() => {
+    if (currentStep.value < 3) currentStep.value++;
+  });
+  const prevStep = $(() => {
+    if (currentStep.value > 1) currentStep.value--;
+  });
+  
   // Keep track of selected pitch for calculation
   const selectedPitch = activePitches.value.find(p => p.id === selectedPitchId.value);
   const durationStr = useSignal("60");
@@ -75,6 +93,11 @@ export default component$(() => {
   const closeBookingModal = $(() => {
     isModalOpen.value = false;
     selectedPitchId.value = "";
+    dateStr.value = "";
+    timeStr.value = "";
+    durationStr.value = "60";
+    currentStep.value = 1;
+    selectedExtras.value = [];
   });
 
   useTask$(({ track }) => {
@@ -333,47 +356,147 @@ export default component$(() => {
               </div>
             ) : (
               <div>
-                {!user.value && (
-                  <div class="bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-xl mb-6 p-4 text-sm leading-relaxed">
-                    <strong class="font-black block mb-1">Atención:</strong> 
-                    Como invitado, tu solicitud deberá ser aprobada por el club.<br/>
-                    <span class="opacity-90">Para confirmar al instante y acceder a pagos online, necesitas <Link href="/auth/register" class="font-bold underline underline-offset-2 hover:text-amber-200 transition-colors">crear usuario</Link>.</span>
-                  </div>
-                )}
+                {/* Stepper Header */}
+                <div class="flex items-center justify-between mb-8 relative px-4">
+                  <div class="absolute left-8 right-8 top-1/2 -translate-y-1/2 h-1 bg-slate-800 -z-10 rounded-full"></div>
+                  <div class="absolute left-8 top-1/2 -translate-y-1/2 h-1 bg-emerald-500 -z-10 transition-all duration-300 rounded-full" style={{ width: `calc(${(currentStep.value - 1) * 50}% - 2rem)` }}></div>
+                  
+                  {[1, 2, 3].map((step) => (
+                    <div key={step} class={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black border-4 border-slate-900 transition-colors ${currentStep.value >= step ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
 
-                {user.value ? (
-                  <Form action={userAction} class="space-y-6">
-                    <input type="hidden" name="pitchId" value={selectedPitchId.value} />
+                <Form action={(user.value ? userAction : guestAction) as any} class="space-y-6">
+                  <input type="hidden" name="pitchId" value={selectedPitchId.value} />
+                  <input type="hidden" name="time" value={timeStr.value} />
+                  {selectedExtras.value.map((ext) => (
+                    <input key={ext} type="hidden" name="extras[]" value={ext} />
+                  ))}
 
-                    {userAction.value?.message && (
-                      <Alert.Root look="alert" class="bg-red-500/10 border-red-500/20 text-red-400 rounded-xl">
-                        <Alert.Description>{userAction.value?.message}</Alert.Description>
-                      </Alert.Root>
-                    )}
+                  {((userAction.value as any)?.message || (guestAction.value as any)?.message) && (
+                    <Alert.Root look="alert" class="bg-red-500/10 border-red-500/20 text-red-400 rounded-xl">
+                      <Alert.Description>{(userAction.value as any)?.message || (guestAction.value as any)?.message}</Alert.Description>
+                    </Alert.Root>
+                  )}
 
-                    <div class="grid grid-cols-2 gap-4">
-                      <div>
-                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Fecha</label>
-                        <input type="date" name="date" required bind:value={dateStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium" />
+                  {/* Step 1: Horario */}
+                  {currentStep.value === 1 && (
+                    <div class="space-y-6 animate-fade-in">
+                      {selectedPitch && (
+                        <div class="bg-slate-800/50 p-4 rounded-xl border border-white/5 flex justify-between items-center">
+                          <div>
+                            <h4 class="text-white font-bold">{selectedPitch.name}</h4>
+                            <span class="text-xs text-emerald-400 font-black tracking-widest uppercase">{selectedPitch.type}</span>
+                          </div>
+                          <div class="text-right">
+                            <span class="block text-sm text-slate-400">Precio Base</span>
+                            <span class="text-white font-bold">${selectedPitch.pricePerHour}/hr</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {!user.value && (
+                        <div class="bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-xl p-4 text-sm leading-relaxed">
+                          <strong class="font-black block mb-1">Atención Invitado:</strong> 
+                          Tu solicitud requerirá aprobación. Para confirmar al instante, <Link href="/auth/register" class="font-bold underline hover:text-amber-200">crea un usuario</Link>.
+                        </div>
+                      )}
+
+                      <div class="grid grid-cols-2 gap-4">
+                        <div>
+                          <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Fecha</label>
+                          <input type="date" name="date" required bind:value={dateStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium" />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Duración</label>
+                          <select name="duration" required bind:value={durationStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium appearance-none">
+                            <option value="60">60 min (1h)</option>
+                            <option value="90">90 min (1.5h)</option>
+                            <option value="120">120 min (2h)</option>
+                          </select>
+                        </div>
                       </div>
-                      <div>
-                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Duración</label>
-                        <select name="duration" required bind:value={durationStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium appearance-none">
-                          <option value="60">60 minutos (1 hora)</option>
-                          <option value="90">90 minutos (1.5 horas)</option>
-                          <option value="120">120 minutos (2 horas)</option>
-                        </select>
+
+                      {timeGridUI}
+
+                      <div class="pt-4 border-t border-white/5">
+                        <Button type="button" onClick$={nextStep} disabled={!timeStr.value || isSubmitDisabled} look="primary" class="w-full py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20">
+                          Siguiente Paso
+                        </Button>
                       </div>
                     </div>
+                  )}
 
-                    <input type="hidden" name="time" value={timeStr.value} />
-                    {timeGridUI}
+                  {/* Step 2: Contacto */}
+                  {currentStep.value === 2 && (
+                    <div class="space-y-6 animate-fade-in">
+                      <h4 class="text-lg font-black text-white text-center">Tus Datos</h4>
+                      
+                      {!user.value ? (
+                        <div class="space-y-4">
+                          <div>
+                            <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Nombre Completo *</label>
+                            <input type="text" name="guestName" placeholder="Ej: Juan Pérez" required class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Teléfono (WhatsApp) *</label>
+                            <input type="tel" name="guestPhone" placeholder="+54 9 11 1234-5678" required class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
+                          </div>
+                          <div>
+                            <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Email (Opcional)</label>
+                            <input type="email" name="guestEmail" placeholder="juan@ejemplo.com" class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div class="bg-slate-800/50 p-6 rounded-xl border border-emerald-500/20 text-center">
+                          <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-black">
+                            U
+                          </div>
+                          <h5 class="text-white font-bold text-lg">Usuario Registrado</h5>
+                          <p class="text-emerald-400 text-sm mt-1">Usaremos tu cuenta para la reserva</p>
+                        </div>
+                      )}
 
-                    <div class="space-y-4 pt-4 border-t border-white/5">
-                      <div class="bg-slate-800/50 rounded-xl p-4 border border-emerald-500/20">
-                        <div class="flex justify-between items-center mb-4">
+                      <div class="flex gap-4 pt-4 border-t border-white/5">
+                        <Button type="button" onClick$={prevStep} look="secondary" class="flex-[1] py-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold uppercase tracking-wider transition-colors">
+                          Atrás
+                        </Button>
+                        <Button type="button" onClick$={nextStep} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
+                          Siguiente Paso
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Step 3: Extras y Pago */}
+                  {currentStep.value === 3 && (
+                    <div class="space-y-6 animate-fade-in">
+                      <div>
+                        <h4 class="text-lg font-black text-white mb-4">Servicios Adicionales (Opcional)</h4>
+                        <div class="grid grid-cols-3 gap-2">
+                          {['⚽ Pelota Extra', '👕 Camisetas', '🥤 Pack Bebidas'].map((extra) => {
+                            const isSelected = selectedExtras.value.includes(extra);
+                            return (
+                              <button
+                                key={extra}
+                                type="button"
+                                onClick$={() => toggleExtra(extra)}
+                                class={`p-3 rounded-xl border transition-all flex flex-col items-center gap-2 ${isSelected ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-800 border-white/10 text-slate-400 hover:border-emerald-500/50'}`}
+                              >
+                                <span class="text-2xl">{extra.split(' ')[0]}</span>
+                                <span class="text-center text-[10px] font-bold uppercase leading-tight">{extra.substring(2)}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div class="bg-slate-800/50 rounded-xl p-4 border border-emerald-500/20 mt-6">
+                        <div class="flex justify-between items-center mb-4 pb-4 border-b border-white/5">
                           <span class="text-sm font-medium text-slate-300">Total a pagar:</span>
-                          <span class="text-xl font-black text-white">${totalPrice}</span>
+                          <span class="text-2xl font-black text-white">${totalPrice}</span>
                         </div>
                         
                         <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Opciones de Pago</label>
@@ -398,60 +521,18 @@ export default component$(() => {
                           </label>
                         </div>
                       </div>
-                    </div>
 
-                    <div class="pt-4">
-                      <Button type="submit" disabled={userAction.isRunning || isSubmitDisabled || !timeStr.value} look="primary" class="w-full py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed">
-                        {userAction.isRunning ? "Procesando..." : "Confirmar Reserva"}
-                      </Button>
-                    </div>
-                  </Form>
-                ) : (
-                  <Form action={guestAction} class="space-y-6">
-                    <input type="hidden" name="pitchId" value={selectedPitchId.value} />
-
-                    {guestAction.value?.message && (
-                      <Alert.Root look="alert" class="bg-red-500/10 border-red-500/20 text-red-400 rounded-xl">
-                        <Alert.Description>{guestAction.value?.message}</Alert.Description>
-                      </Alert.Root>
-                    )}
-
-                    <div class="grid grid-cols-2 gap-4">
-                      <div>
-                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Fecha</label>
-                        <input type="date" name="date" required bind:value={dateStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium" />
-                      </div>
-                      <div>
-                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Duración</label>
-                        <select name="duration" required bind:value={durationStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium appearance-none">
-                          <option value="60">60 minutos (1 hora)</option>
-                          <option value="90">90 minutos (1.5 horas)</option>
-                          <option value="120">120 minutos (2 horas)</option>
-                        </select>
+                      <div class="flex gap-4 pt-4 border-t border-white/5">
+                        <Button type="button" onClick$={prevStep} look="secondary" class="flex-[1] py-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold uppercase tracking-wider transition-colors">
+                          Atrás
+                        </Button>
+                        <Button type="submit" disabled={userAction.isRunning || guestAction.isRunning} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
+                          {(userAction.isRunning || guestAction.isRunning) ? "Procesando..." : "Confirmar Reserva"}
+                        </Button>
                       </div>
                     </div>
-
-                    <input type="hidden" name="time" value={timeStr.value} />
-                    {timeGridUI}
-
-                    <div class="space-y-4 pt-4 border-t border-white/5">
-                      <div>
-                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Tu Nombre Completo</label>
-                        <input type="text" name="guestName" placeholder="Ej: Juan Pérez" required class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium" />
-                      </div>
-                      <div>
-                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Teléfono (WhatsApp)</label>
-                        <input type="tel" name="guestPhone" placeholder="+54 9 11 1234-5678" required class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium" />
-                      </div>
-                    </div>
-
-                    <div class="pt-4">
-                      <Button type="submit" disabled={guestAction.isRunning || isSubmitDisabled || !timeStr.value} look="primary" class="w-full py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed">
-                        {guestAction.isRunning ? "Procesando..." : "Enviar Solicitud"}
-                      </Button>
-                    </div>
-                  </Form>
-                )}
+                  )}
+                </Form>
               </div>
             )}
           </div>
