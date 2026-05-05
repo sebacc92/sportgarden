@@ -5,7 +5,8 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(), // We can use UUIDs or nanoids
   name: text("name").notNull(),
-  email: text("email"), // Can be null if it's just a guest who provided a phone
+  email: text("email").unique(), // Can be null if it's just a guest who provided a phone
+  password: text("password"), // Hashed password, null for guests
   phone: text("phone"),
   role: text("role", { enum: ["ADMIN", "REGISTERED", "GUEST"] })
     .notNull()
@@ -22,6 +23,8 @@ export const pitches = sqliteTable("pitches", {
   type: text("type", { enum: ["F5", "F7", "F9", "F11"] }).notNull(),
   isCovered: integer("is_covered", { mode: "boolean" }).notNull().default(false),
   pricePerHour: real("price_per_hour").notNull(),
+  peakHourStart: text("peak_hour_start"), // ej: "18:00"
+  peakPricePerHour: real("peak_price_per_hour"),
   reservationPercentage: integer("reservation_percentage").notNull().default(0), // % to charge in advance (e.g., 50)
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
 });

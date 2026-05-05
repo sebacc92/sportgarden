@@ -25,6 +25,8 @@ export const useCreatePitchAction = routeAction$(
       type: data.type as "F5" | "F7" | "F9" | "F11",
       isCovered: data.isCovered === "on",
       pricePerHour: Number(data.pricePerHour),
+      peakHourStart: data.peakHourStart || null,
+      peakPricePerHour: data.peakPricePerHour ? Number(data.peakPricePerHour) : null,
       reservationPercentage: Number(data.reservationPercentage),
       isActive: true,
     });
@@ -35,6 +37,8 @@ export const useCreatePitchAction = routeAction$(
     type: z.enum(["F5", "F7", "F9", "F11"]),
     isCovered: z.string().optional(), // 'on' or undefined
     pricePerHour: z.coerce.number().min(0),
+    peakHourStart: z.string().optional(),
+    peakPricePerHour: z.coerce.number().optional(),
     reservationPercentage: z.coerce.number().min(0).max(100),
   })
 );
@@ -49,6 +53,8 @@ export const useUpdatePitchAction = routeAction$(
         type: data.type as "F5" | "F7" | "F9" | "F11",
         isCovered: data.isCovered === "on",
         pricePerHour: Number(data.pricePerHour),
+        peakHourStart: data.peakHourStart || null,
+        peakPricePerHour: data.peakPricePerHour ? Number(data.peakPricePerHour) : null,
         reservationPercentage: Number(data.reservationPercentage),
       })
       .where(eq(pitches.id, data.id));
@@ -61,6 +67,8 @@ export const useUpdatePitchAction = routeAction$(
     type: z.enum(["F5", "F7", "F9", "F11"]),
     isCovered: z.string().optional(),
     pricePerHour: z.coerce.number().min(0),
+    peakHourStart: z.string().optional(),
+    peakPricePerHour: z.coerce.number().optional(),
     reservationPercentage: z.coerce.number().min(0).max(100),
   })
 );
@@ -92,7 +100,7 @@ export const useDeletePitchAction = routeAction$(
     try {
       await db.delete(pitches).where(eq(pitches.id, data.id));
       return { success: true };
-    } catch (e) {
+    } catch {
       return { 
         success: false, 
         message: "No se puede borrar la cancha porque tiene reservas asociadas. Prueba deshabilitándola." 
@@ -103,6 +111,14 @@ export const useDeletePitchAction = routeAction$(
     id: z.string()
   })
 );
+
+// Loading Spinner Component
+export const LoadingSpinner = component$(({ class: className }: { class?: string }) => (
+  <svg class={["animate-spin", className]} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+));
 
 // 3. UI Component
 export default component$(() => {
@@ -118,11 +134,13 @@ export default component$(() => {
   const pitchToDelete = useSignal<{ id: string; name: string } | null>(null);
 
   // State to handle edit mode
-  const editingPitch = useStore<{ id: string | null; name: string; type: string; pricePerHour: number; reservationPercentage: number; isCovered: boolean }>({
+  const editingPitch = useStore<{ id: string | null; name: string; type: string; pricePerHour: number; peakHourStart: string; peakPricePerHour: number | null; reservationPercentage: number; isCovered: boolean }>({
     id: null,
     name: "",
     type: "F5",
     pricePerHour: 0,
+    peakHourStart: "",
+    peakPricePerHour: null,
     reservationPercentage: 0,
     isCovered: false,
   });
@@ -132,6 +150,8 @@ export default component$(() => {
     editingPitch.name = "";
     editingPitch.type = "F5";
     editingPitch.pricePerHour = 0;
+    editingPitch.peakHourStart = "";
+    editingPitch.peakPricePerHour = null;
     editingPitch.reservationPercentage = 0;
     editingPitch.isCovered = false;
   });
@@ -146,6 +166,8 @@ export default component$(() => {
     editingPitch.name = pitch.name;
     editingPitch.type = pitch.type;
     editingPitch.pricePerHour = pitch.pricePerHour;
+    editingPitch.peakHourStart = pitch.peakHourStart || "";
+    editingPitch.peakPricePerHour = pitch.peakPricePerHour;
     editingPitch.reservationPercentage = pitch.reservationPercentage;
     editingPitch.isCovered = pitch.isCovered;
     isFormModalOpen.value = true;
@@ -190,76 +212,97 @@ export default component$(() => {
         </h2>
         
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {pitchesData.value.map((pitch, index) => (
-            <div 
-              key={pitch.id} 
-              class={["group p-6 rounded-3xl border shadow-sm transition-all relative overflow-hidden", pitch.isActive ? "bg-white border-slate-200" : "bg-slate-100 border-slate-300 opacity-80"]}
-            >
-              {/* Decorative Number Badge */}
-              <div class="absolute top-0 right-0 w-16 h-16 bg-slate-50 flex items-center justify-center rounded-bl-3xl z-0 transition-colors group-hover:bg-slate-100">
-                 <span class="text-4xl font-black text-slate-200 group-hover:text-slate-300 transition-colors leading-none">{index + 1}</span>
-              </div>
-
-              <div class="relative z-10">
-                <div class="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 class="font-black text-xl text-slate-800 mb-1 leading-tight">
-                      {pitch.name}
-                    </h3>
-                    <div class="flex flex-wrap gap-2">
-                      <span class="bg-slate-800 text-white px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest">{pitch.type}</span>
-                      {pitch.isCovered && (
-                        <span class="text-blue-600 font-black bg-blue-50 px-2 py-0.5 rounded-lg text-[10px] uppercase tracking-widest border border-blue-100">Techada</span>
-                      )}
-                      {!pitch.isActive && (
-                        <span class="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] uppercase font-black rounded-lg tracking-widest border border-red-200">Inactiva</span>
-                      )}
-                    </div>
-                  </div>
+          {pitchesData.value.map((pitch, index) => {
+            const isToggling = toggleStatusAction.isRunning && toggleStatusAction.formData?.get("id") === pitch.id;
+            
+            return (
+              <div 
+                key={pitch.id} 
+                class={["group p-6 rounded-3xl border shadow-sm transition-all relative overflow-hidden", pitch.isActive ? "bg-white border-slate-200" : "bg-slate-100 border-slate-300 opacity-80"]}
+              >
+                {/* Decorative Number Badge */}
+                <div class="absolute top-0 right-0 w-16 h-16 bg-slate-50 flex items-center justify-center rounded-bl-3xl z-0 transition-colors group-hover:bg-slate-100">
+                  <span class="text-4xl font-black text-slate-200 group-hover:text-slate-300 transition-colors leading-none">{index + 1}</span>
                 </div>
 
-                <div class="bg-slate-50/50 rounded-2xl p-4 mb-6 border border-slate-100">
-                  <div class="flex justify-between items-end">
+                <div class="relative z-10">
+                  <div class="flex justify-between items-start mb-6">
                     <div>
-                      <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Precio x Hora</div>
-                      <div class="text-2xl font-black text-slate-800">${pitch.pricePerHour}</div>
-                    </div>
-                    <div class="text-right">
-                      <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Seña</div>
-                      <div class="text-lg font-black text-slate-600">{pitch.reservationPercentage}%</div>
+                      <h3 class="font-black text-xl text-slate-800 mb-1 leading-tight">
+                        {pitch.name}
+                      </h3>
+                      <div class="flex flex-wrap gap-2">
+                        <span class="bg-slate-800 text-white px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest">{pitch.type}</span>
+                        {pitch.isCovered && (
+                          <span class="text-blue-600 font-black bg-blue-50 px-2 py-0.5 rounded-lg text-[10px] uppercase tracking-widest border border-blue-100">Techada</span>
+                        )}
+                        {!pitch.isActive && (
+                          <span class="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] uppercase font-black rounded-lg tracking-widest border border-red-200">Inactiva</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div class="flex gap-3">
-                  <Button 
-                    onClick$={() => openEditModal(pitch)}
-                    look="outline"
-                    size="sm"
-                    class="flex-1 rounded-xl font-bold border-slate-200 hover:bg-slate-50 text-slate-700"
-                  >
-                    Editar
-                  </Button>
-                  <Form action={toggleStatusAction} class="flex-1">
-                    <input type="hidden" name="id" value={pitch.id} />
+                  <div class="bg-slate-50/50 rounded-2xl p-4 mb-6 border border-slate-100">
+                    <div class="flex justify-between items-end mb-2">
+                      <div>
+                        <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Precio x Hora</div>
+                        <div class="text-2xl font-black text-slate-800">${pitch.pricePerHour}</div>
+                      </div>
+                      <div class="text-right">
+                        <div class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Seña</div>
+                        <div class="text-lg font-black text-slate-600">{pitch.reservationPercentage}%</div>
+                      </div>
+                    </div>
+                    {pitch.peakHourStart && pitch.peakPricePerHour ? (
+                      <div class="pt-2 mt-2 border-t border-slate-200">
+                        <div class="flex justify-between items-center">
+                          <div class="text-xs text-slate-500 font-bold">
+                            Tarifa Pico (desde {pitch.peakHourStart})
+                          </div>
+                          <div class="text-sm font-black text-amber-600">
+                            ${pitch.peakPricePerHour}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div class="flex gap-3">
                     <Button 
-                      type="submit"
+                      onClick$={() => openEditModal(pitch)}
                       look="outline"
                       size="sm"
-                      class={[
-                        "w-full rounded-xl font-bold border-2 transition-all", 
-                        pitch.isActive 
-                          ? "border-amber-100 text-amber-700 hover:bg-amber-50 hover:border-amber-200" 
-                          : "border-emerald-100 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200"
-                      ]}
+                      class="flex-1 rounded-xl font-bold border-slate-200 hover:bg-slate-50 text-slate-700"
                     >
-                      {pitch.isActive ? "Deshabilitar" : "Habilitar"}
+                      Editar
                     </Button>
-                  </Form>
+                    <Form action={toggleStatusAction} class="flex-1">
+                      <input type="hidden" name="id" value={pitch.id} />
+                      <Button 
+                        type="submit"
+                        look="outline"
+                        size="sm"
+                        disabled={isToggling}
+                        class={[
+                          "w-full rounded-xl font-bold border-2 transition-all flex items-center justify-center gap-2", 
+                          pitch.isActive 
+                            ? "border-amber-100 text-amber-700 hover:bg-amber-50 hover:border-amber-200" 
+                            : "border-emerald-100 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200"
+                        ]}
+                      >
+                        {isToggling ? (
+                          <LoadingSpinner class="w-4 h-4" />
+                        ) : (
+                          pitch.isActive ? "Deshabilitar" : "Habilitar"
+                        )}
+                      </Button>
+                    </Form>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           
           {pitchesData.value.length === 0 && (
             <div class="col-span-full p-16 text-center bg-white border-2 border-dashed border-slate-200 rounded-[2rem]">
@@ -358,6 +401,31 @@ export default component$(() => {
               </div>
             </div>
 
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Inicio Horario Pico</label>
+                <input 
+                  type="time" 
+                  name="peakHourStart" 
+                  value={editingPitch.peakHourStart}
+                  class="w-full px-4 py-4 bg-amber-50/50 border border-amber-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all font-bold text-amber-900"
+                />
+              </div>
+              
+              <div>
+                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Precio Horario Pico ($)</label>
+                <input 
+                  type="number" 
+                  name="peakPricePerHour" 
+                  value={editingPitch.peakPricePerHour || ""}
+                  min="0"
+                  step="0.01"
+                  placeholder="Ej: 25000"
+                  class="w-full px-4 py-4 bg-amber-50/50 border border-amber-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all font-bold text-amber-900 placeholder:text-amber-300"
+                />
+              </div>
+            </div>
+
             <div class="pt-4 flex gap-3">
               <Button 
                 type="button" 
@@ -370,9 +438,14 @@ export default component$(() => {
               <Button 
                 type="submit" 
                 look="primary"
-                class="flex-1 bg-slate-800 text-white hover:bg-slate-900 rounded-2xl py-4 font-black uppercase tracking-widest"
+                disabled={createPitchAction.isRunning || updatePitchAction.isRunning}
+                class="flex-1 bg-slate-800 text-white hover:bg-slate-900 rounded-2xl py-4 font-black uppercase tracking-widest flex items-center justify-center gap-2"
               >
-                {editingPitch.id ? "Guardar" : "Crear"}
+                {(createPitchAction.isRunning || updatePitchAction.isRunning) ? (
+                  <LoadingSpinner class="w-5 h-5" />
+                ) : (
+                  editingPitch.id ? "Guardar" : "Crear"
+                )}
               </Button>
             </div>
           </Form>
@@ -441,9 +514,14 @@ export default component$(() => {
               <Button 
                 type="submit" 
                 look="primary" 
-                class="w-full bg-red-600 text-white hover:bg-red-700 rounded-2xl font-black uppercase tracking-widest"
+                disabled={deleteAction.isRunning}
+                class="w-full bg-red-600 text-white hover:bg-red-700 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2"
               >
-                Borrar
+                {deleteAction.isRunning ? (
+                  <LoadingSpinner class="w-5 h-5" />
+                ) : (
+                  "Borrar"
+                )}
               </Button>
             </Form>
           </div>

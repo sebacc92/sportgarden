@@ -3,19 +3,49 @@ import { eq, and, lt, gt, inArray } from "drizzle-orm";
 import { getDB } from "~/db";
 import { bookings, guestRequests, pitches } from "~/db/schema";
 
+const parseDateTime = (dateStr: string, timeStr: string) => {
+  return new Date(`${dateStr}T${timeStr}:00`);
+};
+
+export const calculateDynamicPrice = (
+  startTimeDate: Date,
+  durationMins: number,
+  pricePerHour: number,
+  peakHourStart: string | null,
+  peakPricePerHour: number | null
+) => {
+  if (!peakHourStart || !peakPricePerHour) {
+    return pricePerHour * (durationMins / 60);
+  }
+
+  const startHour = startTimeDate.getHours() + startTimeDate.getMinutes() / 60;
+  
+  const [peakH, peakM] = peakHourStart.split(":").map(Number);
+  const peakStartHour = peakH + peakM / 60;
+
+  let normalHours = 0;
+  let peakHours = 0;
+
+  // We loop over each 30 minute block
+  for (let i = 0; i < durationMins; i += 30) {
+    const currentBlockStart = startHour + (i / 60);
+    if (currentBlockStart >= peakStartHour) {
+      peakHours += 0.5;
+    } else {
+      normalHours += 0.5;
+    }
+  }
+
+  return (normalHours * pricePerHour) + (peakHours * peakPricePerHour);
+};
+
 // Action for Guest Users
 export const useGuestBookingAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const startTimeDate = new Date(data.startTime);
-    const endTimeDate = new Date(data.endTime);
-
-    // Validate times
-    if (endTimeDate <= startTimeDate) {
-      return requestEvent.fail(400, {
-        message: "End time must be after start time",
-      });
-    }
+    
+    const startTimeDate = parseDateTime(data.date, data.time);
+    const endTimeDate = new Date(startTimeDate.getTime() + data.duration * 60000);
 
     // Check if pitch exists to calculate price
     const pitch = await db.query.pitches.findFirst({
@@ -28,13 +58,33 @@ export const useGuestBookingAction = routeAction$(
       });
     }
 
-    const durationHours =
-      (endTimeDate.getTime() - startTimeDate.getTime()) / (1000 * 60 * 60);
-    const totalPrice = pitch.pricePerHour * durationHours;
+    // Check for overlap
+    const overlappingBooking = await db.query.bookings.findFirst({
+      where: and(
+        eq(bookings.pitchId, data.pitchId),
+        lt(bookings.startTime, endTimeDate),
+        gt(bookings.endTime, startTimeDate),
+        inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"])
+      ),
+    });
+
+    if (overlappingBooking) {
+      return requestEvent.fail(409, {
+        message: "La cancha ya está reservada en ese horario.",
+      });
+    }
+
+    const totalPrice = calculateDynamicPrice(
+      startTimeDate,
+      data.duration,
+      pitch.pricePerHour,
+      pitch.peakHourStart,
+      pitch.peakPricePerHour
+    );
 
     const bookingId = crypto.randomUUID();
 
-    // Create booking and guest request in a transaction or sequentially
+    // Create booking and guest request
     await db.insert(bookings).values({
       id: bookingId,
       pitchId: data.pitchId,
@@ -51,7 +101,6 @@ export const useGuestBookingAction = routeAction$(
       bookingId,
       name: data.guestName,
       phone: data.guestPhone,
-      email: data.guestEmail, // Optional
     });
 
     return { success: true, bookingId };
@@ -60,9 +109,9 @@ export const useGuestBookingAction = routeAction$(
     pitchId: z.string().min(1),
     guestName: z.string().min(2),
     guestPhone: z.string().min(8),
-    guestEmail: z.string().email().optional().or(z.literal("")),
-    startTime: z.string().datetime(), // ISO string expected
-    endTime: z.string().datetime(),
+    date: z.string(), // YYYY-MM-DD
+    time: z.string(), // HH:mm
+    duration: z.coerce.number().min(30), // minutes
   })
 );
 
@@ -71,21 +120,14 @@ export const useUserBookingAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
     
-    // TODO: Replace with actual session check when auth is implemented
-    // Mocking user ID for now
-    const userId = requestEvent.sharedMap.get("userId") || "MOCK_USER_ID";
-    if (!userId) {
-       return requestEvent.fail(401, { message: "Unauthorized" });
+    const user = requestEvent.sharedMap.get("user");
+    if (!user) {
+       return requestEvent.fail(401, { message: "Unauthorized. Please log in." });
     }
+    const userId = user.userId;
 
-    const startTimeDate = new Date(data.startTime);
-    const endTimeDate = new Date(data.endTime);
-
-    if (endTimeDate <= startTimeDate) {
-      return requestEvent.fail(400, {
-        message: "End time must be after start time",
-      });
-    }
+    const startTimeDate = parseDateTime(data.date, data.time);
+    const endTimeDate = new Date(startTimeDate.getTime() + data.duration * 60000);
 
     // Check for overlap
     const overlappingBooking = await db.query.bookings.findFirst({
@@ -99,7 +141,7 @@ export const useUserBookingAction = routeAction$(
 
     if (overlappingBooking) {
       return requestEvent.fail(409, {
-        message: "The pitch is already booked for this time slot.",
+        message: "La cancha ya está reservada en ese horario.",
       });
     }
 
@@ -113,13 +155,29 @@ export const useUserBookingAction = routeAction$(
       });
     }
 
-    const durationHours =
-      (endTimeDate.getTime() - startTimeDate.getTime()) / (1000 * 60 * 60);
-    const totalPrice = pitch.pricePerHour * durationHours;
+    const totalPrice = calculateDynamicPrice(
+      startTimeDate,
+      data.duration,
+      pitch.pricePerHour,
+      pitch.peakHourStart,
+      pitch.peakPricePerHour
+    );
+    
+    // Calculate paid amount based on preference
+    let paidAmount = 0;
+    let paymentStatus: "PENDING" | "PARTIAL" | "PAID" = "PENDING";
+    
+    if (data.paymentOption === "SENA") {
+      paidAmount = (pitch.reservationPercentage / 100) * totalPrice;
+      paymentStatus = "PARTIAL";
+    } else if (data.paymentOption === "TOTAL") {
+      paidAmount = totalPrice;
+      paymentStatus = "PAID";
+    }
 
     const bookingId = crypto.randomUUID();
 
-    // Insert booking
+    // Insert booking (auto-confirmed for registered users in this flow)
     await db.insert(bookings).values({
       id: bookingId,
       userId,
@@ -128,16 +186,17 @@ export const useUserBookingAction = routeAction$(
       endTime: endTimeDate,
       status: "CONFIRMED",
       totalPrice,
-      paidAmount: 0,
-      paymentStatus: "PENDING",
+      paidAmount,
+      paymentStatus,
     });
 
     return { success: true, bookingId };
   },
   zod$({
     pitchId: z.string().min(1),
-    startTime: z.string().datetime(),
-    endTime: z.string().datetime(),
-    extras: z.array(z.string()).optional(),
+    date: z.string(), // YYYY-MM-DD
+    time: z.string(), // HH:mm
+    duration: z.coerce.number().min(30), // minutes
+    paymentOption: z.enum(["LATER", "SENA", "TOTAL"]),
   })
 );
