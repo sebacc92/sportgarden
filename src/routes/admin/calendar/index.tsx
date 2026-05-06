@@ -90,9 +90,26 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
 
   const dailyBookings = await db
     .select({
-      booking: bookings,
-      user: users,
-      guest: guestRequests,
+      booking: {
+        id: bookings.id,
+        pitchId: bookings.pitchId,
+        startTime: bookings.startTime,
+        endTime: bookings.endTime,
+        status: bookings.status,
+        totalPrice: bookings.totalPrice,
+        paidAmount: bookings.paidAmount,
+        paymentStatus: bookings.paymentStatus,
+      },
+      user: {
+        id: users.id,
+        name: users.name,
+        phone: users.phone,
+      },
+      guest: {
+        id: guestRequests.id,
+        name: guestRequests.name,
+        phone: guestRequests.phone,
+      },
     })
     .from(bookings)
     .leftJoin(users, eq(bookings.userId, users.id))

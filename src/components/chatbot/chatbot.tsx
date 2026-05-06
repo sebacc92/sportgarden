@@ -1,4 +1,4 @@
-import { component$, useStore, $, useVisibleTask$, useSignal, useOnWindow } from '@builder.io/qwik';
+import { component$, useStore, $, useVisibleTask$, useSignal } from '@builder.io/qwik';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';

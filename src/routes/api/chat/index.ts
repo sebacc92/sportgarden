@@ -1,7 +1,7 @@
 import { type RequestHandler } from '@builder.io/qwik-city';
-import { getDB } from '../../../db';
-import { siteSettings, chatSessions, chatMessages, pitches, bookings } from '../../../db/schema';
-import { eq, desc, gte } from 'drizzle-orm';
+import { getDB } from '~/db';
+import { siteSettings, chatSessions, chatMessages, pitches } from '~/db/schema';
+import { eq } from 'drizzle-orm';
 import OpenAI from 'openai';
 
 export const onPost: RequestHandler = async (requestEvent) => {
@@ -54,7 +54,7 @@ export const onPost: RequestHandler = async (requestEvent) => {
     // Fetch context data: Canchas activas
     const activePitches = await db.select().from(pitches).where(eq(pitches.isActive, true));
 
-    const formatPitches = (p: typeof activePitches) => p.map(x => 
+    const formatPitches = (p: typeof activePitches) => p.map(x =>
       `- ${x.name} (Fútbol ${x.type.replace('F', '')}): ${x.isCovered ? 'Techada' : 'Descubierta'}. Precio base: $${x.pricePerHour}/hora. ${x.peakHourStart ? `(Desde ${x.peakHourStart}hs tarifa nocturna: $${x.peakPricePerHour}/h)` : ''}`
     ).join('\n');
 
