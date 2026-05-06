@@ -1,18 +1,18 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link } from "@builder.io/qwik-city";
-import { eq, desc } from "drizzle-orm";
+import { eq, asc, gte } from "drizzle-orm";
 import { getDB } from "~/db";
 import { bookings, pitches, users, guestRequests } from "~/db/schema";
 
 export const useAdminStats = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  
+
   const allPitches = await db.query.pitches.findMany({
     where: eq(pitches.isActive, true)
   });
-  
+
   const allBookings = await db.query.bookings.findMany();
-  
+
   const pendingCount = allBookings.filter(b => b.status === "PENDING_APPROVAL").length;
   const confirmedCount = allBookings.filter(b => b.status === "CONFIRMED").length;
 
@@ -30,7 +30,8 @@ export const useAdminStats = routeLoader$(async (requestEvent) => {
     .innerJoin(pitches, eq(bookings.pitchId, pitches.id))
     .leftJoin(users, eq(bookings.userId, users.id))
     .leftJoin(guestRequests, eq(bookings.id, guestRequests.bookingId))
-    .orderBy(desc(bookings.startTime))
+    .where(gte(bookings.startTime, new Date()))
+    .orderBy(asc(bookings.startTime))
     .limit(9);
 
   return {
@@ -90,13 +91,12 @@ export default component$(() => {
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Recent Bookings List (Replacing previous "Ver Calendario" card) */}
         <section>
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-bold text-slate-800">Últimos Partidos</h2>
+            <h2 class="text-xl font-bold text-slate-800">Próximos Partidos</h2>
             <Link href="/admin/calendar" class="text-emerald-600 text-sm font-bold hover:underline">Ver calendario completo</Link>
           </div>
-          
+
           <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="divide-y divide-slate-100">
               {stats.value.recentBookings.length === 0 ? (
@@ -106,7 +106,7 @@ export default component$(() => {
                   <div key={booking.id} class="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between group">
                     <div class="flex items-center gap-4">
                       <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-emerald-100 group-hover:text-emerald-600 transition-colors">
-                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                       </div>
                       <div>
                         <div class="font-bold text-slate-800">{booking.customerName}</div>
@@ -120,22 +120,22 @@ export default component$(() => {
                       </div>
                     </div>
                     <div>
-                       <span class={[
-                         "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                         booking.status === "CONFIRMED" ? "bg-emerald-100 text-emerald-700" : 
-                         booking.status === "PENDING_APPROVAL" ? "bg-amber-100 text-amber-700" :
-                         "bg-slate-100 text-slate-600"
-                       ]}>
-                         {booking.status === "CONFIRMED" ? "Confirmado" : booking.status === "PENDING_APPROVAL" ? "Pendiente" : "Otro"}
-                       </span>
+                      <span class={[
+                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
+                        booking.status === "CONFIRMED" ? "bg-emerald-100 text-emerald-700" :
+                          booking.status === "PENDING_APPROVAL" ? "bg-amber-100 text-amber-700" :
+                            "bg-slate-100 text-slate-600"
+                      ]}>
+                        {booking.status === "CONFIRMED" ? "Confirmado" : booking.status === "PENDING_APPROVAL" ? "Pendiente" : "Otro"}
+                      </span>
                     </div>
                   </div>
                 ))
               )}
             </div>
             {stats.value.recentBookings.length > 0 && (
-              <Link 
-                href="/admin/calendar" 
+              <Link
+                href="/admin/calendar"
                 class="block w-full text-center py-3 bg-slate-50 text-slate-600 text-xs font-bold hover:bg-slate-100 transition-colors border-t border-slate-100"
               >
                 VER TODOS LOS TURNOS

@@ -6,6 +6,9 @@ import { pitches, bookings, instagramPosts } from "../db/schema";
 import { useGuestBookingAction, useUserBookingAction, calculateDynamicPrice } from "./api/bookings/index";
 import { Button, Modal, Alert } from "~/components/ui";
 import { SocialFeed, MOCK_INSTAGRAM_POSTS } from "~/components/ui/social-feed";
+import { Chatbot } from "~/components/chatbot/chatbot";
+import { WhatsAppButton } from "~/components/ui/whatsapp-button";
+import { siteSettings } from "../db/schema";
 
 export { useGuestBookingAction, useUserBookingAction };
 
@@ -42,6 +45,12 @@ export const useInstagramFeed = routeLoader$(async (requestEvent) => {
   }
 });
 
+export const useAISettingsLoader = routeLoader$(async (requestEvent) => {
+  const db = getDB(requestEvent);
+  const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+  return settings;
+});
+
 export const getDailyBookings = server$(async function(this: RequestEventBase, pitchId: string, dateStr: string) {
   const db = getDB(this);
   if (!pitchId || !dateStr) return [];
@@ -73,6 +82,7 @@ export default component$(() => {
   const activePitches = usePitchesLoader();
   const user = useUserLoader();
   const instagramFeed = useInstagramFeed();
+  const aiSettings = useAISettingsLoader();
   const guestAction = useGuestBookingAction();
   const userAction = useUserBookingAction();
 
@@ -445,6 +455,14 @@ export default component$(() => {
       {/* Social Feed Section */}
       <SocialFeed posts={instagramFeed.value} />
 
+      {/* Chatbot */}
+      {aiSettings.value?.aiEnabled !== false && (
+        <Chatbot avatarUrl={aiSettings.value?.aiAvatarUrl || undefined} />
+      )}
+
+      {/* WhatsApp Button */}
+      <WhatsAppButton phone={aiSettings.value?.whatsappNumber || "5491112345678"} />
+
       {/* Booking Modal */}
       <Modal.Root bind:show={isModalOpen}>
         <Modal.Panel class="bg-slate-900 border border-white/10 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
@@ -659,6 +677,26 @@ export default component$(() => {
           </div>
         </Modal.Panel>
       </Modal.Root>
+
+      {/* Footer */}
+      <footer class="bg-slate-950 py-12 border-t border-white/10 relative z-20">
+        <div class="mx-auto max-w-7xl px-6 lg:px-8 text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+            <div class="font-black text-2xl tracking-tighter text-white uppercase">
+              Sport<span class="text-emerald-500">Garden</span>
+            </div>
+            <p class="text-slate-500 mt-2 text-sm">Las mejores canchas, el mejor tercer tiempo.</p>
+          </div>
+          <div class="flex gap-6">
+            <a href="#inicio" class="text-sm font-bold text-slate-400 hover:text-emerald-400 uppercase tracking-widest transition-colors">Inicio</a>
+            <a href="#historia" class="text-sm font-bold text-slate-400 hover:text-emerald-400 uppercase tracking-widest transition-colors">Historia</a>
+            <a href="#canchas" class="text-sm font-bold text-slate-400 hover:text-emerald-400 uppercase tracking-widest transition-colors">Canchas</a>
+          </div>
+          <p class="text-slate-600 text-xs mt-4 md:mt-0">
+            © {new Date().getFullYear()} SportGarden Futbol. Todos los derechos reservados.
+          </p>
+        </div>
+      </footer>
 
     </div>
   );

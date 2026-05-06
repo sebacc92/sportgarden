@@ -82,3 +82,31 @@ export const instagramPosts = sqliteTable("instagram_posts", {
   caption: text("caption"),
   timestamp: text("timestamp"),
 });
+
+// --- Settings & AI ---
+export const siteSettings = sqliteTable('site_settings', {
+  id: integer('id').primaryKey(), // We only use id = 1
+  aiEnabled: integer('ai_enabled', { mode: 'boolean' }).notNull().default(true),
+  aiTone: text('ai_tone'),
+  aiInstructions: text('ai_instructions'),
+  aiKnowledge: text('ai_knowledge'),
+  aiInitialGreeting: text('ai_initial_greeting'),
+  aiCallToAction: text('ai_call_to_action'),
+  whatsappNumber: text('whatsapp_number'),
+  aiAvatarUrl: text('ai_avatar_url'),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }),
+});
+
+export const chatSessions = sqliteTable('chat_sessions', {
+  id: text('id').primaryKey(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  lastActive: integer('last_active', { mode: 'timestamp' }).notNull(),
+});
+
+export const chatMessages = sqliteTable('chat_messages', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').references(() => chatSessions.id).notNull(),
+  role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
+  content: text('content').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
