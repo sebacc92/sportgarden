@@ -1,10 +1,11 @@
-import { component$, useSignal, $, useTask$, useComputed$ } from "@builder.io/qwik";
+import { component$, useSignal, $, useTask$, useComputed$, useVisibleTask$ } from "@builder.io/qwik";
 import { routeLoader$, Form, type DocumentHead, Link, server$, type RequestEventBase } from "@builder.io/qwik-city";
-import { eq, and, gte, lt, inArray } from "drizzle-orm";
+import { eq, and, gte, lt, inArray, desc } from "drizzle-orm";
 import { getDB } from "../db";
-import { pitches, bookings } from "../db/schema";
+import { pitches, bookings, instagramPosts } from "../db/schema";
 import { useGuestBookingAction, useUserBookingAction, calculateDynamicPrice } from "./api/bookings/index";
 import { Button, Modal, Alert } from "~/components/ui";
+import { SocialFeed, MOCK_INSTAGRAM_POSTS } from "~/components/ui/social-feed";
 
 export { useGuestBookingAction, useUserBookingAction };
 
@@ -15,6 +16,30 @@ export const usePitchesLoader = routeLoader$(async (requestEvent) => {
 
 export const useUserLoader = routeLoader$((requestEvent) => {
   return requestEvent.sharedMap.get("user") as { userId: string; role: string } | undefined;
+});
+
+export const useInstagramFeed = routeLoader$(async (requestEvent) => {
+  const db = getDB(requestEvent);
+  try {
+    const posts = await db.query.instagramPosts.findMany({
+      orderBy: [desc(instagramPosts.timestamp)],
+      limit: 6,
+    });
+
+    if (posts.length > 0) {
+      return posts.map((p) => ({
+        id: p.id,
+        imageUrl: p.mediaUrl,
+        link: p.permalink,
+        caption: p.caption || undefined,
+      }));
+    }
+
+    return MOCK_INSTAGRAM_POSTS;
+  } catch (error) {
+    console.error('Error cargando feed de instagram desde DB', error);
+    return MOCK_INSTAGRAM_POSTS;
+  }
 });
 
 export const getDailyBookings = server$(async function(this: RequestEventBase, pitchId: string, dateStr: string) {
@@ -47,11 +72,38 @@ export const getDailyBookings = server$(async function(this: RequestEventBase, p
 export default component$(() => {
   const activePitches = usePitchesLoader();
   const user = useUserLoader();
+  const instagramFeed = useInstagramFeed();
   const guestAction = useGuestBookingAction();
   const userAction = useUserBookingAction();
 
   const isModalOpen = useSignal(false);
   const selectedPitchId = useSignal("");
+  const activeSlide = useSignal(0);
+
+  const slides = [
+    {
+      image: "/slider1.png",
+      title: "La Cancha Es Tuya",
+      subtitle: "Instalaciones premium y césped de última generación.",
+    },
+    {
+      image: "/slider2.png",
+      title: "Fútbol Profesional",
+      subtitle: "Siente la verdadera pasión con el mejor equipamiento.",
+    },
+    {
+      image: "/slider3.png",
+      title: "Tercer Tiempo",
+      subtitle: "Comparte con tus amigos después de cada partido.",
+    }
+  ];
+
+  useVisibleTask$(() => {
+    const interval = setInterval(() => {
+      activeSlide.value = (activeSlide.value + 1) % slides.length;
+    }, 5000);
+    return () => clearInterval(interval);
+  });
   
   // Form signals for availability checking
   const dateStr = useSignal("");
@@ -218,55 +270,121 @@ export default component$(() => {
     <div class="min-h-screen bg-slate-950 text-white font-sans selection:bg-emerald-500 selection:text-white pb-20">
 
       {/* Navbar */}
-      <nav class="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-md border-b border-white/5">
+      <nav class="fixed top-0 inset-x-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/5">
         <div class="mx-auto max-w-7xl px-6 lg:px-8 h-20 flex items-center justify-between">
           <div class="font-black text-2xl tracking-tighter uppercase">
             Sport<span class="text-emerald-500">Garden</span>
           </div>
-          <div class="hidden sm:flex gap-6 items-center text-sm font-medium text-slate-300">
-            <a href="#" class="hover:text-emerald-400 transition-colors">Instalaciones</a>
-            <a href="#" class="hover:text-emerald-400 transition-colors">Torneos</a>
-            <a href="#" class="hover:text-emerald-400 transition-colors">Contacto</a>
+          <div class="hidden md:flex gap-8 items-center text-sm font-medium text-slate-300">
+            <a href="#historia" class="hover:text-emerald-400 transition-colors">Historia</a>
+            <a href="#canchas" class="hover:text-emerald-400 transition-colors">Canchas</a>
+            <a href="#contacto" class="hover:text-emerald-400 transition-colors">Contacto</a>
             {user.value?.role === "ADMIN" && (
-              <a href="/admin/calendar" class="ml-4 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white">Panel Admin</a>
+              <a href="/admin/calendar" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white">Panel Admin</a>
             )}
             {user.value ? (
-              <div class="flex items-center gap-4 ml-4">
+              <div class="flex items-center gap-4">
                 <span class="text-emerald-400 font-bold">Hola!</span>
-                {/* Logout should ideally be a form post, but skipping for brevity */}
               </div>
             ) : (
-              <Link href="/auth/login" class="ml-4 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-full transition-colors text-slate-950 font-bold">
+              <Link href="/auth/login" class="hover:text-white transition-colors">
                 Iniciar Sesión
               </Link>
             )}
+            <a href="#canchas" class="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 rounded-full transition-all text-slate-950 font-black tracking-widest uppercase shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:-translate-y-0.5">
+              Reservar
+            </a>
           </div>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section class="relative overflow-hidden pt-24 pb-32">
-        <div class="absolute inset-0 -z-10">
-          <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/40 via-slate-950 to-slate-950"></div>
-          <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGcgc3Ryb2tlPSIjZmZmZmZmIiBzdHJva2Utb3BhY2l0eT0iMC4wNSIgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj48cGF0aCBkPSJNNjAgMEwwIDYwTTAgMGw2MCA2MCIvPjwvZz48L3N2Zz4=')] opacity-20"></div>
-        </div>
-
-        <div class="mx-auto max-w-7xl px-6 lg:px-8 text-center relative z-10">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-8 ring-1 ring-emerald-500/20">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Abierto todos los días
+      {/* Hero Slider Section */}
+      <section class="relative h-screen min-h-[600px] overflow-hidden flex items-center justify-center">
+        {slides.map((slide, index) => (
+          <div
+            key={index}
+            class={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${activeSlide.value === index ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}
+          >
+            <div class="absolute inset-0 bg-slate-950/60 z-10 mix-blend-multiply"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent z-10"></div>
+            <img src={slide.image} alt={slide.title} class="absolute inset-0 w-full h-full object-cover" />
+            
+            <div class="absolute inset-0 flex items-center justify-center z-20">
+              <div class="text-center px-6 max-w-4xl mx-auto transform transition-transform duration-1000 delay-100 translate-y-0">
+                {activeSlide.value === index && (
+                  <div class="animate-fade-in-up">
+                    <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-widest mb-6 ring-1 ring-emerald-500/30 backdrop-blur-sm">
+                      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      Abierto todos los días
+                    </div>
+                    <h1 class="text-5xl md:text-8xl font-black tracking-tighter uppercase mb-6 drop-shadow-2xl text-white">
+                      {slide.title}
+                    </h1>
+                    <p class="mt-4 text-xl md:text-2xl text-slate-200 font-medium mb-10 drop-shadow-md max-w-2xl mx-auto">
+                      {slide.subtitle}
+                    </p>
+                    <a href="#canchas" class="inline-block px-8 py-4 bg-emerald-500 hover:bg-emerald-400 rounded-full transition-all text-slate-950 font-black tracking-widest uppercase text-lg shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:-translate-y-1">
+                      Reservar Ahora
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <h1 class="text-5xl md:text-7xl font-black tracking-tighter uppercase mb-6 drop-shadow-lg">
-            La Cancha <br class="md:hidden" /> Es Tuya
-          </h1>
-          <p class="mt-4 text-lg md:text-xl text-slate-400 max-w-2xl mx-auto font-medium">
-            Instalaciones premium, césped de última generación y tercer tiempo garantizado. Elige tu cancha y reserva en segundos.
-          </p>
+        ))}
+        
+        {/* Slider Controls */}
+        <div class="absolute bottom-10 inset-x-0 z-30 flex justify-center gap-3">
+          {slides.map((_, index) => (
+            <button
+              key={index}
+              onClick$={() => activeSlide.value = index}
+              class={`w-3 h-3 rounded-full transition-all ${activeSlide.value === index ? 'bg-emerald-500 w-8' : 'bg-white/50 hover:bg-white/80'}`}
+              aria-label={`Ir a diapositiva ${index + 1}`}
+            ></button>
+          ))}
+        </div>
+      </section>
+
+      {/* History Section */}
+      <section id="historia" class="py-24 bg-slate-950 relative z-20">
+        <div class="mx-auto max-w-7xl px-6 lg:px-8">
+          <div class="grid lg:grid-cols-2 gap-16 items-center">
+            <div class="space-y-8">
+              <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white">Nuestra <span class="text-emerald-500">Historia</span></h2>
+              <p class="text-lg text-slate-400 leading-relaxed">
+                SportGarden nació con la visión de crear el espacio definitivo para los amantes del fútbol. Desde nuestros humildes comienzos, nos hemos dedicado a ofrecer canchas de primer nivel donde la pasión por el deporte se vive al máximo en cada partido.
+              </p>
+              <p class="text-lg text-slate-400 leading-relaxed">
+                Creemos que el fútbol es más que un juego; es comunidad, amistad y esfuerzo. Por eso, nuestras instalaciones no solo cuentan con la mejor tecnología en césped artificial, sino que también ofrecen un ambiente inigualable para el tan esperado "tercer tiempo".
+              </p>
+              <div class="grid grid-cols-2 gap-6 pt-4 border-t border-white/10">
+                <div>
+                  <div class="text-4xl font-black text-emerald-500 mb-2">+10k</div>
+                  <div class="text-sm font-bold text-slate-500 uppercase tracking-widest">Partidos Jugados</div>
+                </div>
+                <div>
+                  <div class="text-4xl font-black text-emerald-500 mb-2">5</div>
+                  <div class="text-sm font-bold text-slate-500 uppercase tracking-widest">Años de Pasión</div>
+                </div>
+              </div>
+            </div>
+            <div class="relative">
+              <div class="aspect-square rounded-3xl overflow-hidden bg-slate-900 border border-white/10 relative z-10">
+                <img src="/slider1.png" alt="SportGarden Historia" class="w-full h-full object-cover mix-blend-luminosity hover:mix-blend-normal transition-all duration-700" />
+              </div>
+              <div class="absolute -inset-4 bg-emerald-500/20 blur-3xl -z-10 rounded-full"></div>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Pitches Grid */}
-      <section class="mx-auto max-w-7xl px-6 lg:px-8 -mt-10 relative z-20">
+      <section id="canchas" class="mx-auto max-w-7xl px-6 lg:px-8 pt-10 pb-20 relative z-20">
+        <div class="text-center mb-16">
+          <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">Nuestras <span class="text-emerald-500">Canchas</span></h2>
+          <p class="text-lg text-slate-400 max-w-2xl mx-auto">Selecciona tu cancha ideal, verifica la disponibilidad y reserva tu próximo partido.</p>
+        </div>
         <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           {activePitches.value.length === 0 ? (
             <div class="col-span-full text-center text-slate-400 py-20 bg-slate-900/50 rounded-3xl border border-white/5 backdrop-blur-sm">
@@ -323,6 +441,9 @@ export default component$(() => {
           )}
         </div>
       </section>
+
+      {/* Social Feed Section */}
+      <SocialFeed posts={instagramFeed.value} />
 
       {/* Booking Modal */}
       <Modal.Root bind:show={isModalOpen}>
