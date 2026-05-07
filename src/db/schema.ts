@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, relations } from "drizzle-orm";
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 
 // --- Users ---
@@ -22,17 +22,23 @@ export const pitches = sqliteTable("pitches", {
   name: text("name").notNull(),
   type: text("type", { enum: ["F5", "F7", "F9", "F11"] }).notNull(),
   isCovered: integer("is_covered", { mode: "boolean" }).notNull().default(false),
+  isLit: integer("is_lit", { mode: "boolean" }).notNull().default(false),
   pricePerHour: real("price_per_hour").notNull(),
   peakHourStart: text("peak_hour_start"), // ej: "18:00"
   peakPricePerHour: real("peak_price_per_hour"),
-  reservationPercentage: integer("reservation_percentage").notNull().default(0), // % to charge in advance (e.g., 50)
+  depositType: text("deposit_type", { enum: ["PERCENTAGE", "FIXED"] }).notNull().default("PERCENTAGE"),
+  depositAmount: real("deposit_amount").notNull().default(0), // % or fixed amount depending on depositType
+  notes: text("notes"), // Free text for admin notes/clarifications
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  imageUrl: text("image_url"),
 });
 
 // --- Bookings (Reservas) ---
 export const bookings = sqliteTable("bookings", {
   id: text("id").primaryKey(),
   userId: text("user_id").references(() => users.id), // Can be null if guest request is not yet linked to a user
+  groupId: text("group_id"), // Reference to groups.id
+  isSubscription: integer("is_subscription", { mode: "boolean" }).default(false),
   pitchId: text("pitch_id")
     .notNull()
     .references(() => pitches.id),
@@ -94,6 +100,15 @@ export const siteSettings = sqliteTable('site_settings', {
   aiCallToAction: text('ai_call_to_action'),
   whatsappNumber: text('whatsapp_number'),
   aiAvatarUrl: text('ai_avatar_url'),
+  
+  // Club Info
+  clubName: text('club_name'),
+  clubAddress: text('club_address'),
+  clubPhone: text('club_phone'),
+  clubStatus: text('club_status').notNull().default('AUTO'), // 'AUTO', 'OPEN', 'CLOSED'
+  operatingHours: text('operating_hours', { mode: 'json' }), // array of { day: 0-6, isOpen: boolean, openTime: string, closeTime: string }
+  services: text('services', { mode: 'json' }), // array of strings
+  
   updatedAt: integer('updated_at', { mode: 'timestamp' }),
 });
 
@@ -110,3 +125,131 @@ export const chatMessages = sqliteTable('chat_messages', {
   content: text('content').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
+
+// --- Groups (Cuentas Corrientes) ---
+export const groups = sqliteTable("groups", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  contactName: text("contact_name"),
+  contactPhone: text("contact_phone"),
+  contactEmail: text("contact_email"),
+  balance: real("balance").notNull().default(0), // Positive means group has credit, negative means debt
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+export const groupTransactions = sqliteTable("group_transactions", {
+  id: text("id").primaryKey(),
+  groupId: text("group_id").notNull().references(() => groups.id),
+  type: text("type", { enum: ["CHARGE", "PAYMENT"] }).notNull(),
+  amount: real("amount").notNull(), // Absolute amount
+  description: text("description"),
+  bookingId: text("booking_id").references(() => bookings.id), // If type=CHARGE from a booking
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+// --- Escuelita (Individual Subscriptions) ---
+export const students = sqliteTable("students", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  birthDate: integer("birth_date", { mode: "timestamp" }),
+  guardianName: text("guardian_name"),
+  guardianPhone: text("guardian_phone"),
+  guardianEmail: text("guardian_email"),
+  category: text("category"), // Ej: "2010/2011"
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+export const studentSubscriptions = sqliteTable("student_subscriptions", {
+  id: text("id").primaryKey(),
+  studentId: text("student_id").notNull().references(() => students.id),
+  month: integer("month").notNull(), // 1-12
+  year: integer("year").notNull(),
+  price: real("price").notNull(),
+  status: text("status", { enum: ["PENDING", "PAID"] }).notNull().default("PENDING"),
+  dueDate: integer("due_date", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+export const studentPayments = sqliteTable("student_payments", {
+  id: text("id").primaryKey(),
+  subscriptionId: text("subscription_id").notNull().references(() => studentSubscriptions.id),
+  amount: real("amount").notNull(),
+  paymentMethod: text("payment_method"), // "CASH", "TRANSFER", etc.
+  paymentDate: integer("payment_date", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+// --- Cash Management (Caja) ---
+export const cashRegisters = sqliteTable("cash_registers", {
+  id: text("id").primaryKey(),
+  openedAt: integer("opened_at", { mode: "timestamp" }).notNull().default(sql`(strftime('%s', 'now'))`),
+  closedAt: integer("closed_at", { mode: "timestamp" }),
+  openingBalance: real("opening_balance").notNull().default(0),
+  closingBalance: real("closing_balance"),
+  status: text("status", { enum: ["OPEN", "CLOSED"] }).notNull().default("OPEN"),
+  openedBy: text("opened_by").references(() => users.id),
+  closedBy: text("closed_by").references(() => users.id),
+});
+
+export const cashMovements = sqliteTable("cash_movements", {
+  id: text("id").primaryKey(),
+  registerId: text("register_id").notNull().references(() => cashRegisters.id),
+  type: text("type", { enum: ["INCOME", "EXPENSE"] }).notNull(),
+  category: text("category", { enum: ["BOOKING", "SCHOOL", "GROUP_PAYMENT", "MAINTENANCE", "OTHER"] }).notNull(),
+  amount: real("amount").notNull(),
+  description: text("description"),
+  paymentMethod: text("payment_method", { enum: ["CASH", "TRANSFER", "CARD", "MERCADO_PAGO"] }).notNull().default("CASH"),
+  referenceId: text("reference_id"), // ID to booking, student_payment, group_transaction depending on category
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+// --- Pitch Subscriptions (Abonos de Canchas) ---
+export const pitchSubscriptions = sqliteTable("pitch_subscriptions", {
+  id: text("id").primaryKey(),
+  pitchId: text("pitch_id").notNull().references(() => pitches.id),
+  userId: text("user_id").references(() => users.id), // Abono a nombre de un usuario
+  groupId: text("group_id").references(() => groups.id), // O abono a nombre de un grupo
+  dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  startTime: text("start_time").notNull(), // "19:00"
+  endTime: text("end_time").notNull(), // "20:00"
+  startDate: integer("start_date", { mode: "timestamp" }).notNull(),
+  endDate: integer("end_date", { mode: "timestamp" }), // If null, it's indefinitely recurring
+  pricePerMatch: real("price_per_match").notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+// --- Pitch Pricing Rules (Precios Dinámicos) ---
+export const pitchPricingRules = sqliteTable("pitch_pricing_rules", {
+  id: text("id").primaryKey(),
+  pitchId: text("pitch_id").notNull().references(() => pitches.id, { onDelete: "cascade" }),
+  dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  startTime: text("start_time").notNull(), // format "HH:MM"
+  endTime: text("end_time").notNull(), // format "HH:MM"
+  price: real("price").notNull(),
+});
+
+export const pitchesRelations = relations(pitches, ({ many }) => ({
+  pricingRules: many(pitchPricingRules),
+}));
+
+export const pitchPricingRulesRelations = relations(pitchPricingRules, ({ one }) => ({
+  pitch: one(pitches, {
+    fields: [pitchPricingRules.pitchId],
+    references: [pitches.id],
+  }),
+}));

@@ -172,7 +172,9 @@ export const useUserBookingAction = routeAction$(
     let paymentStatus: "PENDING" | "PARTIAL" | "PAID" = "PENDING";
     
     if (data.paymentOption === "SENA") {
-      paidAmount = (pitch.reservationPercentage / 100) * totalPrice;
+      paidAmount = pitch.depositType === "FIXED"
+        ? pitch.depositAmount
+        : (pitch.depositAmount / 100) * totalPrice;
       paymentStatus = "PARTIAL";
     } else if (data.paymentOption === "TOTAL") {
       paidAmount = totalPrice;

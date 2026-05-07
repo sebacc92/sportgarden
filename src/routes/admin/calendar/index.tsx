@@ -170,6 +170,7 @@ export default component$(() => {
   // Current Time Indicator Logic
   const currentTimePosition = useSignal(0);
   const showCurrentTimeLine = useSignal(false);
+  const scrollContainerRef = useSignal<HTMLElement>();
 
   // Modal State
   const isModalOpen = useSignal(false);
@@ -208,6 +209,22 @@ export default component$(() => {
     };
 
     updateTimeIndicator();
+    
+    // Auto scroll to current time on initial load
+    if (scrollContainerRef.value && showCurrentTimeLine.value) {
+      setTimeout(() => {
+        const container = scrollContainerRef.value;
+        if (container) {
+          const containerHeight = container.clientHeight;
+          // Center the line in the container
+          container.scrollTo({
+            top: Math.max(0, currentTimePosition.value - (containerHeight / 2)),
+            behavior: "smooth"
+          });
+        }
+      }, 100);
+    }
+
     const interval = setInterval(updateTimeIndicator, 60000); // Update every minute
     cleanup(() => clearInterval(interval));
   });
@@ -350,6 +367,7 @@ export default component$(() => {
 
               {/* Calendar Grid Body */}
               <div
+                ref={scrollContainerRef}
                 class="flex relative bg-slate-50/30 overflow-y-auto"
                 style={{ height: `${hours.length * PIXELS_PER_HOUR}px` }}
               >
@@ -468,6 +486,7 @@ export default component$(() => {
 
               {/* Calendar Grid Body */}
               <div
+                ref={scrollContainerRef}
                 class="flex relative bg-slate-50/30 overflow-y-auto"
                 style={{ height: `${hours.length * PIXELS_PER_HOUR}px` }}
               >

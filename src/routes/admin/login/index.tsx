@@ -9,13 +9,13 @@ export const useLoginAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    // Buscar usuario por email y asegurarse que sea ADMIN
+    // Buscar usuario por nombre de usuario y asegurarse que sea ADMIN
     const [user] = await db
       .select()
       .from(users)
       .where(
         and(
-          eq(users.email, data.email.trim().toLowerCase()),
+          eq(users.name, data.username.trim().toLowerCase()),
           eq(users.role, 'ADMIN')
         )
       );
@@ -42,7 +42,7 @@ export const useLoginAction = routeAction$(
     throw requestEvent.redirect(302, '/admin');
   },
   zod$({
-    email: z.string().email('Ingresa un email válido'),
+    username: z.string().min(1, 'Ingresa un usuario'),
     password: z.string().min(1, 'La contraseña es obligatoria'),
   }),
 );
@@ -81,22 +81,22 @@ export default component$(() => {
           <Form action={action} class="space-y-5">
             <div>
               <label
-                for="email"
+                for="username"
                 class="block text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2"
               >
-                Email
+                Usuario
               </label>
               <input
-                id="email"
-                name="email"
-                type="email"
-                autocomplete="email"
+                id="username"
+                name="username"
+                type="text"
+                autocomplete="username"
                 required
                 class="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                placeholder="admin@sportgarden.com"
+                placeholder="admin"
               />
-              {action.value?.fieldErrors?.email && (
-                <p class="text-red-400 text-xs mt-1.5">{action.value.fieldErrors.email}</p>
+              {action.value?.fieldErrors?.username && (
+                <p class="text-red-400 text-xs mt-1.5">{action.value.fieldErrors.username}</p>
               )}
             </div>
 

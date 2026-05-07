@@ -207,7 +207,14 @@ export default component$(() => {
   });
 
   const totalPrice = dynamicPrice.value;
-  const senaAmount = selectedPitch ? (selectedPitch.reservationPercentage / 100) * totalPrice : 0;
+  const depositType = (selectedPitch as any)?.depositType ?? "PERCENTAGE";
+  const depositAmount = (selectedPitch as any)?.depositAmount ?? 0;
+  const senaAmount = selectedPitch
+    ? depositType === "FIXED"
+      ? depositAmount
+      : (depositAmount / 100) * totalPrice
+    : 0;
+  const senaLabel = depositType === "FIXED" ? `$${depositAmount}` : `${depositAmount}%`;
 
   const timeOptions: string[] = [];
   for (let h = 8; h <= 23; h++) {
@@ -408,12 +415,20 @@ export default component$(() => {
                 class="group flex flex-col overflow-hidden rounded-3xl bg-slate-900 border border-white/10 shadow-2xl transition-all duration-300 hover:-translate-y-2 hover:shadow-emerald-900/20 hover:border-emerald-500/30"
               >
                 <div class="relative h-56 bg-slate-800 flex items-center justify-center overflow-hidden">
-                  <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent z-10"></div>
-                  <div class="absolute inset-x-0 bottom-0 h-1/2 border-t-2 border-white/10 w-full flex justify-center">
-                    <div class="w-24 h-12 border-2 border-b-0 border-white/10 rounded-t-full mt-auto"></div>
-                  </div>
-
-                  <span class="text-6xl font-black text-white/5 tracking-tighter group-hover:scale-110 transition-transform duration-500">{pitch.type}</span>
+                  {pitch.imageUrl && (
+                    <img src={pitch.imageUrl} alt={pitch.name} class="absolute inset-0 w-full h-full object-cover z-0 group-hover:scale-105 transition-transform duration-700" />
+                  )}
+                  
+                  <div class={["absolute inset-0 z-10", pitch.imageUrl ? "bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" : "bg-gradient-to-t from-slate-900 via-transparent to-transparent"]}></div>
+                  
+                  {!pitch.imageUrl && (
+                    <>
+                      <div class="absolute inset-x-0 bottom-0 h-1/2 border-t-2 border-white/10 w-full flex justify-center z-10">
+                        <div class="w-24 h-12 border-2 border-b-0 border-white/10 rounded-t-full mt-auto"></div>
+                      </div>
+                      <span class="text-6xl font-black text-white/5 tracking-tighter group-hover:scale-110 transition-transform duration-500 z-10">{pitch.type}</span>
+                    </>
+                  )}
 
                   {pitch.isCovered && (
                     <span class="absolute top-4 right-4 z-20 rounded-full bg-slate-950/80 px-3 py-1 text-xs font-bold text-emerald-400 backdrop-blur-md border border-white/10">
@@ -521,9 +536,8 @@ export default component$(() => {
                   )}
 
                   {/* Step 1: Horario */}
-                  {currentStep.value === 1 && (
-                    <div class="space-y-6 animate-fade-in">
-                      {selectedPitch && (
+                  <div class={["space-y-6 animate-fade-in", currentStep.value !== 1 && "hidden"]}>
+                    {selectedPitch && (
                         <div class="bg-slate-800/50 p-4 rounded-xl border border-white/5 flex justify-between items-center">
                           <div>
                             <h4 class="text-white font-bold">{selectedPitch.name}</h4>
@@ -566,12 +580,10 @@ export default component$(() => {
                         </Button>
                       </div>
                     </div>
-                  )}
 
                   {/* Step 2: Contacto */}
-                  {currentStep.value === 2 && (
-                    <div class="space-y-6 animate-fade-in">
-                      <h4 class="text-lg font-black text-white text-center">Tus Datos</h4>
+                  <div class={["space-y-6 animate-fade-in", currentStep.value !== 2 && "hidden"]}>
+                    <h4 class="text-lg font-black text-white text-center">Tus Datos</h4>
                       
                       {!user.value ? (
                         <div class="space-y-4">
@@ -607,13 +619,11 @@ export default component$(() => {
                         </Button>
                       </div>
                     </div>
-                  )}
 
                   {/* Step 3: Extras y Pago */}
-                  {currentStep.value === 3 && (
-                    <div class="space-y-6 animate-fade-in">
-                      <div>
-                        <h4 class="text-lg font-black text-white mb-4">Servicios Adicionales (Opcional)</h4>
+                  <div class={["space-y-6 animate-fade-in", currentStep.value !== 3 && "hidden"]}>
+                    <div>
+                      <h4 class="text-lg font-black text-white mb-4">Servicios Adicionales (Opcional)</h4>
                         <div class="grid grid-cols-3 gap-2">
                           {['⚽ Pelota Extra', '👕 Camisetas', '🥤 Pack Bebidas'].map((extra) => {
                             const isSelected = selectedExtras.value.includes(extra);
@@ -647,7 +657,7 @@ export default component$(() => {
                           <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
                             <input type="radio" name="paymentOption" value="SENA" class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
                             <div class="flex-1">
-                              <span class="text-sm font-medium text-white block">Pagar Seña ({selectedPitch?.reservationPercentage}%)</span>
+                              <span class="text-sm font-medium text-white block">Pagar Seña ({senaLabel})</span>
                               <span class="text-xs text-slate-400">Pagas hoy: ${senaAmount}</span>
                             </div>
                           </label>
@@ -670,7 +680,6 @@ export default component$(() => {
                         </Button>
                       </div>
                     </div>
-                  )}
                 </Form>
               </div>
             )}
