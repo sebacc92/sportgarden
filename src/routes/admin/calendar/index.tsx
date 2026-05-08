@@ -1,4 +1,4 @@
-import { component$, useSignal, useVisibleTask$, $ } from "@builder.io/qwik";
+import { component$, useSignal, useVisibleTask$, useTask$, $ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, Link, useNavigate, Form } from "@builder.io/qwik-city";
 import { Button, Modal, Alert } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
@@ -159,8 +159,8 @@ export default component$(() => {
   const updateStatusAction = useUpdateBookingStatusAction();
   const nav = useNavigate();
 
-  // Layout mode: 'grid' (time-grid per pitch) | 'list' (table) | 'timeline' (pitches×time)
-  const layoutMode = useSignal<'grid' | 'list' | 'timeline'>('timeline');
+  // Layout mode: 'timeline' (pitches×time) | 'list' (table) | 'grid' (time-grid per pitch)
+  const layoutMode = useSignal<'timeline' | 'list' | 'grid'>('timeline');
 
   const CALENDAR_START_HOUR = 0;
   const CALENDAR_END_HOUR = 24;
@@ -238,6 +238,14 @@ export default component$(() => {
     const success = track(() => updateStatusAction.value?.success);
     if (success) {
       isModalOpen.value = false;
+    }
+  });
+
+  // Force grid layout for week/month views as timeline/list are day-only
+  useTask$(({ track }) => {
+    const view = track(() => calendarData.value.view);
+    if (view !== "day" && layoutMode.value !== "grid") {
+      layoutMode.value = "grid";
     }
   });
 
@@ -358,18 +366,29 @@ export default component$(() => {
           {/* Layout Mode Toggle */}
           <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
             <button
-              onClick$={() => layoutMode.value = 'grid'}
-              class={cn("w-8 h-8 flex items-center justify-center rounded-md transition-colors", layoutMode.value === 'grid' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700")}
-              title="Vista grilla"
+              onClick$={() => layoutMode.value = 'timeline'}
+              disabled={calendarData.value.view !== 'day'}
+              class={cn(
+                "w-8 h-8 flex items-center justify-center rounded-md transition-all", 
+                layoutMode.value === 'timeline' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700",
+                calendarData.value.view !== 'day' && "opacity-30 cursor-not-allowed"
+              )}
+              title="Vista cronograma"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                <rect x="3" y="4" width="18" height="4" rx="1"/>
+                <rect x="3" y="10" width="11" height="4" rx="1"/>
+                <rect x="3" y="16" width="15" height="4" rx="1"/>
               </svg>
             </button>
             <button
               onClick$={() => layoutMode.value = 'list'}
-              class={cn("w-8 h-8 flex items-center justify-center rounded-md transition-colors", layoutMode.value === 'list' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700")}
+              disabled={calendarData.value.view !== 'day'}
+              class={cn(
+                "w-8 h-8 flex items-center justify-center rounded-md transition-all", 
+                layoutMode.value === 'list' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700",
+                calendarData.value.view !== 'day' && "opacity-30 cursor-not-allowed"
+              )}
               title="Vista lista"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -381,14 +400,13 @@ export default component$(() => {
               </svg>
             </button>
             <button
-              onClick$={() => layoutMode.value = 'timeline'}
-              class={cn("w-8 h-8 flex items-center justify-center rounded-md transition-colors", layoutMode.value === 'timeline' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700")}
-              title="Vista cronograma"
+              onClick$={() => layoutMode.value = 'grid'}
+              class={cn("w-8 h-8 flex items-center justify-center rounded-md transition-all", layoutMode.value === 'grid' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700")}
+              title="Vista grilla"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="4" width="18" height="4" rx="1"/>
-                <rect x="3" y="10" width="11" height="4" rx="1"/>
-                <rect x="3" y="16" width="15" height="4" rx="1"/>
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
               </svg>
             </button>
           </div>

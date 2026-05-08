@@ -467,6 +467,142 @@ export default component$(() => {
         </div>
       </section>
 
+      {/* Location Section */}
+      <section id="contacto" class="py-24 bg-slate-950 relative z-20">
+        <div class="mx-auto max-w-7xl px-6 lg:px-8">
+          <div class="mb-12">
+            <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">Donde <span class="text-emerald-500">estamos</span></h2>
+          </div>
+          
+          <div class="grid lg:grid-cols-5 gap-8 items-start">
+            {/* Map Column */}
+            <div class="lg:col-span-3 aspect-[16/10] lg:aspect-auto lg:h-[600px] rounded-3xl overflow-hidden border border-white/10 bg-slate-900 shadow-2xl relative group">
+              <iframe 
+                src={`https://www.google.com/maps?q=${encodeURIComponent(aiSettings.value?.clubAddress || "Pedro Moran 2379, CABA")}&output=embed&z=16`}
+                class="w-full h-full group-hover:scale-[1.02] transition-all duration-700"
+                loading="lazy"
+                title="Mapa de ubicación"
+              ></iframe>
+              <div class="absolute inset-0 pointer-events-none ring-1 ring-inset ring-white/10 rounded-3xl"></div>
+            </div>
+
+            {/* Info Column */}
+            <div class="lg:col-span-2 space-y-4">
+              {/* Ubicación Card */}
+              <div class="bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-sm">
+                <div class="p-6">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Ubicación</h3>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6"/></svg>
+                  </div>
+                  <p class="text-white font-bold leading-relaxed">
+                    {aiSettings.value?.clubAddress || "Pedro moran 2379. Capital Federal. Argentina"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Horarios Card */}
+              <div class="bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-sm">
+                <div class="p-6">
+                  <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Horarios del Club</h3>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6"/></svg>
+                  </div>
+                  <div class="space-y-4">
+                    {(() => {
+                      const hours = (aiSettings.value?.operatingHours as any[]) || [];
+                      if (hours.length === 0) {
+                        return (
+                          <>
+                            <div class="flex flex-col">
+                              <span class="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Lunes a Viernes</span>
+                              <span class="text-white font-bold">08:00 a 23:00</span>
+                            </div>
+                            <div class="flex flex-col">
+                              <span class="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Sábados</span>
+                              <span class="text-white font-bold">10:00 a 20:00</span>
+                            </div>
+                            <div class="flex flex-col">
+                              <span class="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Domingos y Feriados</span>
+                              <span class="text-white font-bold">15:00 a 21:00</span>
+                            </div>
+                          </>
+                        );
+                      }
+                      
+                      // Group same hours
+                      const groups: Record<string, string[]> = {};
+                      const dayNames = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
+                      
+                      hours.forEach(h => {
+                        const timeStr = h.isOpen ? `${h.openTime} a ${h.closeTime}` : "Cerrado";
+                        if (!groups[timeStr]) groups[timeStr] = [];
+                        groups[timeStr].push(dayNames[h.day]);
+                      });
+
+                      return Object.entries(groups).map(([time, days]) => (
+                        <div key={time} class="flex flex-col">
+                          <span class="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">{days.join(", ")}</span>
+                          <span class={["text-white font-bold", time === "Cerrado" ? "text-red-400" : ""]}>{time}</span>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Servicios Card */}
+              <div class="bg-slate-900/50 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-sm">
+                <div class="p-6">
+                  <div class="flex items-center justify-between mb-8">
+                    <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Servicios del Club</h3>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6"/></svg>
+                  </div>
+                  
+                  <div class="grid grid-cols-2 gap-y-6 gap-x-4">
+                    {(() => {
+                      const services = (aiSettings.value?.services as string[]) || [
+                        "Wi-Fi", "Vestuario", "Ayuda Médica", "Torneos", "Colegios", "Bar / Restaurante", "Estacionamiento", "Cumpleaños"
+                      ];
+                      
+                      const iconMap: Record<string, any> = {
+                        "wi-fi": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></svg>,
+                        "vestuario": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>,
+                        "ayuda médica": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>,
+                        "torneos": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>,
+                        "colegios": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c3 3 9 3 12 0v5"/><path d="M11 10v4"/></svg>,
+                        "bar": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 9H5L3 3z"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/><path d="m9 3 1 9"/><path d="m15 3-1 9"/></svg>,
+                        "estacionamiento": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="12" x="3" y="10" rx="2"/><path d="M7 10V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6"/><circle cx="7" cy="15" r="1"/><circle cx="17" cy="15" r="1"/></svg>,
+                        "cumpleaños": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      };
+
+                      return services.map(s => {
+                        const lowS = s.toLowerCase();
+                        let icon = <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>;
+                        
+                        Object.keys(iconMap).forEach(key => {
+                          if (lowS.includes(key)) icon = iconMap[key];
+                        });
+
+                        return (
+                          <div key={s} class="flex items-center gap-3 group/item">
+                            <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-emerald-400 group-hover/item:bg-emerald-500 group-hover/item:text-slate-950 transition-colors">
+                              {icon}
+                            </div>
+                            <span class="text-xs font-bold text-slate-300 group-hover/item:text-white transition-colors">{s}</span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Social Feed Section */}
       <SocialFeed posts={instagramFeed.value} />
 
@@ -559,7 +695,22 @@ export default component$(() => {
 
                       <div class="grid grid-cols-2 gap-4">
                         <div>
-                          <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Fecha</label>
+                          <div class="flex justify-between items-center mb-2">
+                            <label class="block text-xs font-black text-slate-400 uppercase tracking-widest">Fecha</label>
+                            <button 
+                              type="button" 
+                              onClick$={() => {
+                                const today = new Date();
+                                const yyyy = today.getFullYear();
+                                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                                const dd = String(today.getDate()).padStart(2, '0');
+                                dateStr.value = `${yyyy}-${mm}-${dd}`;
+                              }}
+                              class="text-[10px] font-black text-emerald-500 hover:text-emerald-400 px-2 py-0.5 border border-emerald-500/30 hover:border-emerald-500 rounded-md transition-all uppercase tracking-widest"
+                            >
+                              Hoy
+                            </button>
+                          </div>
                           <input type="date" name="date" required bind:value={dateStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium" />
                         </div>
                         <div>

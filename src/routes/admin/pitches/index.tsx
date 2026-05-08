@@ -5,7 +5,7 @@ import { getDB } from "~/db";
 import { pitches, pitchPricingRules } from "~/db/schema";
 import { Button, Modal } from "~/components/ui";
 import { LuImage, LuPlus, LuSettings, LuTrash2 } from '@qwikest/icons/lucide';
-import { upload } from '@vercel/blob/client';
+import { put } from '@vercel/blob';
 import imageCompression from 'browser-image-compression';
 
 // 1. Data Loader
@@ -23,6 +23,18 @@ export const useCreatePitchAction = routeAction$(
     const db = getDB(requestEvent);
     const id = Math.random().toString(36).substring(2, 11);
 
+    let uploadedImageUrl = data.imageUrl || null;
+
+    if (data.image && typeof data.image === 'object' && (data.image as Blob).size > 0) {
+      const file = data.image as File;
+      const fileName = `pitch-${id}-${Date.now()}.webp`;
+      const { url } = await put(fileName, file, {
+        access: 'public',
+        token: requestEvent.env.get('BLOB_READ_WRITE_TOKEN'),
+      });
+      uploadedImageUrl = url;
+    }
+
     await db.insert(pitches).values({
       id,
       name: data.name,
@@ -30,13 +42,11 @@ export const useCreatePitchAction = routeAction$(
       isCovered: data.isCovered === "on",
       isLit: data.isLit === "on",
       pricePerHour: Number(data.pricePerHour),
-      peakHourStart: data.peakHourStart || null,
-      peakPricePerHour: data.peakPricePerHour ? Number(data.peakPricePerHour) : null,
       depositType: (data.depositType as "PERCENTAGE" | "FIXED") || "PERCENTAGE",
       depositAmount: Number(data.depositAmount) || 0,
       notes: data.notes || null,
       isActive: true,
-      imageUrl: data.imageUrl || null,
+      imageUrl: uploadedImageUrl,
     });
     return { success: true };
   },
@@ -46,18 +56,29 @@ export const useCreatePitchAction = routeAction$(
     isCovered: z.string().optional(),
     isLit: z.string().optional(),
     pricePerHour: z.coerce.number().min(0),
-    peakHourStart: z.string().optional(),
-    peakPricePerHour: z.coerce.number().optional(),
     depositType: z.string().optional(),
     depositAmount: z.coerce.number().optional(),
     notes: z.string().optional(),
     imageUrl: z.string().optional(),
+    image: z.any().optional(),
   })
 );
 
 export const useUpdatePitchAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
+
+    let uploadedImageUrl = data.imageUrl || null;
+
+    if (data.image && typeof data.image === 'object' && (data.image as Blob).size > 0) {
+      const file = data.image as File;
+      const fileName = `pitch-${data.id}-${Date.now()}.webp`;
+      const { url } = await put(fileName, file, {
+        access: 'public',
+        token: requestEvent.env.get('BLOB_READ_WRITE_TOKEN'),
+      });
+      uploadedImageUrl = url;
+    }
 
     await db.update(pitches)
       .set({
@@ -66,12 +87,10 @@ export const useUpdatePitchAction = routeAction$(
         isCovered: data.isCovered === "on",
         isLit: data.isLit === "on",
         pricePerHour: Number(data.pricePerHour),
-        peakHourStart: data.peakHourStart || null,
-        peakPricePerHour: data.peakPricePerHour ? Number(data.peakPricePerHour) : null,
         depositType: (data.depositType as "PERCENTAGE" | "FIXED") || "PERCENTAGE",
         depositAmount: Number(data.depositAmount) || 0,
         notes: data.notes || null,
-        imageUrl: data.imageUrl || null,
+        imageUrl: uploadedImageUrl,
       })
       .where(eq(pitches.id, data.id));
 
@@ -84,12 +103,11 @@ export const useUpdatePitchAction = routeAction$(
     isCovered: z.string().optional(),
     isLit: z.string().optional(),
     pricePerHour: z.coerce.number().min(0),
-    peakHourStart: z.string().optional(),
-    peakPricePerHour: z.coerce.number().optional(),
     depositType: z.string().optional(),
     depositAmount: z.coerce.number().optional(),
     notes: z.string().optional(),
     imageUrl: z.string().optional(),
+    image: z.any().optional(),
   })
 );
 
@@ -186,13 +204,11 @@ export default component$(() => {
   const selectedPitchForPricing = useSignal<{ id: string; name: string; rules: any[] } | null>(null);
 
   // State to handle edit mode
-  const editingPitch = useStore<{ id: string | null; name: string; type: string; pricePerHour: number; peakHourStart: string; peakPricePerHour: number | null; depositType: string; depositAmount: number; isCovered: boolean; isLit: boolean; notes: string; imageUrl: string | null }>({
+  const editingPitch = useStore<{ id: string | null; name: string; type: string; pricePerHour: number; depositType: string; depositAmount: number; isCovered: boolean; isLit: boolean; notes: string; imageUrl: string | null }>({
     id: null,
     name: "",
     type: "F5",
     pricePerHour: 0,
-    peakHourStart: "",
-    peakPricePerHour: null,
     depositType: "PERCENTAGE",
     depositAmount: 0,
     isCovered: false,
@@ -201,28 +217,57 @@ export default component$(() => {
     imageUrl: null,
   });
 
-  const isUploading = useSignal(false);
+  const isCompressing = useSignal(false);
+  const previewUrl = useSignal<string | null>(null);
 
-  const handleFileChange = $(async (event: Event) => {
+  const handleFileChange = $((event: Event) => {
     const element = event.target as HTMLInputElement;
     if (!element.files || element.files.length === 0) return;
     const file = element.files[0];
-    isUploading.value = true;
+    previewUrl.value = URL.createObjectURL(file);
+    editingPitch.imageUrl = null; // Clear existing if new one is selected
+  });
+
+  const handleSubmit = $(async (e: Event, currentTarget: HTMLFormElement) => {
+    if (isCompressing.value || createPitchAction.isRunning || updatePitchAction.isRunning) return;
+
+    isCompressing.value = true;
     try {
-      const options = { maxSizeMB: 1, maxWidthOrHeight: 1200, useWebWorker: true };
-      const compressedFile = await imageCompression(file, options);
-      const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
-      const newFileName = `pitch-${uniqueId}.webp`;
-      const blob = await upload(newFileName, compressedFile, {
-        access: 'public',
-        handleUploadUrl: '/api/upload',
-      });
-      editingPitch.imageUrl = blob.url;
+      const formData = new FormData(currentTarget);
+      const imageFile = formData.get('image') as File | null;
+
+      if (imageFile && imageFile.size > 0 && imageFile.name) {
+        const options = {
+          maxWidthOrHeight: 1200,
+          useWebWorker: true,
+          fileType: 'image/webp',
+          initialQuality: 0.8,
+        };
+        const compressedBlob = await imageCompression(imageFile, options);
+        const newFileName = imageFile.name.replace(/\.[^/.]+$/, "") + ".webp";
+        const compressedFile = new File([compressedBlob], newFileName, { type: 'image/webp' });
+        
+        formData.set('image', compressedFile);
+      }
+
+      if (editingPitch.id) {
+        await updatePitchAction.submit(formData);
+      } else {
+        await createPitchAction.submit(formData);
+      }
     } catch (error) {
-      console.error('Error uploading pitch image:', error);
+      console.error('Error al comprimir/subir imagen:', error);
     } finally {
-      isUploading.value = false;
-      element.value = '';
+      isCompressing.value = false;
+    }
+  });
+
+  useTask$(({ track }) => {
+    const createSuccess = track(() => createPitchAction.value?.success);
+    const updateSuccess = track(() => updatePitchAction.value?.success);
+    if (createSuccess || updateSuccess) {
+      isFormModalOpen.value = false;
+      resetForm();
     }
   });
 
@@ -231,14 +276,13 @@ export default component$(() => {
     editingPitch.name = "";
     editingPitch.type = "F5";
     editingPitch.pricePerHour = 0;
-    editingPitch.peakHourStart = "";
-    editingPitch.peakPricePerHour = null;
     editingPitch.depositType = "PERCENTAGE";
     editingPitch.depositAmount = 0;
     editingPitch.isCovered = false;
     editingPitch.isLit = false;
     editingPitch.notes = "";
     editingPitch.imageUrl = null;
+    previewUrl.value = null;
   });
 
   const openCreateModal = $(() => {
@@ -251,8 +295,6 @@ export default component$(() => {
     editingPitch.name = pitch.name;
     editingPitch.type = pitch.type;
     editingPitch.pricePerHour = pitch.pricePerHour;
-    editingPitch.peakHourStart = pitch.peakHourStart || "";
-    editingPitch.peakPricePerHour = pitch.peakPricePerHour;
     editingPitch.depositType = pitch.depositType || "PERCENTAGE";
     editingPitch.depositAmount = pitch.depositAmount || 0;
     editingPitch.isCovered = pitch.isCovered;
@@ -369,18 +411,6 @@ export default component$(() => {
                         </div>
                       </div>
                     </div>
-                    {pitch.peakHourStart && pitch.peakPricePerHour ? (
-                      <div class="pt-2 mt-2 border-t border-slate-200">
-                        <div class="flex justify-between items-center">
-                          <div class="text-xs text-slate-500 font-bold">
-                            Tarifa Pico (desde <span>{pitch.peakHourStart}</span>)
-                          </div>
-                          <div class="text-sm font-black text-amber-600">
-                            $<span>{pitch.peakPricePerHour}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
                   </div>
 
                   {(pitch as any).notes && (
@@ -460,10 +490,8 @@ export default component$(() => {
             <Form
               action={editingPitch.id ? updatePitchAction : createPitchAction}
               class="space-y-6"
-              onSubmitCompleted$={() => {
-                isFormModalOpen.value = false;
-                resetForm();
-              }}
+              preventdefault:submit
+              onSubmit$={handleSubmit}
             >
               {editingPitch.id && <input type="hidden" name="id" value={editingPitch.id} />}
               <input type="hidden" name="imageUrl" value={editingPitch.imageUrl || ""} />
@@ -474,12 +502,15 @@ export default component$(() => {
                 <div>
                   <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Foto de la Cancha</label>
                   <div class="h-44 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden relative group">
-                    {editingPitch.imageUrl ? (
+                    {(previewUrl.value || editingPitch.imageUrl) ? (
                       <>
-                        <img src={editingPitch.imageUrl} alt="Foto cancha" class="w-full h-full object-cover" />
+                        <img src={previewUrl.value || editingPitch.imageUrl!} alt="Foto cancha" class="w-full h-full object-cover" />
                         <button
                           type="button"
-                          onClick$={() => editingPitch.imageUrl = null}
+                          onClick$={() => {
+                            editingPitch.imageUrl = null;
+                            previewUrl.value = null;
+                          }}
                           class="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white"
                           title="Eliminar foto"
                         >
@@ -492,17 +523,18 @@ export default component$(() => {
                         <span class="text-xs font-bold uppercase tracking-widest">Subir Imagen</span>
                       </div>
                     )}
-                    {isUploading.value && (
+                    {isCompressing.value && (
                       <div class="absolute inset-0 bg-white/80 flex flex-col items-center justify-center">
                         <div class="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                       </div>
                     )}
                     <input
                       type="file"
+                      name="image"
                       accept="image/*"
                       onChange$={handleFileChange}
                       class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      disabled={isUploading.value}
+                      disabled={isCompressing.value}
                     />
                   </div>
                 </div>
@@ -596,43 +628,6 @@ export default component$(() => {
                 </div>
               </div>
 
-              {/* Horario Pico */}
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Inicio Horario Pico</label>
-                  <input
-                    type="time"
-                    name="peakHourStart"
-                    value={editingPitch.peakHourStart}
-                    class="w-full px-4 py-3 bg-amber-50/50 border border-amber-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all font-bold text-amber-900"
-                  />
-                </div>
-                <div>
-                  <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Precio Horario Pico ($)</label>
-                  <input
-                    type="number"
-                    name="peakPricePerHour"
-                    value={editingPitch.peakPricePerHour || ""}
-                    min="0"
-                    step="1"
-                    placeholder="Ej: 25000"
-                    class="w-full px-4 py-3 bg-amber-50/50 border border-amber-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all font-bold text-amber-900 placeholder:text-amber-300"
-                  />
-                </div>
-              </div>
-
-              {/* Aclaraciones */}
-              <div>
-                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Aclaraciones</label>
-                <textarea
-                  name="notes"
-                  value={editingPitch.notes}
-                  placeholder="Ej: Tiene vestuario propio, apta para lluvia..."
-                  rows={2}
-                  class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all font-medium resize-none"
-                />
-              </div>
-
               {/* Precios Dinámicos (solo en edición) */}
               {editingPitch.id && selectedPitchForPricing.value && (
                 <div class="border-t border-slate-100 pt-4 flex items-center justify-between">
@@ -651,6 +646,18 @@ export default component$(() => {
                 </div>
               )}
 
+              {/* Aclaraciones */}
+              <div>
+                <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Aclaraciones</label>
+                <textarea
+                  name="notes"
+                  value={editingPitch.notes}
+                  placeholder="Ej: Tiene vestuario propio, apta para lluvia..."
+                  rows={2}
+                  class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all font-medium resize-none"
+                />
+              </div>
+
               {/* Botones */}
               <div class="pt-4 flex gap-3 sticky bottom-0 bg-white border-t border-slate-50 mt-4 -mx-2 px-2 z-20">
                 <Button
@@ -664,10 +671,10 @@ export default component$(() => {
                 <Button
                   type="submit"
                   look="primary"
-                  disabled={createPitchAction.isRunning || updatePitchAction.isRunning}
+                  disabled={createPitchAction.isRunning || updatePitchAction.isRunning || isCompressing.value}
                   class="flex-1 bg-slate-800 text-white hover:bg-slate-900 rounded-2xl py-4 font-black uppercase tracking-widest flex items-center justify-center gap-2"
                 >
-                  {(createPitchAction.isRunning || updatePitchAction.isRunning) ? (
+                  {(createPitchAction.isRunning || updatePitchAction.isRunning || isCompressing.value) ? (
                     <LoadingSpinner class="w-5 h-5" />
                   ) : (
                     editingPitch.id ? "Guardar" : "Crear"

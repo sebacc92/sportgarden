@@ -4,7 +4,7 @@ import { getDB } from '~/db';
 import { siteSettings } from '~/db/schema';
 import { eq } from 'drizzle-orm';
 import { LuImage, LuTrash2 } from '@qwikest/icons/lucide';
-import { upload } from '@vercel/blob/client';
+import { put } from '@vercel/blob';
 import imageCompression from 'browser-image-compression';
 
 const DEFAULT_SETTINGS = {
@@ -40,6 +40,18 @@ export const useUpdateAiSettingsAction = routeAction$(
     try {
       const db = getDB(requestEvent);
 
+      let uploadedImageUrl = data.aiAvatarUrl || null;
+
+      if (data.image && typeof data.image === 'object' && (data.image as Blob).size > 0) {
+        const file = data.image as File;
+        const fileName = `ai-avatar-${Date.now()}.webp`;
+        const { url } = await put(fileName, file, {
+          access: 'public',
+          token: requestEvent.env.get('BLOB_READ_WRITE_TOKEN'),
+        });
+        uploadedImageUrl = url;
+      }
+
       await db.update(siteSettings).set({
         aiEnabled: data.aiEnabled === 'on',
         aiTone: data.aiTone || null,
@@ -48,7 +60,7 @@ export const useUpdateAiSettingsAction = routeAction$(
         aiInitialGreeting: data.aiInitialGreeting || null,
         aiCallToAction: data.aiCallToAction || null,
         whatsappNumber: data.whatsappNumber || '5491112345678',
-        aiAvatarUrl: data.aiAvatarUrl || null,
+        aiAvatarUrl: uploadedImageUrl,
         updatedAt: new Date(),
       }).where(eq(siteSettings.id, 1));
 
@@ -67,6 +79,7 @@ export const useUpdateAiSettingsAction = routeAction$(
     aiCallToAction: z.string().optional(),
     whatsappNumber: z.string().optional(),
     aiAvatarUrl: z.string().optional(),
+    image: z.any().optional(),
   }),
 );
 
@@ -76,29 +89,45 @@ export default component$(() => {
 
   const s = settings.value;
 
-  const isUploading = useSignal(false);
+  const isCompressing = useSignal(false);
   const avatarUrl = useSignal(s.aiAvatarUrl || '');
+  const previewUrl = useSignal<string | null>(null);
 
-  const handleFileChange = $(async (event: Event) => {
+  const handleFileChange = $((event: Event) => {
     const element = event.target as HTMLInputElement;
     if (!element.files || element.files.length === 0) return;
     const file = element.files[0];
-    isUploading.value = true;
+    previewUrl.value = URL.createObjectURL(file);
+    avatarUrl.value = ''; // Clear existing
+  });
+
+  const handleSubmit = $(async (e: Event, currentTarget: HTMLFormElement) => {
+    if (isCompressing.value || action.isRunning) return;
+
+    isCompressing.value = true;
     try {
-      const options = { maxSizeMB: 0.5, maxWidthOrHeight: 500, useWebWorker: true };
-      const compressedFile = await imageCompression(file, options);
-      const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
-      const newFileName = `ai-avatar-${uniqueId}.webp`;
-      const blob = await upload(newFileName, compressedFile, {
-        access: 'public',
-        handleUploadUrl: '/api/upload',
-      });
-      avatarUrl.value = blob.url;
+      const formData = new FormData(currentTarget);
+      const imageFile = formData.get('image') as File | null;
+
+      if (imageFile && imageFile.size > 0 && imageFile.name) {
+        const options = {
+          maxWidthOrHeight: 500,
+          useWebWorker: true,
+          fileType: 'image/webp',
+          initialQuality: 0.8,
+        };
+        const compressedBlob = await imageCompression(imageFile, options);
+        const newFileName = `ai-avatar-${Date.now()}.webp`;
+        const compressedFile = new File([compressedBlob], newFileName, { type: 'image/webp' });
+        
+        formData.set('image', compressedFile);
+      }
+
+      await action.submit(formData);
     } catch (error) {
-      console.error('Error uploading avatar:', error);
+      console.error('Error al comprimir/subir avatar:', error);
     } finally {
-      isUploading.value = false;
-      element.value = '';
+      isCompressing.value = false;
     }
   });
 
@@ -121,7 +150,12 @@ export default component$(() => {
         </div>
       )}
 
-      <Form action={action} class="space-y-8">
+      <Form
+        action={action}
+        class="space-y-8"
+        preventdefault:submit
+        onSubmit$={handleSubmit}
+      >
         <input type="hidden" name="aiAvatarUrl" value={avatarUrl.value} />
         {/* Chatbot Section */}
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -150,12 +184,15 @@ export default component$(() => {
               <div class="shrink-0 space-y-2 flex flex-col items-center">
                 <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-1.5">Avatar del Chatbot</label>
                 <div class="w-24 h-24 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden relative group">
-                  {avatarUrl.value ? (
+                  {(previewUrl.value || avatarUrl.value) ? (
                     <>
-                      <img src={avatarUrl.value} alt="Avatar IA" class="w-full h-full object-cover" />
+                      <img src={previewUrl.value || avatarUrl.value} alt="Avatar IA" class="w-full h-full object-cover" />
                       <button
                         type="button"
-                        onClick$={() => avatarUrl.value = ''}
+                        onClick$={() => {
+                          avatarUrl.value = '';
+                          previewUrl.value = null;
+                        }}
                         class="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white"
                         title="Eliminar avatar"
                       >
@@ -165,7 +202,7 @@ export default component$(() => {
                   ) : (
                     <LuImage class="w-8 h-8 text-slate-300" />
                   )}
-                  {isUploading.value && (
+                  {isCompressing.value && (
                     <div class="absolute inset-0 bg-white/80 flex flex-col items-center justify-center">
                       <div class="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                     </div>
@@ -174,13 +211,14 @@ export default component$(() => {
                 <div class="relative mt-2">
                   <input
                     type="file"
+                    name="image"
                     accept="image/*"
                     onChange$={handleFileChange}
                     class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    disabled={isUploading.value}
+                    disabled={isCompressing.value}
                   />
                   <button type="button" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-full font-medium transition-colors">
-                    {avatarUrl.value ? 'Cambiar foto' : 'Subir foto'}
+                    {(previewUrl.value || avatarUrl.value) ? 'Cambiar foto' : 'Subir foto'}
                   </button>
                 </div>
               </div>
@@ -275,13 +313,13 @@ export default component$(() => {
             disabled={action.isRunning}
             class="bg-emerald-500 text-slate-950 px-10 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-emerald-400 transition shadow-md inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg active:scale-[0.98]"
           >
-            {action.isRunning ? (
+            {action.isRunning || isCompressing.value ? (
               <>
                 <svg class="animate-spin h-5 w-5 text-slate-950" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Guardando...
+                {isCompressing.value ? 'Optimizando...' : 'Guardando...'}
               </>
             ) : (
               'Guardar Configuración IA'
