@@ -8,9 +8,10 @@ export const users = sqliteTable("users", {
   email: text("email").unique(), // Can be null if it's just a guest who provided a phone
   password: text("password"), // Hashed password, null for guests
   phone: text("phone"),
-  role: text("role", { enum: ["ADMIN", "REGISTERED", "GUEST"] })
+  role: text("role", { enum: ["DEV", "OWNER", "MANAGER", "EMPLOYEE", "REGISTERED", "GUEST"] })
     .notNull()
     .default("GUEST"),
+  lastLoginAt: integer("last_login_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(strftime('%s', 'now'))`),
@@ -243,13 +244,95 @@ export const pitchPricingRules = sqliteTable("pitch_pricing_rules", {
   price: real("price").notNull(),
 });
 
+export const usersRelations = relations(users, ({ many }) => ({
+  bookings: many(bookings),
+  cashRegistersOpened: many(cashRegisters, { relationName: "openedBy" }),
+  cashRegistersClosed: many(cashRegisters, { relationName: "closedBy" }),
+  pitchSubscriptions: many(pitchSubscriptions),
+}));
+
 export const pitchesRelations = relations(pitches, ({ many }) => ({
   pricingRules: many(pitchPricingRules),
+  bookings: many(bookings),
+  subscriptions: many(pitchSubscriptions),
 }));
 
 export const pitchPricingRulesRelations = relations(pitchPricingRules, ({ one }) => ({
   pitch: one(pitches, {
     fields: [pitchPricingRules.pitchId],
     references: [pitches.id],
+  }),
+}));
+
+export const bookingsRelations = relations(bookings, ({ one, many }) => ({
+  user: one(users, {
+    fields: [bookings.userId],
+    references: [users.id],
+  }),
+  pitch: one(pitches, {
+    fields: [bookings.pitchId],
+    references: [pitches.id],
+  }),
+  group: one(groups, {
+    fields: [bookings.groupId],
+    references: [groups.id],
+  }),
+  guestRequest: one(guestRequests, {
+    fields: [bookings.id],
+    references: [guestRequests.bookingId],
+  }),
+  groupTransactions: many(groupTransactions),
+}));
+
+export const groupsRelations = relations(groups, ({ many }) => ({
+  transactions: many(groupTransactions),
+  bookings: many(bookings),
+  pitchSubscriptions: many(pitchSubscriptions),
+}));
+
+export const groupTransactionsRelations = relations(groupTransactions, ({ one }) => ({
+  group: one(groups, {
+    fields: [groupTransactions.groupId],
+    references: [groups.id],
+  }),
+  booking: one(bookings, {
+    fields: [groupTransactions.bookingId],
+    references: [bookings.id],
+  }),
+}));
+
+export const cashRegistersRelations = relations(cashRegisters, ({ one, many }) => ({
+  openedByUser: one(users, {
+    fields: [cashRegisters.openedBy],
+    references: [users.id],
+    relationName: "openedBy",
+  }),
+  closedByUser: one(users, {
+    fields: [cashRegisters.closedBy],
+    references: [users.id],
+    relationName: "closedBy",
+  }),
+  movements: many(cashMovements),
+}));
+
+export const cashMovementsRelations = relations(cashMovements, ({ one }) => ({
+  register: one(cashRegisters, {
+    fields: [cashMovements.registerId],
+    references: [cashRegisters.id],
+  }),
+}));
+
+export const pitchSubscriptionsRelations = relations(pitchSubscriptions, ({ one }) => ({
+  pitch: one(pitches, {
+    fields: [pitchSubscriptions.pitchId],
+    references: [pitches.id],
+  }),
+  user: one(users, {
+    fields: [pitchSubscriptions.userId],
+    references: [users.id],
+  }),
+  group: one(groups, {
+    fields: [pitchSubscriptions.groupId],
+    references: [groups.id],
   }),
 }));

@@ -2,7 +2,18 @@ import { component$, Slot, useSignal, $ } from "@builder.io/qwik";
 import { Link, useLocation, routeLoader$, server$ } from "@builder.io/qwik-city";
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
-import { siteSettings } from "~/db/schema";
+import { siteSettings, users } from "~/db/schema";
+
+export const useAdminUser = routeLoader$(async (requestEvent) => {
+  const db = getDB(requestEvent);
+  const adminId = requestEvent.cookie.get('auth_session')?.value;
+  if (!adminId) return null;
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, adminId),
+    columns: { role: true, name: true }
+  });
+  return user;
+});
 
 export const useSiteSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -23,6 +34,8 @@ export default component$(() => {
   const loc = useLocation();
   const isCollapsed = useSignal(false);
   const settings = useSiteSettings();
+  const adminUser = useAdminUser();
+  const userRole = adminUser.value?.role || 'GUEST';
 
   const navItems = [
     {
@@ -36,6 +49,7 @@ export default component$(() => {
           <rect x="3" y="14" width="7" height="7"></rect>
         </svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]
     },
     {
       name: "Perfil del Club",
@@ -46,6 +60,7 @@ export default component$(() => {
           <path d="M3 7v1a3 3 0 0 0 6 0V7m6 0v1a3 3 0 0 0 6 0V7m-6 0h6m-6 0a3 3 0 0 0-6 0m6 0v12m-6-12v12"></path>
         </svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
       name: "Canchas",
@@ -58,9 +73,10 @@ export default component$(() => {
           <circle cx="12" cy="10" r="3"></circle>
         </svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
-      name: "Calendario",
+      name: "Reservas",
       href: "/admin/calendar/",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
@@ -70,6 +86,7 @@ export default component$(() => {
           <line x1="3" y1="10" x2="21" y2="10"></line>
         </svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]
     },
 
     {
@@ -78,6 +95,7 @@ export default component$(() => {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
       name: "Cuentas Ctes.",
@@ -85,6 +103,7 @@ export default component$(() => {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
       name: "Escuelita",
@@ -92,6 +111,7 @@ export default component$(() => {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
       name: "Abonos",
@@ -99,6 +119,7 @@ export default component$(() => {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="m9 16 2 2 4-4"/></svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
       name: "Configurar IA",
@@ -106,6 +127,7 @@ export default component$(() => {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
       name: "Auditoría IA",
@@ -113,6 +135,15 @@ export default component$(() => {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"]
+    },
+    {
+      name: "Usuarios",
+      href: "/admin/users/",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
       name: "Ir al Sitio",
@@ -124,8 +155,11 @@ export default component$(() => {
           <line x1="10" y1="14" x2="21" y2="3"></line>
         </svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]
     }
   ];
+
+  const visibleNavItems = navItems.filter(item => item.roles.includes(userRole));
 
   return (
     <div class="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
@@ -219,7 +253,7 @@ export default component$(() => {
             {!isCollapsed.value && "Administración"}
           </div>
           
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             let isActive = false;
             if (item.href === "/admin/") {
               isActive = loc.url.pathname === "/admin" || loc.url.pathname === "/admin/";

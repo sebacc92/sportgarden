@@ -12,9 +12,17 @@ export const useAdminStats = routeLoader$(async (requestEvent) => {
   });
 
   const allBookings = await db.query.bookings.findMany();
+  const now = new Date();
 
   const pendingCount = allBookings.filter(b => b.status === "PENDING_APPROVAL").length;
   const confirmedCount = allBookings.filter(b => b.status === "CONFIRMED").length;
+
+  // Calculate pitches currently in use
+  const inUseCount = allBookings.filter(b => 
+    b.status === "CONFIRMED" && 
+    b.startTime <= now && 
+    b.endTime >= now
+  ).length;
 
   // Fetch 9 most recent bookings
   const recentBookings = await db
@@ -36,6 +44,7 @@ export const useAdminStats = routeLoader$(async (requestEvent) => {
 
   return {
     activePitches: allPitches.length,
+    pitchesInUse: inUseCount,
     pendingBookings: pendingCount,
     confirmedBookings: confirmedCount,
     recentBookings: recentBookings.map(b => ({
@@ -52,21 +61,40 @@ export default component$(() => {
 
   return (
     <div class="p-8 overflow-auto h-full bg-slate-50">
-      <header class="mb-8">
-        <h1 class="text-3xl font-bold text-slate-800">Panel de Control</h1>
-        <p class="text-slate-500 mt-1">Resumen del estado actual del club.</p>
+      <header class="mb-8 flex items-center justify-between">
+        <div>
+          <h1 class="text-3xl font-bold text-slate-800">Panel de Control</h1>
+          <p class="text-slate-500 mt-1">Resumen del estado actual del club.</p>
+        </div>
+        <Link 
+          href="/" 
+          target="_blank"
+          class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl shadow-sm hover:bg-slate-50 hover:border-slate-800 transition-all text-sm"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          Ver Sitio Público
+        </Link>
       </header>
 
       {/* Stats Cards */}
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
-          <div class="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4 relative overflow-hidden group">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-slate-400 uppercase tracking-widest leading-tight">Reservas Pendientes<br/>por Confirmar</div>
+              <div class="text-3xl font-black text-slate-800 leading-tight mt-1">{stats.value.pendingBookings}</div>
+            </div>
           </div>
-          <div>
-            <div class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Pendientes</div>
-            <div class="text-3xl font-black text-slate-800">{stats.value.pendingBookings}</div>
-          </div>
+          <Link 
+            href="/admin/calendar" 
+            class="mt-2 text-[10px] font-black text-amber-600 uppercase tracking-widest hover:underline flex items-center gap-1"
+          >
+            Ver pendientes
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </Link>
         </div>
 
         <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
@@ -79,14 +107,26 @@ export default component$(() => {
           </div>
         </div>
 
-        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex items-center gap-4">
-          <div class="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-slate-400 uppercase tracking-widest">Canchas Activas</div>
+              <div class="flex items-baseline gap-2">
+                <div class="text-3xl font-black text-slate-800">{stats.value.activePitches}</div>
+                <div class="text-xs font-bold text-blue-600 uppercase">{stats.value.pitchesInUse} en uso</div>
+              </div>
+            </div>
           </div>
-          <div>
-            <div class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Canchas Activas</div>
-            <div class="text-3xl font-black text-slate-800">{stats.value.activePitches}</div>
-          </div>
+          <Link 
+            href="/admin/pitches" 
+            class="mt-2 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline flex items-center gap-1"
+          >
+            Gestionar canchas
+            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </Link>
         </div>
       </div>
 
@@ -161,18 +201,9 @@ export default component$(() => {
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-300 group-hover:text-emerald-500 transition-colors"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </Link>
 
-            <Link href="/" class="group flex items-center justify-between bg-white p-6 rounded-2xl border border-slate-200 hover:border-slate-800 hover:shadow-md transition-all">
-              <div class="flex items-center gap-4">
-                <div class="w-12 h-12 bg-slate-100 group-hover:bg-slate-800 text-slate-600 group-hover:text-white rounded-xl flex items-center justify-center transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                </div>
-                <div class="text-left">
-                  <div class="font-bold text-slate-800">Ver Sitio Público</div>
-                  <div class="text-sm text-slate-500">Abrir la página de reservas</div>
-                </div>
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-300 group-hover:text-slate-800 transition-colors"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </Link>
+            <div class="bg-white/50 p-6 rounded-2xl border border-dashed border-slate-200 flex items-center justify-center">
+              <p class="text-xs text-slate-400 font-medium">Más opciones próximamente...</p>
+            </div>
           </div>
         </section>
       </div>

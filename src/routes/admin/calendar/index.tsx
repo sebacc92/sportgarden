@@ -1,12 +1,13 @@
 import { component$, useSignal, useVisibleTask$, $ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, Link, useNavigate, Form } from "@builder.io/qwik-city";
-import { buttonVariants } from "~/components/ui/button/button";
 import { Button, Modal, Alert } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { getDB } from "~/db";
 import { bookings, pitches, users, guestRequests } from "~/db/schema";
 import { BookingSlot } from "~/components/admin/booking-slot";
+import { BookingListView } from "~/components/admin/booking-list-view";
+import { BookingTimelineView } from "~/components/admin/booking-timeline-view";
 
 // Helper functions for date manipulation
 const getStartOfWeek = (d: Date) => {
@@ -158,6 +159,9 @@ export default component$(() => {
   const updateStatusAction = useUpdateBookingStatusAction();
   const nav = useNavigate();
 
+  // Layout mode: 'grid' (time-grid per pitch) | 'list' (table) | 'timeline' (pitches×time)
+  const layoutMode = useSignal<'grid' | 'list' | 'timeline'>('timeline');
+
   const CALENDAR_START_HOUR = 0;
   const CALENDAR_END_HOUR = 24;
   const PIXELS_PER_HOUR = 140;
@@ -237,9 +241,6 @@ export default component$(() => {
     }
   });
 
-  const getDayName = (dateStr: string) => {
-    return new Date(dateStr + "T00:00:00").toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
-  };
 
   const getWeekName = (startStr: string, endStr: string) => {
     const s = new Date(startStr);
@@ -292,52 +293,151 @@ export default component$(() => {
   return (
     <div class="flex flex-col h-full overflow-hidden bg-slate-50 text-slate-900 font-sans">
       {/* Date Navigation Toolbar */}
-      <div class="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shadow-sm z-10 shrink-0">
-        <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
-          <button 
-            onClick$={() => handleViewChange("day")}
-            class={cn("px-4 py-1.5 text-sm font-bold rounded-md transition-colors", calendarData.value.view === "day" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800")}
-          >
-            Día
-          </button>
-          <button 
-            onClick$={() => handleViewChange("week")}
-            class={cn("px-4 py-1.5 text-sm font-bold rounded-md transition-colors", calendarData.value.view === "week" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800")}
-          >
-            Semana
-          </button>
-          <button 
-            onClick$={() => handleViewChange("month")}
-            class={cn("px-4 py-1.5 text-sm font-bold rounded-md transition-colors", calendarData.value.view === "month" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800")}
-          >
-            Mes
-          </button>
+      <div class="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-10 shrink-0 gap-4">
+
+        {/* Left: Title + count */}
+        <div class="flex items-center gap-3 shrink-0">
+          <h1 class="text-base font-black text-slate-800">Reservas</h1>
+          <div class="w-px h-5 bg-slate-200"></div>
+          <span class="text-xs font-bold text-slate-400">
+            <span class="text-slate-800 font-black">{calendarData.value.bookings.length}</span> reservas
+          </span>
         </div>
 
-        <div class="flex items-center gap-4 bg-slate-50 rounded-lg p-1 border border-slate-200">
+        {/* Center: Big date with flanking arrows */}
+        <div class="flex items-center gap-3">
           <Link
             href={`?date=${calendarData.value.prevDateStr}&view=${calendarData.value.view}`}
-            class={cn(buttonVariants({ look: "ghost", size: "sm" }), "p-2 hover:bg-slate-200")}
+            class="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-500 hover:text-slate-800 transition-all shadow-sm"
             title="Anterior"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
           </Link>
-          <div class="font-black text-sm min-w-[200px] text-center text-slate-800 uppercase tracking-wider">
-            {calendarData.value.view === "day" && getDayName(calendarData.value.selectedDateStr)}
-            {calendarData.value.view === "week" && getWeekName(calendarData.value.startDateStr, calendarData.value.endDateStr)}
-            {calendarData.value.view === "month" && getMonthName(calendarData.value.selectedDateStr)}
+
+          <div class="text-center min-w-[280px]">
+            {calendarData.value.view === "day" && (
+              <div class="text-2xl font-black text-slate-800 capitalize leading-tight">
+                {new Date(calendarData.value.selectedDateStr + "T00:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
+              </div>
+            )}
+            {calendarData.value.view === "week" && (
+              <div class="text-xl font-black text-slate-800 leading-tight">
+                {getWeekName(calendarData.value.startDateStr, calendarData.value.endDateStr)}
+              </div>
+            )}
+            {calendarData.value.view === "month" && (
+              <div class="text-xl font-black text-slate-800 capitalize leading-tight">
+                {getMonthName(calendarData.value.selectedDateStr)}
+              </div>
+            )}
+            {calendarData.value.selectedDateStr === new Date().toISOString().split("T")[0] && (
+              <div class="text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-0.5">Hoy</div>
+            )}
           </div>
+
           <Link
             href={`?date=${calendarData.value.nextDateStr}&view=${calendarData.value.view}`}
-            class={cn(buttonVariants({ look: "ghost", size: "sm" }), "p-2 hover:bg-slate-200")}
+            class="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-500 hover:text-slate-800 transition-all shadow-sm"
             title="Siguiente"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
           </Link>
+        </div>
+
+        {/* Right: Go to today + Layout toggle + View Switcher */}
+        <div class="flex items-center gap-3 shrink-0">
+          {calendarData.value.selectedDateStr !== new Date().toISOString().split("T")[0] && (
+            <Link
+              href={`?date=${new Date().toISOString().split("T")[0]}&view=${calendarData.value.view}`}
+              class="px-3 py-1.5 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+            >
+              Ir a Hoy
+            </Link>
+          )}
+
+          {/* Layout Mode Toggle */}
+          <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button
+              onClick$={() => layoutMode.value = 'grid'}
+              class={cn("w-8 h-8 flex items-center justify-center rounded-md transition-colors", layoutMode.value === 'grid' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700")}
+              title="Vista grilla"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+              </svg>
+            </button>
+            <button
+              onClick$={() => layoutMode.value = 'list'}
+              class={cn("w-8 h-8 flex items-center justify-center rounded-md transition-colors", layoutMode.value === 'list' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700")}
+              title="Vista lista"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+                <line x1="8" y1="18" x2="21" y2="18"/>
+                <circle cx="3" cy="6" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+                <circle cx="3" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+              </svg>
+            </button>
+            <button
+              onClick$={() => layoutMode.value = 'timeline'}
+              class={cn("w-8 h-8 flex items-center justify-center rounded-md transition-colors", layoutMode.value === 'timeline' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700")}
+              title="Vista cronograma"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="4" rx="1"/>
+                <rect x="3" y="10" width="11" height="4" rx="1"/>
+                <rect x="3" y="16" width="15" height="4" rx="1"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button
+              onClick$={() => handleViewChange("day")}
+              class={cn("px-3 py-1.5 text-xs font-bold rounded-md transition-colors", calendarData.value.view === "day" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800")}
+            >
+              Día
+            </button>
+            <button
+              onClick$={() => handleViewChange("week")}
+              class={cn("px-3 py-1.5 text-xs font-bold rounded-md transition-colors", calendarData.value.view === "week" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800")}
+            >
+              Semana
+            </button>
+            <button
+              onClick$={() => handleViewChange("month")}
+              class={cn("px-3 py-1.5 text-xs font-bold rounded-md transition-colors", calendarData.value.view === "month" ? "bg-white text-emerald-600 shadow-sm" : "text-slate-500 hover:text-slate-800")}
+            >
+              Mes
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Calendar Area */}
+      {/* Calendar Area: conditionally render grid, list or timeline */}
+      {layoutMode.value === 'list' ? (
+        <main class="flex-1 overflow-auto p-6">
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
+            <BookingListView
+              pitches={calendarData.value.pitches}
+              bookings={calendarData.value.bookings as any}
+              onBookingClick$={handleBookingClick}
+            />
+          </div>
+        </main>
+      ) : layoutMode.value === 'timeline' ? (
+        <main class="flex-1 overflow-auto p-6">
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
+            <BookingTimelineView
+              pitches={calendarData.value.pitches}
+              bookings={calendarData.value.bookings as any}
+              onBookingClick$={handleBookingClick}
+            />
+          </div>
+        </main>
+      ) : (
       <main class="flex-1 overflow-auto p-6 relative">
         <div class={cn(
             "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full",
@@ -349,34 +449,41 @@ export default component$(() => {
             <>
               {/* Pitches Header Row */}
               <div class="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-30">
-                <div class="w-20 shrink-0 border-r border-slate-200 flex items-center justify-center bg-slate-100">
+                <div class="w-16 shrink-0 border-r border-slate-200 flex items-center justify-center bg-slate-100">
                   <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora</span>
                 </div>
-                {calendarData.value.pitches.map((pitch) => (
-                  <div
-                    key={pitch.id}
-                    class="flex-1 text-center py-4 border-r border-slate-200 last:border-0"
-                  >
-                    <div class="font-black text-slate-800 uppercase tracking-tight">{pitch.name}</div>
-                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                      {pitch.type}
+                {calendarData.value.pitches.map((pitch) => {
+                  const pitchBookingCount = calendarData.value.bookings.filter(b => b.booking.pitchId === pitch.id).length;
+                  return (
+                    <div
+                      key={pitch.id}
+                      class="flex-1 text-center py-3 border-r border-slate-200 last:border-0"
+                    >
+                      <div class="font-black text-slate-800 text-sm">{pitch.name}</div>
+                      <div class="flex items-center justify-center gap-2 mt-0.5">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{pitch.type}</span>
+                        {pitchBookingCount > 0 && (
+                          <span class="text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                            {pitchBookingCount} res.
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* Calendar Grid Body */}
               <div
                 ref={scrollContainerRef}
-                class="flex relative bg-slate-50/30 overflow-y-auto"
-                style={{ height: `${hours.length * PIXELS_PER_HOUR}px` }}
+                class="flex relative bg-slate-50/30 overflow-y-auto flex-1"
               >
                 {/* Time Column */}
-                <div class="w-20 shrink-0 border-r border-slate-200 relative bg-slate-50/80 backdrop-blur-sm z-20">
+                <div class="w-16 shrink-0 border-r border-slate-200 relative bg-white z-20">
                   {hours.map((hour) => (
                     <div
                       key={hour}
-                      class="absolute w-full text-right pr-3 text-xs font-bold text-slate-400 -mt-2"
+                      class="absolute w-full text-right pr-2 text-[11px] font-bold text-slate-300 -mt-2"
                       style={{
                         top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px`,
                       }}
@@ -638,6 +745,7 @@ export default component$(() => {
 
         </div>
       </main>
+      )}
 
       {/* Booking Details Modal */}
       <Modal.Root bind:show={isModalOpen}>
@@ -774,5 +882,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Calendario - SportGardenFutbol",
+  title: "Reservas - SportGardenFutbol",
 };

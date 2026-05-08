@@ -2,7 +2,7 @@ import { component$ } from '@builder.io/qwik';
 import { Form, routeAction$, z, zod$, type DocumentHead } from '@builder.io/qwik-city';
 import { getDB } from '~/db';
 import { users } from '~/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 
 export const useLoginAction = routeAction$(
@@ -16,7 +16,7 @@ export const useLoginAction = routeAction$(
       .where(
         and(
           eq(users.name, data.username.trim().toLowerCase()),
-          eq(users.role, 'ADMIN')
+          inArray(users.role, ['DEV', 'OWNER', 'MANAGER', 'EMPLOYEE'])
         )
       );
 
@@ -38,6 +38,11 @@ export const useLoginAction = routeAction$(
       maxAge: [15, 'days'],
       path: '/',
     });
+
+    // Update lastLoginAt
+    await db.update(users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(users.id, user.id));
 
     throw requestEvent.redirect(302, '/admin');
   },
