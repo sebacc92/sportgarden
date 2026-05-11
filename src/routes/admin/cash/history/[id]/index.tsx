@@ -4,6 +4,25 @@ import { getDB } from "~/db";
 import { cashRegisters, cashMovements } from "~/db/schema";
 import { eq, desc } from "drizzle-orm";
 
+const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 100];
+
+const CATEGORY_META: Record<string, { label: string; color: string }> = {
+  BOOKING:       { label: "Reserva",       color: "bg-emerald-100 text-emerald-800" },
+  SCHOOL:        { label: "Escuelita",     color: "bg-blue-100 text-blue-800" },
+  GROUP_PAYMENT: { label: "Cuenta Cte.",   color: "bg-purple-100 text-purple-800" },
+  MAINTENANCE:   { label: "Mantenimiento", color: "bg-orange-100 text-orange-800" },
+  SALARY:        { label: "Sueldo",        color: "bg-red-100 text-red-800" },
+  SERVICES:      { label: "Servicios",     color: "bg-yellow-100 text-yellow-800" },
+  OTHER:         { label: "Otro",          color: "bg-slate-100 text-slate-700" },
+};
+
+const METHOD_META: Record<string, string> = {
+  CASH:         "Efectivo",
+  TRANSFER:     "Transferencia",
+  CARD:         "Tarjeta",
+  MERCADO_PAGO: "Mercado Pago",
+};
+
 export const useRegisterDetailData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const registerId = requestEvent.params.id;
@@ -14,89 +33,176 @@ export const useRegisterDetailData = routeLoader$(async (requestEvent) => {
   });
 
   const register = registers[0];
-  if (!register) {
-    throw requestEvent.error(404, "Caja no encontrada");
-  }
+  if (!register) throw requestEvent.error(404, "Caja no encontrada");
 
   const movements = await db.query.cashMovements.findMany({
     where: eq(cashMovements.registerId, register.id),
     orderBy: [desc(cashMovements.createdAt)],
   });
 
-  const totalIncomes = movements.filter(m => m.type === "INCOME").reduce((acc, m) => acc + m.amount, 0);
-  const totalExpenses = movements.filter(m => m.type === "EXPENSE").reduce((acc, m) => acc + m.amount, 0);
+  const totalIncomes  = movements.filter(m => m.type === "INCOME").reduce((a, m) => a + m.amount, 0);
+  const totalExpenses = movements.filter(m => m.type === "EXPENSE").reduce((a, m) => a + m.amount, 0);
   const calculatedBalance = register.openingBalance + totalIncomes - totalExpenses;
 
-  return {
-    register,
-    movements,
-    totalIncomes,
-    totalExpenses,
-    calculatedBalance,
-  };
+  // Por categoría
+  const byCategory: Record<string, { incomes: number; expenses: number }> = {};
+  for (const m of movements) {
+    if (!byCategory[m.category]) byCategory[m.category] = { incomes: 0, expenses: 0 };
+    if (m.type === "INCOME") byCategory[m.category].incomes += m.amount;
+    else byCategory[m.category].expenses += m.amount;
+  }
+
+  // Por método de pago
+  const byMethod: Record<string, { incomes: number; expenses: number }> = {};
+  for (const m of movements) {
+    if (!byMethod[m.paymentMethod]) byMethod[m.paymentMethod] = { incomes: 0, expenses: 0 };
+    if (m.type === "INCOME") byMethod[m.paymentMethod].incomes += m.amount;
+    else byMethod[m.paymentMethod].expenses += m.amount;
+  }
+
+  return { register, movements, totalIncomes, totalExpenses, calculatedBalance, byCategory, byMethod };
 });
 
 export default component$(() => {
   const detailData = useRegisterDetailData();
-  const { register, movements, totalIncomes, totalExpenses, calculatedBalance } = detailData.value;
+  const { register, movements, totalIncomes, totalExpenses, calculatedBalance, byCategory, byMethod } = detailData.value;
 
-  const dateStr = register.closedAt ? new Date(register.closedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "Abierta";
+  const openedStr = register.openedAt
+    ? new Date(register.openedAt).toLocaleString("es-AR", { dateStyle: "long", timeStyle: "short" })
+    : "-";
+  const closedStr = register.closedAt
+    ? new Date(register.closedAt).toLocaleString("es-AR", { dateStyle: "long", timeStyle: "short" })
+    : "Abierta";
+
+  const billCount = register.billCount as Record<string, number> | null;
+  const billTotalCash = billCount
+    ? BILL_DENOMINATIONS.reduce((sum, d) => sum + d * (billCount[d] || 0), 0)
+    : null;
 
   return (
-    <div class="p-6 bg-slate-50 min-h-full font-sans print:bg-white print:p-0">
-      <div class="max-w-4xl mx-auto space-y-6">
+    <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans print:bg-white print:p-0">
+      <div class="max-w-4xl mx-auto space-y-5">
 
-        {/* Back & Print Buttons */}
-        <div class="flex justify-between items-center print:hidden mb-6">
-          <Link href="/admin/cash/history/" class="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
+        {/* Toolbar */}
+        <div class="flex justify-between items-center print:hidden">
+          <Link href="/admin/cash/history/"
+            class="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
             Volver al Historial
           </Link>
-          <button
-            onClick$={() => window.print()}
-            class="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-900 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect width="12" height="8" x="6" y="14" /></svg>
-            Imprimir / Guardar PDF
+          <button onClick$={() => window.print()}
+            class="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+            Descargar PDF
           </button>
         </div>
 
-        {/* Report Content */}
+        {/* Report Card */}
         <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 print:shadow-none print:border-none print:p-0">
 
+          {/* Report Header */}
           <div class="text-center mb-8 border-b border-slate-200 pb-6 print:border-black">
-            <h1 class="text-3xl font-black tracking-tight text-slate-800">Reporte de Caja</h1>
-            <p class="text-slate-500 mt-2 font-medium">Cierre: {dateStr}</p>
+            <div class="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 print:text-black">Reporte de Caja</div>
+            <h1 class="text-3xl font-black tracking-tight text-slate-800">Cierre del Turno</h1>
+            <div class="flex flex-wrap justify-center gap-6 mt-3 text-sm text-slate-500">
+              <span>📅 Apertura: <strong class="text-slate-700">{openedStr}</strong></span>
+              <span>🔒 Cierre: <strong class="text-slate-700">{closedStr}</strong></span>
+            </div>
           </div>
 
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+          {/* Summary Cards */}
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 print:border-black print:bg-transparent">
-              <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 print:text-black">Apertura</div>
-              <div class="text-xl font-black text-slate-800">${register.openingBalance.toFixed(2)}</div>
+              <div class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1 print:text-black">Apertura</div>
+              <div class="text-xl font-black text-slate-800">${register.openingBalance.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
             </div>
             <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 print:border-black print:bg-transparent">
-              <div class="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 print:text-black">Ingresos</div>
-              <div class="text-xl font-black text-emerald-700 print:text-black">+${totalIncomes.toFixed(2)}</div>
+              <div class="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1 print:text-black">Ingresos</div>
+              <div class="text-xl font-black text-emerald-700 print:text-black">+${totalIncomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
             </div>
             <div class="bg-red-50 p-4 rounded-xl border border-red-100 print:border-black print:bg-transparent">
-              <div class="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1 print:text-black">Egresos</div>
-              <div class="text-xl font-black text-red-700 print:text-black">-${totalExpenses.toFixed(2)}</div>
+              <div class="text-xs font-black text-red-600 uppercase tracking-widest mb-1 print:text-black">Egresos</div>
+              <div class="text-xl font-black text-red-700 print:text-black">-${totalExpenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
             </div>
             <div class="bg-slate-800 p-4 rounded-xl border border-slate-900 print:border-black print:bg-transparent">
-              <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 print:text-black">Cierre Teórico</div>
-              <div class="text-xl font-black text-white print:text-black">${calculatedBalance.toFixed(2)}</div>
+              <div class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1 print:text-black">Cierre Teórico</div>
+              <div class="text-xl font-black text-white print:text-black">${calculatedBalance.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
             </div>
           </div>
 
-          {register.closingBalance !== null && (
-            <div class="mb-8 p-4 bg-slate-100 rounded-xl border border-slate-200 print:border-black print:bg-transparent flex justify-between items-center">
-              <span class="font-bold text-slate-700">Monto declarado al cerrar:</span>
-              <span class="text-2xl font-black text-slate-900">${register.closingBalance.toFixed(2)}</span>
+          {/* Arqueo de Billetes */}
+          {billCount && billTotalCash !== null && (
+            <div class="mb-8">
+              <h2 class="text-base font-black text-slate-800 mb-3 border-b border-slate-200 pb-2 print:border-black">Arqueo de Billetes</h2>
+              <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+                {BILL_DENOMINATIONS.filter(d => (billCount[d] || 0) > 0).map((d) => (
+                  <div key={d} class="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl print:border-black print:bg-transparent">
+                    <span class="text-sm font-bold text-slate-600">${d.toLocaleString("es-AR")}</span>
+                    <span class="text-sm text-slate-500">× {billCount[d]}</span>
+                    <span class="text-sm font-black text-slate-800">${(d * (billCount[d] || 0)).toLocaleString("es-AR")}</span>
+                  </div>
+                ))}
+              </div>
+              <div class="flex justify-between items-center p-4 bg-emerald-50 border border-emerald-200 rounded-xl print:border-black print:bg-transparent">
+                <span class="font-bold text-emerald-700">Total Efectivo Contado</span>
+                <span class="text-2xl font-black text-emerald-800">${billTotalCash.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>
+              </div>
+              {register.closingBalance !== null && (
+                <div class={`mt-2 flex justify-between items-center p-3 rounded-xl border print:border-black ${Math.abs(billTotalCash - (register.closingBalance || 0)) < 0.01 ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+                  <span class="font-bold text-sm">Diferencia vs. cierre</span>
+                  <span class="font-black">${(billTotalCash - (register.closingBalance || 0)).toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              )}
             </div>
           )}
 
-          <h2 class="text-lg font-black text-slate-800 mb-4 print:text-xl border-b border-slate-200 pb-2 print:border-black">Detalle de Movimientos</h2>
+          {register.notes && (
+            <div class="mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl print:border-black print:bg-transparent">
+              <div class="text-xs font-black text-yellow-700 uppercase tracking-wider mb-1 print:text-black">Observaciones del Turno</div>
+              <p class="text-sm text-slate-700">{register.notes}</p>
+            </div>
+          )}
 
+          {/* Desglose por Categoría */}
+          {Object.keys(byCategory).length > 0 && (
+            <div class="mb-8">
+              <h2 class="text-base font-black text-slate-800 mb-3 border-b border-slate-200 pb-2 print:border-black">Resumen por Categoría</h2>
+              <div class="space-y-2">
+                {Object.entries(byCategory).map(([cat, vals]) => {
+                  const meta = CATEGORY_META[cat] || CATEGORY_META["OTHER"];
+                  return (
+                    <div key={cat} class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 print:border-black print:bg-transparent">
+                      <span class={`px-2 py-0.5 rounded-md text-xs font-bold ${meta.color}`}>{meta.label}</span>
+                      <div class="flex gap-6 text-sm">
+                        {vals.incomes > 0 && <span class="font-bold text-emerald-600">+${vals.incomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
+                        {vals.expenses > 0 && <span class="font-bold text-red-600">-${vals.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
+                        <span class="font-black text-slate-800">${(vals.incomes - vals.expenses).toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Desglose por Método */}
+          {Object.keys(byMethod).length > 0 && (
+            <div class="mb-8">
+              <h2 class="text-base font-black text-slate-800 mb-3 border-b border-slate-200 pb-2 print:border-black">Resumen por Método de Pago</h2>
+              <div class="grid grid-cols-2 gap-3">
+                {Object.entries(byMethod).map(([method, vals]) => (
+                  <div key={method} class="p-3 bg-slate-50 border border-slate-100 rounded-xl print:border-black print:bg-transparent">
+                    <div class="text-xs font-bold text-slate-500 uppercase mb-1">{METHOD_META[method] || method}</div>
+                    {vals.incomes > 0 && <div class="text-sm font-bold text-emerald-600">+${vals.incomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>}
+                    {vals.expenses > 0 && <div class="text-sm font-bold text-red-600">-${vals.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Movements Table */}
+          <h2 class="text-base font-black text-slate-800 mb-3 border-b border-slate-200 pb-2 print:border-black">Detalle de Movimientos</h2>
           <table class="w-full text-left border-collapse print:text-sm">
             <thead>
               <tr class="bg-slate-50 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 print:bg-transparent print:border-black print:text-black">
@@ -107,30 +213,33 @@ export default component$(() => {
                 <th class="p-3 text-right">Monto</th>
               </tr>
             </thead>
-            <tbody class="font-semibold text-slate-700 print:text-black">
+            <tbody class="font-medium text-slate-700 print:text-black">
               {movements.length === 0 ? (
-                <tr>
-                  <td colSpan={5} class="p-6 text-center text-slate-500">Sin movimientos</td>
-                </tr>
+                <tr><td colSpan={5} class="p-6 text-center text-slate-400">Sin movimientos</td></tr>
               ) : (
-                movements.map((m) => (
-                  <tr key={m.id} class="border-b border-slate-100 last:border-0 print:border-black">
-                    <td class="p-3 whitespace-nowrap">
-                      {new Date(m.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
-                    </td>
-                    <td class="p-3 text-xs">{m.category}</td>
-                    <td class="p-3 text-slate-500 font-medium print:text-black">{m.description || "-"}</td>
-                    <td class="p-3 text-xs">{m.paymentMethod}</td>
-                    <td class={`p-3 text-right font-black ${m.type === "INCOME" ? "text-emerald-600 print:text-black" : "text-red-600 print:text-black"}`}>
-                      {m.type === "INCOME" ? "+" : "-"}${m.amount.toFixed(2)}
-                    </td>
-                  </tr>
-                ))
+                movements.map((m) => {
+                  const cat = CATEGORY_META[m.category] || CATEGORY_META["OTHER"];
+                  return (
+                    <tr key={m.id} class="border-b border-slate-100 last:border-0 print:border-black">
+                      <td class="p-3 text-xs whitespace-nowrap">
+                        {new Date(m.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                      </td>
+                      <td class="p-3">
+                        <span class={`px-2 py-0.5 rounded-md text-xs font-bold print:bg-transparent print:font-bold ${cat.color}`}>{cat.label}</span>
+                      </td>
+                      <td class="p-3 text-sm text-slate-500 print:text-black">{m.description || "—"}</td>
+                      <td class="p-3 text-xs text-slate-500 print:text-black">{METHOD_META[m.paymentMethod] || m.paymentMethod}</td>
+                      <td class={`p-3 text-right font-black text-sm print:text-black ${m.type === "INCOME" ? "text-emerald-600" : "text-red-600"}`}>
+                        {m.type === "INCOME" ? "+" : "-"}${m.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
 
-          <div class="mt-16 text-center text-slate-400 text-xs font-medium print:block">
+          <div class="mt-12 text-center text-slate-400 text-xs font-medium print:block">
             <p>Reporte generado el {new Date().toLocaleString("es-AR")}</p>
           </div>
         </div>

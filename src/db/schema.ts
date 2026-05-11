@@ -118,6 +118,7 @@ export const siteSettings = sqliteTable('site_settings', {
   extraServices: text('extra_services', { mode: 'json' }), // array of { name: string, price: number, icon: string }
   bankAlias: text('bank_alias'),
   galleryImages: text('gallery_images', { mode: 'json' }), // array of image URLs (max 20)
+  schoolCategories: text('school_categories', { mode: 'json' }), // array of { id: string, name: string, teacher: string }
   
   updatedAt: integer('updated_at', { mode: 'timestamp' }),
 });
@@ -170,6 +171,7 @@ export const students = sqliteTable("students", {
   guardianPhone: text("guardian_phone"),
   guardianEmail: text("guardian_email"),
   category: text("category"), // Ej: "2010/2011"
+  monthlyFee: real("monthly_fee").notNull().default(0),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
@@ -209,13 +211,16 @@ export const cashRegisters = sqliteTable("cash_registers", {
   status: text("status", { enum: ["OPEN", "CLOSED"] }).notNull().default("OPEN"),
   openedBy: text("opened_by").references(() => users.id),
   closedBy: text("closed_by").references(() => users.id),
+  // Arqueo de billetes al cierre: { "100": 5, "500": 10, ... }
+  billCount: text("bill_count", { mode: "json" }).$type<Record<string, number>>(),
+  notes: text("notes"), // Observaciones del turno
 });
 
 export const cashMovements = sqliteTable("cash_movements", {
   id: text("id").primaryKey(),
   registerId: text("register_id").notNull().references(() => cashRegisters.id),
   type: text("type", { enum: ["INCOME", "EXPENSE"] }).notNull(),
-  category: text("category", { enum: ["BOOKING", "SCHOOL", "GROUP_PAYMENT", "MAINTENANCE", "OTHER"] }).notNull(),
+  category: text("category", { enum: ["BOOKING", "SCHOOL", "GROUP_PAYMENT", "MAINTENANCE", "SALARY", "SERVICES", "OTHER"] }).notNull(),
   amount: real("amount").notNull(),
   description: text("description"),
   paymentMethod: text("payment_method", { enum: ["CASH", "TRANSFER", "CARD", "MERCADO_PAGO"] }).notNull().default("CASH"),

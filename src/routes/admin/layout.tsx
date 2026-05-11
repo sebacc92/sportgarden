@@ -30,7 +30,7 @@ export const useSiteSettings = routeLoader$(async (requestEvent) => {
   });
 });
 
-export const updateClubStatus = server$(async function(status: string) {
+export const updateClubStatus = server$(async function (status: string) {
   const db = getDB(this);
   await db.update(siteSettings)
     .set({ clubStatus: status, updatedAt: new Date() })
@@ -58,6 +58,14 @@ export default component$(() => {
         </svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]
+    },
+    {
+      name: "Caja",
+      href: "/admin/cash/",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2" /><path d="M6 12h.01M18 12h.01" /></svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
       name: "Reservas",
@@ -89,7 +97,15 @@ export default component$(() => {
       name: "Escuelita",
       href: "/admin/school/",
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" /></svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER"]
+    },
+    {
+      name: "Abonos fijos",
+      href: "/admin/subscriptions/",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="m9 16 2 2 4-4" /></svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
     },
@@ -102,26 +118,10 @@ export default component$(() => {
       roles: ["DEV", "OWNER", "MANAGER"]
     },
     {
-      name: "Abonos fijos",
-      href: "/admin/subscriptions/",
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="m9 16 2 2 4-4"/></svg>
-      ),
-      roles: ["DEV", "OWNER", "MANAGER"]
-    },
-    {
-      name: "Caja",
-      href: "/admin/cash/",
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
-      ),
-      roles: ["DEV", "OWNER", "MANAGER"]
-    },
-    {
       name: "Configurar IA",
       href: "/admin/ia/",
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M12 8V4H8" /><rect width="16" height="12" x="4" y="8" rx="2" /><path d="M2 14h2" /><path d="M20 14h2" /><path d="M15 13v2" /><path d="M9 13v2" /></svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
     },
@@ -129,7 +129,7 @@ export default component$(() => {
       name: "Auditoría IA",
       href: "/admin/chats/",
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
     },
@@ -149,7 +149,7 @@ export default component$(() => {
       href: "/admin/gallery/",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
         </svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
@@ -158,7 +158,7 @@ export default component$(() => {
       name: "Usuarios",
       href: "/admin/users/",
       icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
     },
@@ -181,7 +181,7 @@ export default component$(() => {
   return (
     <div class="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
       {/* Sidebar */}
-      <aside 
+      <aside
         class={[
           "bg-slate-950 text-slate-300 flex flex-col shrink-0 shadow-xl z-50 transition-all duration-300 relative",
           isCollapsed.value ? "w-20" : "w-64"
@@ -193,12 +193,12 @@ export default component$(() => {
           class="absolute -right-3 top-6 w-6 h-6 bg-slate-800 border border-slate-700 text-slate-300 rounded-full flex items-center justify-center hover:bg-slate-700 transition-colors z-50 shadow-md"
           title={isCollapsed.value ? "Expandir" : "Colapsar"}
         >
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
             width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
             class={["transition-transform duration-300", isCollapsed.value ? "rotate-180" : ""]}
           >
-            <path d="m15 18-6-6 6-6"/>
+            <path d="m15 18-6-6 6-6" />
           </svg>
         </button>
 
@@ -221,10 +221,10 @@ export default component$(() => {
         <div class={["px-6 py-4 border-b border-white/5 transition-all duration-300", isCollapsed.value ? "opacity-0 h-0 overflow-hidden py-0" : "opacity-100"]}>
           {(() => {
             if (!settings.value) return null;
-            
+
             const currentStatus = settings.value.clubStatus;
             const hours = settings.value.operatingHours as any[];
-            
+
             const calculateAutoStatus = () => {
               const now = new Date();
               const day = now.getDay();
@@ -234,12 +234,12 @@ export default component$(() => {
             };
 
             const isOpen = currentStatus === 'OPEN' || (currentStatus === 'AUTO' && calculateAutoStatus());
-            
+
             const handleStatusChange = $(async () => {
               const nextStatus = currentStatus === 'AUTO' ? 'CLOSED' : currentStatus === 'CLOSED' ? 'OPEN' : 'AUTO';
               const labels: any = { 'AUTO': 'Cerrado (Manual)', 'CLOSED': 'Abierto (Manual)', 'OPEN': 'Automático' };
               const confirmMsg = `¿Estás seguro de cambiar el estado a ${labels[currentStatus]}?`;
-              
+
               if (window.confirm(confirmMsg)) {
                 await updateClubStatus(nextStatus);
                 window.location.reload();
@@ -252,8 +252,8 @@ export default component$(() => {
                   <div class={["w-2 h-2 rounded-full", isOpen ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse"]}></div>
                   <span class="text-xs font-black uppercase tracking-widest text-slate-400">Estado</span>
                 </div>
-                
-                <button 
+
+                <button
                   onClick$={handleStatusChange}
                   title={`Modo actual: ${currentStatus === 'AUTO' ? 'Automático' : 'Manual'}`}
                   class={["flex items-center gap-1.5 px-2 py-1 rounded-md transition-all group", isOpen ? "bg-emerald-500/10 hover:bg-emerald-500/20" : "bg-red-500/10 hover:bg-red-500/20"]}
@@ -262,7 +262,7 @@ export default component$(() => {
                     {isOpen ? "Abierto" : "Cerrado"}
                   </span>
                   <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-slate-500 group-hover:text-white transition-colors opacity-50">
-                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
                   </svg>
                 </button>
               </div>
@@ -274,7 +274,7 @@ export default component$(() => {
           <div class={["text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 px-2 transition-all", isCollapsed.value ? "opacity-0 h-0 mb-0" : "opacity-100"]}>
             {!isCollapsed.value && "Administración"}
           </div>
-          
+
           {visibleNavItems.map((item) => {
             let isActive = false;
             if (item.href === "/admin/") {
@@ -304,7 +304,7 @@ export default component$(() => {
             );
           })}
         </nav>
-        
+
         <div class="p-4 border-t border-white/5 overflow-hidden">
           <div class={["flex items-center", isCollapsed.value ? "justify-center" : "gap-3 px-2"]}>
             <div class="w-8 h-8 rounded-full bg-emerald-600 flex shrink-0 items-center justify-center text-white font-bold">
@@ -321,7 +321,7 @@ export default component$(() => {
       </aside>
 
       {/* Main Content (Slot) */}
-      <div class="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+      <div class="flex-1 flex flex-col min-w-0 overflow-y-auto relative">
         <Slot />
       </div>
     </div>
