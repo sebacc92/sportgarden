@@ -2,7 +2,7 @@ import { component$, Slot, useSignal, $ } from "@builder.io/qwik";
 import { Link, useLocation, routeLoader$, server$ } from "@builder.io/qwik-city";
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
-import { siteSettings, users } from "~/db/schema";
+import { siteSettings, users, cashRegisters } from "~/db/schema";
 import logo from "../../media/SportGarden8.png";
 
 export const useAdminUser = routeLoader$(async (requestEvent) => {
@@ -29,7 +29,14 @@ export const useSiteSettings = routeLoader$(async (requestEvent) => {
     where: eq(siteSettings.id, 1)
   });
 });
-
+export const useOpenRegister = routeLoader$(async (requestEvent) => {
+  const db = getDB(requestEvent);
+  const openRegister = await db.query.cashRegisters.findFirst({
+    where: eq(cashRegisters.status, "OPEN"),
+    columns: { id: true, openedAt: true }
+  });
+  return openRegister ? { id: openRegister.id, openedAt: openRegister.openedAt.toISOString() } : null;
+});
 export const updateClubStatus = server$(async function (status: string) {
   const db = getDB(this);
   await db.update(siteSettings)
@@ -43,6 +50,7 @@ export default component$(() => {
   const isCollapsed = useSignal(false);
   const settings = useSiteSettings();
   const adminUser = useAdminUser();
+  const openRegister = useOpenRegister();
   const userRole = adminUser.value?.role ?? 'GUEST';
 
   const navItems = [
@@ -153,6 +161,14 @@ export default component$(() => {
         </svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
+    },
+    {
+      name: "Clientes",
+      href: "/admin/clients/",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]
     },
     {
       name: "Usuarios",
@@ -322,6 +338,33 @@ export default component$(() => {
 
       {/* Main Content (Slot) */}
       <div class="flex-1 flex flex-col min-w-0 overflow-y-auto relative">
+        {/* Global Warning for Stale Cash Register */}
+        {openRegister.value && !loc.url.pathname.startsWith('/admin/login') && (() => {
+          const openedDate = new Date(openRegister.value.openedAt);
+          const today = new Date();
+          const openedYMD = `${openedDate.getFullYear()}-${String(openedDate.getMonth() + 1).padStart(2, '0')}-${String(openedDate.getDate()).padStart(2, '0')}`;
+          const todayYMD = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+          
+          if (openedYMD !== todayYMD && openedDate < today) {
+            return (
+              <div class="bg-amber-500 text-white px-8 py-3 flex items-center justify-between gap-4 shrink-0 shadow-lg z-20">
+                <div class="flex items-center gap-4">
+                  <div class="bg-white/20 p-2 rounded-xl">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                  </div>
+                  <div>
+                    <div class="text-xs font-black uppercase tracking-widest leading-none mb-1">Advertencia: Caja Abierta de ayer</div>
+                    <div class="text-sm font-medium opacity-90">La caja se abrió el <strong>{openedDate.toLocaleDateString("es-AR")}</strong>. Ciérrala para separar los ingresos de hoy.</div>
+                  </div>
+                </div>
+                <Link href="/admin/cash" class="bg-white text-amber-600 px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-amber-50 transition-all shadow-sm">
+                  Gestionar Caja
+                </Link>
+              </div>
+            );
+          }
+          return null;
+        })()}
         <Slot />
       </div>
     </div>

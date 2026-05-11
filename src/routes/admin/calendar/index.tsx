@@ -1,10 +1,10 @@
-import { component$, useSignal, useVisibleTask$, useTask$, $, useComputed$, Fragment } from "@builder.io/qwik";
+import { component$, useSignal, useVisibleTask$, useTask$, $, useComputed$, useStore, Fragment } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, Link, useNavigate, Form, server$ } from "@builder.io/qwik-city";
 import { Button, Modal, Alert } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { eq, and, gte, lte, lt } from "drizzle-orm";
 import { getDB } from "~/db";
-import { bookings, pitches, users, guestRequests } from "~/db/schema";
+import { bookings, pitches, users, guestRequests, cashRegisters, cashMovements } from "~/db/schema";
 import { BookingSlot } from "~/components/admin/booking-slot";
 import { BookingListView } from "~/components/admin/booking-list-view";
 import { BookingTimelineView } from "~/components/admin/booking-timeline-view";
@@ -48,7 +48,7 @@ export const useUpdateBookingStatusAction = routeAction$(
   },
   zod$({
     bookingId: z.string(),
-    status: z.enum(["CONFIRMED", "CANCELLED", "COMPLETED"]),
+    status: z.enum(["PENDING_APPROVAL", "CONFIRMED", "CANCELLED", "COMPLETED"]),
   })
 );
 
@@ -76,20 +76,65 @@ export const useCreateAdminBookingAction = routeAction$(
       }
     }
 
-    // Generate all dates (weekly)
-    const datesToBook: string[] = [];
+    // Generate all dates
+    const datesToBook: { date: string, startTime: string, endTime: string, price: number }[] = [];
     const current = new Date(startDate);
-    while (current <= endDate) {
-      datesToBook.push(current.toISOString().split("T")[0]);
-      current.setDate(current.getDate() + 7);
+    const globalPrice = Number(data.price);
+
+    if (data.isSubscription && data.subscriptionSchedules) {
+      const schedules = JSON.parse(data.subscriptionSchedules) as { dayOfWeek: number, startTime: string, endTime: string, price: number }[];
+      if (schedules.length === 0) {
+        return { success: false, failed: true, message: "Debe seleccionar al menos un día de la semana para el turno fijo." };
+      }
+
+      while (current <= endDate) {
+        const dayOfWeek = current.getDay();
+        const schedule = schedules.find(s => s.dayOfWeek === dayOfWeek);
+        if (schedule) {
+          datesToBook.push({
+            date: current.toISOString().split("T")[0],
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+            price: schedule.price
+          });
+        }
+        current.setDate(current.getDate() + 1);
+      }
+    } else {
+      while (current <= endDate) {
+        datesToBook.push({
+          date: current.toISOString().split("T")[0],
+          startTime: data.startTime,
+          endTime: data.endTime,
+          price: globalPrice
+        });
+        if (data.isSubscription) {
+          current.setDate(current.getDate() + 7);
+        } else {
+          break; // Single booking only
+        }
+      }
     }
 
     const firstBookingId = crypto.randomUUID();
+    const firstPaidAmount = Number(data.paidAmount) || 0;
+    let openRegisterId: string | null = null;
+
+    if (firstPaidAmount > 0) {
+      const openRegister = await db.query.cashRegisters.findFirst({
+        where: eq(cashRegisters.status, "OPEN"),
+      });
+
+      if (!openRegister) {
+        return { failed: true, message: "No hay una caja abierta. Por favor, abre la caja desde el módulo de Caja antes de cobrar." };
+      }
+      openRegisterId = openRegister.id;
+    }
 
     for (let i = 0; i < datesToBook.length; i++) {
-      const d = datesToBook[i];
-      const startDateTime = new Date(`${d}T${data.startTime}:00`);
-      const endDateTime = new Date(`${d}T${data.endTime}:00`);
+      const bookingInfo = datesToBook[i];
+      const startDateTime = new Date(`${bookingInfo.date}T${bookingInfo.startTime}:00`);
+      const endDateTime = new Date(`${bookingInfo.date}T${bookingInfo.endTime}:00`);
       const isFirst = i === 0;
       const bookingId = isFirst ? firstBookingId : crypto.randomUUID();
 
@@ -100,14 +145,27 @@ export const useCreateAdminBookingAction = routeAction$(
         startTime: startDateTime,
         endTime: endDateTime,
         status: "CONFIRMED",
-        totalPrice: Number(data.price),
+        totalPrice: bookingInfo.price,
         paidAmount: isFirst ? (Number(data.paidAmount) || 0) : 0,
-        paymentStatus: isFirst ? ((Number(data.paidAmount) || 0) >= Number(data.price) ? "PAID" : (Number(data.paidAmount) || 0) > 0 ? "PARTIAL" : "PENDING") : "PENDING",
+        paymentStatus: isFirst ? (data.paymentStatus || ((Number(data.paidAmount) || 0) >= Number(data.price) ? "PAID" : (Number(data.paidAmount) || 0) > 0 ? "PARTIAL" : "PENDING")) : "PENDING",
         paymentMethod: data.paymentMethod as any,
         isSubscription: data.isSubscription,
         notes: data.notes || null,
         extras: data.extras ? JSON.parse(data.extras) : null,
       });
+
+      if (isFirst && firstPaidAmount > 0 && openRegisterId) {
+        await db.insert(cashMovements).values({
+          id: crypto.randomUUID(),
+          registerId: openRegisterId,
+          type: "INCOME",
+          category: "BOOKING",
+          amount: firstPaidAmount,
+          description: `Pago reserva: ${data.customerName || "Invitado"}`,
+          paymentMethod: data.paymentMethod as any,
+          referenceId: bookingId,
+        });
+      }
 
       // Only create guest request if no userId was provided
       if (!data.userId) {
@@ -116,6 +174,7 @@ export const useCreateAdminBookingAction = routeAction$(
           bookingId: bookingId,
           name: data.customerName || "Invitado",
           phone: data.customerPhone || "",
+          email: data.customerEmail || null,
         });
       }
     }
@@ -130,13 +189,64 @@ export const useCreateAdminBookingAction = routeAction$(
     userId: z.string().optional(),
     customerName: z.string().optional(),
     customerPhone: z.string().optional(),
+    customerEmail: z.string().optional(),
     price: z.string(),
     paidAmount: z.string().optional(),
+    paymentStatus: z.enum(["PENDING", "PARTIAL", "PAID"]).optional(),
     paymentMethod: z.enum(["CASH", "TRANSFER", "MERCADO_PAGO"]).default("CASH"),
     notes: z.string().optional(),
     extras: z.string().optional(),
     isSubscription: z.coerce.boolean().optional(),
+    subscriptionSchedules: z.string().optional(),
     endDate: z.string().optional(),
+  })
+);
+
+export const useAddBookingPaymentAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const amount = Number(data.amount);
+    
+    if (amount <= 0) return { failed: true, message: "El monto debe ser mayor a 0." };
+
+    const openRegister = await db.query.cashRegisters.findFirst({
+      where: eq(cashRegisters.status, "OPEN"),
+    });
+
+    if (!openRegister) {
+      return { failed: true, message: "No hay una caja abierta. Abre la caja antes de registrar el pago." };
+    }
+
+    const booking = await db.query.bookings.findFirst({
+      where: eq(bookings.id, data.bookingId),
+    });
+
+    if (!booking) return { failed: true, message: "Reserva no encontrada." };
+
+    const newPaidAmount = (booking.paidAmount || 0) + amount;
+    const newPaymentStatus = newPaidAmount >= booking.totalPrice ? "PAID" : "PARTIAL";
+
+    await db.update(bookings)
+      .set({ paidAmount: newPaidAmount, paymentStatus: newPaymentStatus })
+      .where(eq(bookings.id, booking.id));
+
+    await db.insert(cashMovements).values({
+      id: crypto.randomUUID(),
+      registerId: openRegister.id,
+      type: "INCOME",
+      category: "BOOKING",
+      amount: amount,
+      description: `Pago adicional reserva: ${booking.id.slice(0, 8)}`,
+      paymentMethod: data.paymentMethod as any,
+      referenceId: booking.id,
+    });
+
+    return { success: true };
+  },
+  zod$({
+    bookingId: z.string(),
+    amount: z.string(),
+    paymentMethod: z.enum(["CASH", "TRANSFER", "MERCADO_PAGO"]),
   })
 );
 
@@ -163,6 +273,10 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
 
   const settings = await db.query.siteSettings.findFirst();
   const extraServices = (settings?.extraServices || []) as { name: string; price: number; icon: string }[];
+
+  const openRegister = await db.query.cashRegisters.findFirst({
+    where: eq(cashRegisters.status, "OPEN"),
+  });
 
   let selectedDate = new Date();
   const [year, month, day] = dateStr.split("-").map(Number);
@@ -261,6 +375,10 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
       galleryImages: (settings.galleryImages || []) as string[],
       schoolCategories: (settings.schoolCategories || []) as any[],
     } : null,
+    openRegister: openRegister ? {
+      id: openRegister.id,
+      openedAt: openRegister.openedAt.toISOString(),
+    } : null,
   };
 });
 
@@ -305,6 +423,7 @@ export default component$(() => {
   const calendarData = useCalendarData();
   const updateStatusAction = useUpdateBookingStatusAction();
   const createBookingAction = useCreateAdminBookingAction();
+  const addPaymentAction = useAddBookingPaymentAction();
   const nav = useNavigate();
 
   // Layout mode: 'timeline' (pitches×time) | 'list' (table) | 'grid' (time-grid per pitch)
@@ -313,7 +432,7 @@ export default component$(() => {
   const clubSettings = calendarData.value.settings;
   const selectedDateBA = new Date(calendarData.value.selectedDateStr + "T12:00:00");
   const dayOfWeek = selectedDateBA.getDay();
-  
+
   const operatingHours = (() => {
     try {
       if (typeof clubSettings?.operatingHours === 'string') return JSON.parse(clubSettings.operatingHours);
@@ -355,39 +474,83 @@ export default component$(() => {
   const adminOccupiedSlots = useSignal<{ startTime: string; endTime: string }[]>([]);
   const adminIsChecking = useSignal(false);
 
+  const adminSubDays = useStore<Record<number, { active: boolean, startTime: string, duration: string }>>({
+    1: { active: false, startTime: "", duration: "60" },
+    2: { active: false, startTime: "", duration: "60" },
+    3: { active: false, startTime: "", duration: "60" },
+    4: { active: false, startTime: "", duration: "60" },
+    5: { active: false, startTime: "", duration: "60" },
+    6: { active: false, startTime: "", duration: "60" },
+    0: { active: false, startTime: "", duration: "60" },
+  });
+
+  const subscriptionSchedulesJSON = useComputed$(() => {
+    const schedules: { dayOfWeek: number, startTime: string, endTime: string, price: number }[] = [];
+    const pitch = calendarData.value.pitches.find(p => p.id === adminFormPitchId.value);
+    const basePrice = pitch ? pitch.pricePerHour : 0;
+
+    for (let i = 0; i <= 6; i++) {
+      if (adminSubDays[i].active) {
+        const d = adminSubDays[i];
+        const sTime = d.startTime || adminFormTime.value || "18:00";
+        const duration = parseInt(d.duration, 10);
+
+        const startHour = parseInt(sTime.split(":")[0], 10);
+        const startMin = parseInt(sTime.split(":")[1], 10);
+        const totalStartMins = startHour * 60 + startMin;
+        const totalEndMins = totalStartMins + duration;
+        const endHour = Math.floor(totalEndMins / 60);
+        const endMin = totalEndMins % 60;
+        const eTime = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
+
+        const schedulePrice = (basePrice / 60) * duration;
+
+        schedules.push({
+          dayOfWeek: i,
+          startTime: sTime,
+          endTime: eTime,
+          price: schedulePrice
+        });
+      }
+    }
+    return JSON.stringify(schedules);
+  });
+
   // Search user state
   const adminSearchTerm = useSignal("");
   const adminSearchResults = useSignal<any[]>([]);
   const adminSelectedUserId = useSignal("");
   const adminSelectedUserName = useSignal("");
   const adminSelectedUserPhone = useSignal("");
+  const adminSelectedUserEmail = useSignal("");
   const adminIsSearching = useSignal(false);
 
   // Pricing & Extras
+  const adminApplyDiscount = useSignal(false);
   const adminDiscountAmount = useSignal<number | "">(0);
   const adminDiscountType = useSignal<"FIXED" | "PERCENTAGE">("FIXED");
   const adminSelectedExtras = useSignal<string[]>([]);
+  const adminIsFullPayment = useSignal(false);
+  const adminPaidAmount = useSignal<number | "">("");
 
-  useTask$(({ track }) => {
+  useTask$(({ track, cleanup }) => {
     const term = track(() => adminSearchTerm.value);
     if (term.length >= 2) {
       adminIsSearching.value = true;
-      searchUsersServer(term).then(res => {
-        adminSearchResults.value = res;
-        adminIsSearching.value = false;
-      });
+      const id = setTimeout(() => {
+        searchUsersServer(term).then(res => {
+          adminSearchResults.value = res;
+          adminIsSearching.value = false;
+        }).catch(() => {
+          adminSearchResults.value = [];
+          adminIsSearching.value = false;
+        });
+      }, 400);
+      cleanup(() => clearTimeout(id));
     } else {
       adminSearchResults.value = [];
+      adminIsSearching.value = false;
     }
-  });
-
-  const incrementDuration = $(() => {
-    const current = parseInt(adminFormDuration.value, 10);
-    if (current < 360) adminFormDuration.value = String(current + 30);
-  });
-  const decrementDuration = $(() => {
-    const current = parseInt(adminFormDuration.value, 10);
-    if (current > 30) adminFormDuration.value = String(current - 30);
   });
 
   const adminTimeOptions: string[] = [];
@@ -495,7 +658,7 @@ export default component$(() => {
 
   const calendarViewComputed = useComputed$(() => {
     // Accedemos a .value para que Qwik sepa que debe re-ejecutar esto si cambia
-    const data = calendarData.value; 
+    const data = calendarData.value;
     return data.view;
   });
 
@@ -1133,6 +1296,41 @@ export default component$(() => {
                 </div>
               </div>
 
+              {selectedBookingDetails.booking.paymentStatus !== "PAID" && (
+                <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 mt-4">
+                  <div class="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-3">Registrar Pago Adicional</div>
+                  {!calendarData.value.openRegister ? (
+                    <div class="text-xs font-bold text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200 flex items-center gap-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                      Caja cerrada. Abre la caja para cobrar.
+                    </div>
+                  ) : (
+                    <Form action={addPaymentAction} class="space-y-3">
+                    <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
+                    <div class="flex gap-2">
+                      <div class="flex-1 relative">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</span>
+                        <input type="number" name="amount" min="1" max={selectedBookingDetails.booking.totalPrice - selectedBookingDetails.booking.paidAmount} placeholder="Monto" required class="w-full pl-7 pr-3 py-2 border border-emerald-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500" />
+                      </div>
+                      <select name="paymentMethod" class="flex-1 px-3 py-2 border border-emerald-200 rounded-lg text-sm focus:outline-none focus:border-emerald-500 bg-white">
+                        <option value="CASH">Efectivo</option>
+                        <option value="TRANSFER">Transferencia</option>
+                        <option value="MERCADO_PAGO">Mercado Pago</option>
+                      </select>
+                    </div>
+                    {addPaymentAction.value?.failed && (
+                      <div class="text-xs font-bold text-red-600 bg-red-50 p-2 rounded border border-red-200">
+                        {addPaymentAction.value.message}
+                      </div>
+                    )}
+                    <button type="submit" disabled={addPaymentAction.isRunning} class="w-full py-2 bg-emerald-600 text-white rounded-lg font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm">
+                      {addPaymentAction.isRunning ? "Registrando..." : "Registrar Pago en Caja"}
+                    </button>
+                  </Form>
+                  )}
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div class="border-t border-slate-100 pt-6">
                 {updateStatusAction.value?.failed && (
@@ -1141,49 +1339,42 @@ export default component$(() => {
                   </Alert.Root>
                 )}
 
-                {selectedBookingDetails.booking.status === "PENDING_APPROVAL" && (
-                  <div class="flex gap-4">
-                    <Form action={updateStatusAction} class="flex-1">
-                      <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
-                      <input type="hidden" name="status" value="CANCELLED" />
-                      <Button look="secondary" type="submit" disabled={updateStatusAction.isRunning} class="w-full py-3 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-xl font-bold">
-                        Rechazar
-                      </Button>
-                    </Form>
-                    <Form action={updateStatusAction} class="flex-1">
-                      <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
-                      <input type="hidden" name="status" value="CONFIRMED" />
-                      <Button look="primary" type="submit" disabled={updateStatusAction.isRunning} class="w-full py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold">
-                        Confirmar
-                      </Button>
-                    </Form>
-                  </div>
-                )}
+                <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Cambiar Estado</div>
+                <div class="flex flex-wrap gap-2 mb-4">
+                  {[
+                    { value: "CONFIRMED", label: "Confirmado", color: "emerald" },
+                    { value: "PENDING_APPROVAL", label: "Pendiente", color: "amber" },
+                    { value: "CANCELLED", label: "Cancelado", color: "red" },
+                    { value: "COMPLETED", label: "Completado", color: "slate" },
+                  ].map((s) => {
+                    const isCurrent = selectedBookingDetails.booking.status === s.value;
+                    let btnClass = "px-4 py-2 rounded-full text-xs font-bold transition-colors border flex items-center gap-2 ";
+                    
+                    if (s.color === "emerald") {
+                      btnClass += isCurrent ? "bg-emerald-500 text-white border-emerald-600" : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100";
+                    } else if (s.color === "amber") {
+                      btnClass += isCurrent ? "bg-amber-500 text-white border-amber-600" : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100";
+                    } else if (s.color === "red") {
+                      btnClass += isCurrent ? "bg-red-500 text-white border-red-600" : "bg-red-50 text-red-700 border-red-200 hover:bg-red-100";
+                    } else if (s.color === "slate") {
+                      btnClass += isCurrent ? "bg-slate-700 text-white border-slate-800" : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200";
+                    }
 
-                {selectedBookingDetails.booking.status === "CONFIRMED" && (
-                  <div class="flex gap-4">
-                    <Form action={updateStatusAction} class="flex-1">
-                      <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
-                      <input type="hidden" name="status" value="CANCELLED" />
-                      <Button look="secondary" type="submit" disabled={updateStatusAction.isRunning} class="w-full py-3 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 rounded-xl font-bold">
-                        Cancelar Reserva
-                      </Button>
-                    </Form>
-                    <Form action={updateStatusAction} class="flex-1">
-                      <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
-                      <input type="hidden" name="status" value="COMPLETED" />
-                      <Button look="primary" type="submit" disabled={updateStatusAction.isRunning} class="w-full py-3 bg-slate-800 text-white hover:bg-slate-900 rounded-xl font-bold">
-                        Marcar Completada
-                      </Button>
-                    </Form>
-                  </div>
-                )}
-
-                {(selectedBookingDetails.booking.status === "CANCELLED" || selectedBookingDetails.booking.status === "COMPLETED") && (
-                  <Button look="secondary" onClick$={() => isModalOpen.value = false} class="w-full py-3 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl font-bold">
-                    Cerrar
-                  </Button>
-                )}
+                    return (
+                      <Form action={updateStatusAction} key={s.value}>
+                        <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
+                        <input type="hidden" name="status" value={s.value} />
+                        <button type="submit" disabled={isCurrent || updateStatusAction.isRunning} class={btnClass + (isCurrent || updateStatusAction.isRunning ? " opacity-80 cursor-default" : "")}>
+                          <span class={`w-2 h-2 rounded-full ${isCurrent ? 'bg-white' : (s.color === 'emerald' ? 'bg-emerald-500' : s.color === 'amber' ? 'bg-amber-500' : s.color === 'red' ? 'bg-red-500' : 'bg-slate-500')}`}></span>
+                          {s.label}
+                        </button>
+                      </Form>
+                    );
+                  })}
+                </div>
+                <Button look="secondary" onClick$={() => isModalOpen.value = false} class="w-full py-3 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl font-bold">
+                  Cerrar Detalles
+                </Button>
               </div>
             </div>
           ) : (
@@ -1199,8 +1390,6 @@ export default component$(() => {
             {(() => {
               const pitch = calendarData.value.pitches.find(p => p.id === adminFormPitchId.value);
               const dateStr = adminFormDate.value;
-              const durHrs = Math.floor(parseInt(adminFormDuration.value) / 60);
-              const durMins = parseInt(adminFormDuration.value) % 60;
               const nowBAStr = new Intl.DateTimeFormat('en-CA', {
                 timeZone: 'America/Argentina/Buenos_Aires',
                 year: 'numeric', month: '2-digit', day: '2-digit',
@@ -1219,16 +1408,46 @@ export default component$(() => {
                 : basePrice * ((Number(adminDiscountAmount.value) || 0) / 100);
               const finalPrice = Math.max(0, basePrice - discount) + extrasCost;
 
+              const openRegister = calendarData.value.openRegister;
+
+              if (!openRegister) {
+                return (
+                  <div class="flex-1 flex flex-col items-center justify-center p-12 bg-slate-50 text-center">
+                    <div class="w-20 h-20 bg-red-100 rounded-3xl flex items-center justify-center mb-6 text-red-600 shadow-inner">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
+                    </div>
+                    <h2 class="text-3xl font-black text-slate-800 mb-3 tracking-tighter uppercase">Caja Cerrada</h2>
+                    <p class="text-slate-500 font-medium mb-10 max-w-sm leading-relaxed text-sm">
+                      No es posible crear nuevas reservas mientras la caja esté cerrada. Esto asegura que todos los cobros queden registrados correctamente.
+                    </p>
+                    <div class="flex flex-col gap-3 w-full max-w-xs">
+                      <Link 
+                        href="/admin/finances/cash" 
+                        class="w-full py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20 text-center"
+                      >
+                        Ir a Abrir Caja
+                      </Link>
+                      <button 
+                        onClick$={() => isCreateModalOpen.value = false} 
+                        class="w-full py-4 bg-white text-slate-500 rounded-2xl font-black uppercase tracking-widest text-xs border border-slate-200 hover:bg-slate-50 transition-all"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <>
-                  <div class="bg-slate-50 border-b border-slate-200 px-8 pt-8 pb-6 flex flex-col gap-3 shrink-0 relative">
+                  <div class="bg-white border-b border-slate-200 px-8 pt-8 pb-6 shrink-0 relative">
                     {isPast && (
-                      <div class="bg-amber-100 border border-amber-200 text-amber-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-sm flex items-center justify-center gap-2 mb-2 w-full">
+                      <div class="bg-amber-100 border border-amber-200 text-amber-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-sm flex items-center justify-center gap-2 mb-4 w-full">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
                         Horario Pasado o en Curso
                       </div>
                     )}
-                    <div class="flex justify-between items-start">
+                    <div class="flex justify-between items-center">
                       <Modal.Title class="text-[28px] font-black text-slate-800 tracking-tighter leading-none">
                         Nueva Reserva
                       </Modal.Title>
@@ -1236,207 +1455,40 @@ export default component$(() => {
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                       </Modal.Close>
                     </div>
-                    <div class="flex flex-wrap items-center gap-3 text-[14px] text-slate-600 font-semibold tracking-tight mt-2">
-                      <select
-                        class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 hover:bg-slate-50 transition-colors"
-                        value={adminFormPitchId.value}
-                        onChange$={(_, el) => adminFormPitchId.value = el.value}
-                      >
-                        <option value="">Seleccionar cancha</option>
-                        {calendarData.value.pitches.map(p => <option key={p.id} value={p.id}>{`${p.name} ${p.type}`}</option>)}
-                      </select>
-
-                      <input
-                        type="date"
-                        value={adminFormDate.value}
-                        onChange$={(_, el) => adminFormDate.value = el.value}
-                        class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 hover:bg-slate-50 transition-colors"
-                      />
-
-                      <select
-                        class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 hover:bg-slate-50 transition-colors font-mono"
-                        value={adminFormTime.value}
-                        onChange$={(_, el) => adminFormTime.value = el.value}
-                      >
-                        <option value="">--:-- hs</option>
-                        {adminTimeOptions.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
-                      </select>
-                    </div>
                   </div>
 
-                  <div class="flex-1 overflow-y-auto overflow-x-hidden px-8 py-8">
-                    <Form action={createBookingAction} id="create-booking-form" class="space-y-8 pb-10" onSubmitCompleted$={() => { if (createBookingAction.value?.success) isCreateModalOpen.value = false; }}>
-                      <input type="hidden" name="date" value={adminFormDate.value} />
-                      <input type="hidden" name="startTime" value={adminFormTime.value} />
-                      <input type="hidden" name="endTime" value={adminEndTime.value} />
-                      <input type="hidden" name="pitchId" value={adminFormPitchId.value} />
-                      <input type="hidden" name="isSubscription" value={adminIsSubscription.value ? "true" : "false"} />
+                  <div class="flex-1 overflow-y-auto px-8 py-6 bg-slate-50">
+                    <Form action={createBookingAction} id="create-booking-form" class="space-y-6 pb-10" onSubmitCompleted$={() => { if (createBookingAction.value?.success) isCreateModalOpen.value = false; }}>
 
-                      {/* Fila: Tipo de Turno / Precio / Fin */}
-                      <div class="grid grid-cols-2 gap-8">
-                        {/* Tipo de Turno */}
-                        <div class="flex flex-col gap-2">
-                          <div class="flex bg-slate-100 p-1 rounded-full border border-slate-200 shadow-inner">
-                            <button
-                              type="button"
-                              onClick$={() => adminIsSubscription.value = false}
-                              class={cn("flex-1 py-1.5 text-sm font-bold rounded-full transition-all text-center", !adminIsSubscription.value ? "bg-emerald-800 text-white shadow-md" : "text-slate-500 hover:text-slate-700")}
-                            >
-                              Turno único
-                            </button>
-                            <button
-                              type="button"
-                              onClick$={() => adminIsSubscription.value = true}
-                              class={cn("flex-1 py-1.5 text-sm font-bold rounded-full transition-all text-center", adminIsSubscription.value ? "bg-emerald-800 text-white shadow-md" : "text-slate-500 hover:text-slate-700")}
-                            >
-                              Turno fijo
-                            </button>
+                      {/* ---------------------------
+                          BLOQUE 1: Datos del Cliente
+                      --------------------------- */}
+                      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+                          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                          Datos del Organizador
+                        </h3>
+
+                        <div class="relative">
+                          <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Buscar Cliente Registrado</label>
+                          <div class="relative">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                            <input
+                              type="text"
+                              value={adminSearchTerm.value}
+                              onInput$={(_, el) => adminSearchTerm.value = el.value}
+                              placeholder="Buscar por nombre, teléfono o email..."
+                              class="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-medium"
+                            />
+                            {adminIsSearching.value && (
+                              <div class="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-slate-300 border-t-emerald-500 animate-spin"></div>
+                            )}
                           </div>
 
-                          {/* Duración */}
-                          <div class="mt-4 flex flex-col items-center">
-                            <label class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duración</label>
-                            <div class="flex items-center gap-4">
-                              <button type="button" onClick$={decrementDuration} class="w-10 h-10 rounded-xl border-2 border-emerald-600 text-emerald-700 flex items-center justify-center hover:bg-emerald-50 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /></svg>
-                              </button>
-                              <div class="flex gap-1 items-baseline">
-                                <div class="flex flex-col items-center">
-                                  <span class="text-2xl font-black text-slate-800">{String(durHrs).padStart(2, '0')}</span>
-                                  <span class="text-[10px] text-slate-400 font-bold uppercase">Hs</span>
-                                </div>
-                                <span class="text-2xl font-black text-slate-300 -mt-1">:</span>
-                                <div class="flex flex-col items-center">
-                                  <span class="text-2xl font-black text-slate-800">{String(durMins).padStart(2, '0')}</span>
-                                  <span class="text-[10px] text-slate-400 font-bold uppercase">Min</span>
-                                </div>
-                              </div>
-                              <button type="button" onClick$={incrementDuration} class="w-10 h-10 rounded-xl border-2 border-emerald-600 text-emerald-700 flex items-center justify-center hover:bg-emerald-50 transition-colors">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Lado derecho: Precio y Fin */}
-                        <div class="flex flex-col gap-6">
-                          <div>
-                            <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Precio Total</label>
-                            <div class="flex flex-col gap-2">
-                              <div class="flex items-center justify-between text-sm text-slate-500 font-medium px-1">
-                                <span>Precio Base:</span>
-                                <span>${basePrice.toLocaleString('es-AR')}</span>
-                              </div>
-
-                              <div class="flex flex-col gap-2 mt-1">
-                                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Aplicar Descuento</label>
-                                <div class="flex gap-2">
-                                  <select
-                                    value={adminDiscountType.value}
-                                    onChange$={(_, el) => adminDiscountType.value = el.value as any}
-                                    class="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-bold text-slate-600 transition-all"
-                                  >
-                                    <option value="FIXED">Monto Fijo ($)</option>
-                                    <option value="PERCENTAGE">Porcentaje (%)</option>
-                                  </select>
-                                  <input
-                                    type="number"
-                                    value={adminDiscountAmount.value}
-                                    onInput$={(_, el) => adminDiscountAmount.value = el.value ? Number(el.value) : ""}
-                                    min="0"
-                                    placeholder="0"
-                                    class="flex-1 px-4 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-800 transition-all"
-                                  />
-                                </div>
-                              </div>
-
-                              {calendarData.value.extraServices.length > 0 && (
-                                <div class="mt-2 space-y-2">
-                                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Extras</label>
-                                  <div class="flex flex-wrap gap-2">
-                                    {calendarData.value.extraServices.map((extra: any) => {
-                                      const isSelected = adminSelectedExtras.value.includes(extra.name);
-                                      return (
-                                        <button
-                                          key={extra.name}
-                                          type="button"
-                                          onClick$={() => {
-                                            if (isSelected) {
-                                              adminSelectedExtras.value = adminSelectedExtras.value.filter(e => e !== extra.name);
-                                            } else {
-                                              adminSelectedExtras.value = [...adminSelectedExtras.value, extra.name];
-                                            }
-                                          }}
-                                          class={cn(
-                                            "px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5",
-                                            isSelected ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
-                                          )}
-                                        >
-                                          <span class="text-sm">{extra.icon}</span>
-                                          <span>{extra.name} (+${extra.price})</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-
-                              <div class="pt-2 mt-1 border-t border-slate-200 flex items-center justify-between">
-                                <span class="text-sm font-black text-slate-800">Total a Pagar:</span>
-                                <span class="text-xl font-black text-emerald-600">${finalPrice.toLocaleString('es-AR')}</span>
-                              </div>
-                              <input type="hidden" name="price" value={finalPrice} />
-                              <input type="hidden" name="extras" value={JSON.stringify(adminSelectedExtras.value)} />
-                            </div>
-                          </div>
-
-                          {adminIsSubscription.value && (
-                            <div class="animate-in fade-in slide-in-from-top-2 duration-300">
-                              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha de finalización</label>
-                              <input type="date" name="endDate" value={adminEndDate.value} onInput$={(_, el) => adminEndDate.value = el.value} class="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-semibold text-slate-700" />
-                              {!adminEndDate.value && <p class="text-[10px] text-slate-400 mt-1 font-medium">Sin definir - Se renovará automáticamente.</p>}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <hr class="border-slate-100" />
-
-                      {/* Organizador */}
-                      <div class="space-y-4">
-                        <div class="flex items-center justify-between">
-                          <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
-                            Organizador <span class="text-xs font-semibold text-slate-400 font-sans">(obligatorio)</span>
-                          </h3>
-                          {adminSelectedUserId.value && (
-                            <button type="button" onClick$={() => { adminSelectedUserId.value = ""; adminSearchTerm.value = ""; adminSelectedUserName.value = ""; adminSelectedUserPhone.value = ""; }} class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase">
-                              Cambiar Cliente
-                            </button>
-                          )}
-                        </div>
-
-                        <input type="hidden" name="userId" value={adminSelectedUserId.value} />
-
-                        <div class="grid grid-cols-2 gap-4">
-                          <div class="col-span-2 relative">
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Buscar Cliente Registrado (Opcional)</label>
-                            <div class="relative">
-                              <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-                              <input
-                                type="text"
-                                value={adminSearchTerm.value}
-                                onInput$={(_, el) => adminSearchTerm.value = el.value}
-                                placeholder="Buscar por nombre, teléfono o email..."
-                                class="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-medium"
-                              />
-                              {adminIsSearching.value && (
-                                <div class="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-slate-300 border-t-emerald-500 animate-spin"></div>
-                              )}
-                            </div>
-
-                            {adminSearchResults.value.length > 0 && !adminSelectedUserId.value && (
-                              <div class="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                                {adminSearchResults.value.map(user => (
+                          {adminSearchTerm.value.length >= 2 && !adminSelectedUserId.value && (
+                            <div class="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                              {adminSearchResults.value.length > 0 ? (
+                                adminSearchResults.value.map(user => (
                                   <button
                                     key={user.id}
                                     type="button"
@@ -1444,6 +1496,7 @@ export default component$(() => {
                                       adminSelectedUserId.value = user.id;
                                       adminSelectedUserName.value = user.name;
                                       adminSelectedUserPhone.value = user.phone || "";
+                                      adminSelectedUserEmail.value = user.email || "";
                                       adminSearchTerm.value = "";
                                       adminSearchResults.value = [];
                                     }}
@@ -1452,13 +1505,33 @@ export default component$(() => {
                                     <span class="text-sm font-bold text-slate-800">{user.name}</span>
                                     <span class="text-xs text-slate-500">{user.phone || user.email}</span>
                                   </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                                ))
+                              ) : !adminIsSearching.value ? (
+                                <div class="px-4 py-4 text-center">
+                                  <p class="text-sm text-slate-500 font-medium mb-2">Cliente no encontrado</p>
+                                  <button
+                                    type="button"
+                                    onClick$={() => {
+                                      adminSelectedUserName.value = adminSearchTerm.value;
+                                      adminSearchTerm.value = "";
+                                      adminSearchResults.value = [];
+                                      document.querySelector<HTMLInputElement>('input[name="customerName"]')?.focus();
+                                    }}
+                                    class="text-xs font-bold bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition-colors"
+                                  >
+                                    Registrar como nuevo cliente
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
 
+                        <input type="hidden" name="userId" value={adminSelectedUserId.value} />
+
+                        <div class="grid grid-cols-2 gap-4">
                           <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre</label>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre Completo <span class="text-emerald-500">*</span></label>
                             <input
                               type="text"
                               name="customerName"
@@ -1471,7 +1544,7 @@ export default component$(() => {
                             />
                           </div>
                           <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Teléfono</label>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Teléfono <span class="text-emerald-500">*</span></label>
                             <input
                               type="tel"
                               name="customerPhone"
@@ -1484,14 +1557,319 @@ export default component$(() => {
                             />
                           </div>
                         </div>
+
+                        {!adminSelectedUserId.value && (
+                          <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email <span class="text-slate-300 font-normal normal-case">(Opcional)</span></label>
+                            <input
+                              type="email"
+                              name="customerEmail"
+                              value={adminSelectedUserEmail.value}
+                              onInput$={(_, el) => adminSelectedUserEmail.value = el.value}
+                              placeholder="ejemplo@correo.com"
+                              class="w-full px-4 py-2.5 border bg-white border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 text-sm font-medium"
+                            />
+                          </div>
+                        )}
+
+                        {adminSelectedUserId.value && (
+                          <div class="pt-2 flex justify-end">
+                            <button type="button" onClick$={() => { adminSelectedUserId.value = ""; adminSearchTerm.value = ""; adminSelectedUserName.value = ""; adminSelectedUserPhone.value = ""; adminSelectedUserEmail.value = ""; }} class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase">
+                              Ingresar datos manualmente (No registrado)
+                            </button>
+                          </div>
+                        )}
                       </div>
 
-                      <hr class="border-slate-100" />
+                      {/* ---------------------------
+                          BLOQUE 2: Detalles del Turno
+                      --------------------------- */}
+                      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 mb-4">
+                          <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                          Detalles del Turno
+                        </h3>
 
-                      {/* Notas */}
-                      <div class="space-y-4">
-                        <h3 class="text-sm font-black text-slate-800">Notas</h3>
-                        <textarea name="notes" placeholder="Sólo será visible por el complejo" rows={3} class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-emerald-500 text-sm resize-none"></textarea>
+                        <div class="grid grid-cols-2 gap-4">
+                          <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cancha</label>
+                            <select
+                              name="pitchId"
+                              class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium"
+                              value={adminFormPitchId.value}
+                              onChange$={(_, el) => adminFormPitchId.value = el.value}
+                              required
+                            >
+                              <option value="">Seleccionar cancha</option>
+                              {calendarData.value.pitches.map(p => <option key={p.id} value={p.id}>{`${p.name} ${p.type}`}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <div class="flex items-center justify-between mb-1">
+                              <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">Fecha</label>
+                              <button
+                                type="button"
+                                onClick$={() => {
+                                  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+                                  adminFormDate.value = today;
+                                }}
+                                class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors"
+                              >
+                                HOY
+                              </button>
+                            </div>
+                            <input
+                              type="date"
+                              name="date"
+                              value={adminFormDate.value}
+                              onChange$={(_, el) => adminFormDate.value = el.value}
+                              required
+                              class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium"
+                            />
+                          </div>
+                        </div>
+
+                        {!adminIsSubscription.value ? (
+                          <div class="grid grid-cols-2 gap-4">
+                            <div>
+                              <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hora Inicio</label>
+                              <select
+                                name="startTime"
+                                class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium font-mono"
+                                value={adminFormTime.value}
+                                onChange$={(_, el) => adminFormTime.value = el.value}
+                                required
+                              >
+                                <option value="">--:-- hs</option>
+                                {adminTimeOptions.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hora Fin</label>
+                              <input type="hidden" name="endTime" value={adminEndTime.value} />
+                              <select
+                                class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium font-mono"
+                                value={adminFormDuration.value}
+                                onChange$={(_, el) => adminFormDuration.value = el.value}
+                              >
+                                <option value="30">30 min</option>
+                                <option value="60">1 hora</option>
+                                <option value="90">1.5 horas</option>
+                                <option value="120">2 horas</option>
+                                <option value="150">2.5 horas</option>
+                                <option value="180">3 horas</option>
+                                <option value="210">3.5 horas</option>
+                                <option value="240">4 horas</option>
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <input type="hidden" name="startTime" value={adminFormTime.value || "18:00"} />
+                            <input type="hidden" name="endTime" value={adminEndTime.value || "19:00"} />
+                          </>
+                        )}
+
+                        <div class="pt-2">
+                          <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Tipo de Turno</label>
+                          <div class="flex gap-4">
+                            <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 transition-colors">
+                              <input type="radio" name="isSubscriptionDisplay" checked={!adminIsSubscription.value} onChange$={() => adminIsSubscription.value = false} class="w-4 h-4 accent-blue-600 cursor-pointer" />
+                              <span class="text-sm font-bold text-slate-700">Turno Eventual</span>
+                            </label>
+                            <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 transition-colors">
+                              <input type="radio" name="isSubscriptionDisplay" checked={adminIsSubscription.value} onChange$={() => adminIsSubscription.value = true} class="w-4 h-4 accent-blue-600 cursor-pointer" />
+                              <span class="text-sm font-bold text-slate-700">Turno Fijo</span>
+                            </label>
+                            <input type="hidden" name="isSubscription" value={adminIsSubscription.value ? "true" : "false"} />
+                          </div>
+                        </div>
+
+                        {adminIsSubscription.value && (
+                          <div class="animate-in fade-in slide-in-from-top-2 duration-300 mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-4">
+                            <div>
+                              <label class="block text-[11px] font-bold text-blue-700 uppercase tracking-wider mb-2">Días y Horarios</label>
+                              <input type="hidden" name="subscriptionSchedules" value={subscriptionSchedulesJSON.value} />
+                              <div class="space-y-2">
+                                {[{ id: 1, label: 'Lunes' }, { id: 2, label: 'Martes' }, { id: 3, label: 'Miércoles' }, { id: 4, label: 'Jueves' }, { id: 5, label: 'Viernes' }, { id: 6, label: 'Sábado' }, { id: 0, label: 'Domingo' }].map(day => (
+                                  <div key={day.id} class="flex items-center gap-3 p-3 bg-white border border-blue-200 rounded-xl">
+                                    <label class="flex items-center gap-2 cursor-pointer min-w-[100px]">
+                                      <input type="checkbox" checked={adminSubDays[day.id].active} onChange$={(_, el) => adminSubDays[day.id].active = el.checked} class="w-4 h-4 accent-blue-600 rounded" />
+                                      <span class="text-sm font-bold text-slate-700">{day.label}</span>
+                                    </label>
+
+                                    {adminSubDays[day.id].active && (
+                                      <div class="flex-1 flex gap-2 animate-in fade-in slide-in-from-left-2">
+                                        <select
+                                          class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-xs font-medium font-mono"
+                                          value={adminSubDays[day.id].startTime || adminFormTime.value || "18:00"}
+                                          onChange$={(_, el) => adminSubDays[day.id].startTime = el.value}
+                                        >
+                                          <option value="">--:-- hs</option>
+                                          {adminTimeOptions.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
+                                        </select>
+                                        <select
+                                          class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-xs font-medium font-mono"
+                                          value={adminSubDays[day.id].duration}
+                                          onChange$={(_, el) => adminSubDays[day.id].duration = el.value}
+                                        >
+                                          <option value="30">30 min</option>
+                                          <option value="60">1 hora</option>
+                                          <option value="90">1.5 horas</option>
+                                          <option value="120">2 horas</option>
+                                          <option value="150">2.5 horas</option>
+                                          <option value="180">3 horas</option>
+                                          <option value="210">3.5 horas</option>
+                                          <option value="240">4 horas</option>
+                                        </select>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div>
+                              <label class="block text-[11px] font-bold text-blue-700 uppercase tracking-wider mb-1">Repetir hasta (Fecha final)</label>
+                              <input type="date" name="endDate" value={adminEndDate.value} onInput$={(_, el) => adminEndDate.value = el.value} class="w-full px-3 py-2.5 border border-blue-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 text-sm font-semibold text-slate-700" />
+                              <p class="text-[11px] text-blue-600/70 mt-2 font-medium leading-tight">La reserva se repetirá los días seleccionados en su horario correspondiente desde el {adminFormDate.value || '-'} hasta la fecha seleccionada. Si se deja vacío, se renovará mensualmente por 1 año.</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Notas */}
+                        <div class="pt-2">
+                          <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Notas Internas</label>
+                          <textarea name="notes" placeholder="Sólo será visible por el complejo..." rows={2} class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-blue-500 focus:bg-white text-sm resize-none"></textarea>
+                        </div>
+                      </div>
+
+                      {/* ---------------------------
+                          BLOQUE 3: Finanzas y Pagos
+                      --------------------------- */}
+                      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-sm space-y-5 text-white">
+                        <h3 class="text-sm font-black text-slate-200 uppercase tracking-widest flex items-center gap-2 mb-2">
+                          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          Finanzas y Pagos
+                        </h3>
+
+                        {calendarData.value.extraServices.length > 0 && (
+                          <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Servicios Extra</label>
+                            <div class="flex flex-wrap gap-2">
+                              {calendarData.value.extraServices.map((extra: any) => {
+                                const isSelected = adminSelectedExtras.value.includes(extra.name);
+                                return (
+                                  <button
+                                    key={extra.name}
+                                    type="button"
+                                    onClick$={() => {
+                                      if (isSelected) {
+                                        adminSelectedExtras.value = adminSelectedExtras.value.filter(e => e !== extra.name);
+                                      } else {
+                                        adminSelectedExtras.value = [...adminSelectedExtras.value, extra.name];
+                                      }
+                                    }}
+                                    class={cn(
+                                      "px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5",
+                                      isSelected ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400" : "bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-700"
+                                    )}
+                                  >
+                                    <span class="text-sm">{extra.icon}</span>
+                                    <span>{extra.name} (+${extra.price})</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <div class="flex items-center justify-between border-b border-slate-700 pb-4">
+                          <label class="flex items-center gap-2 cursor-pointer group">
+                            <div class="relative">
+                              <input type="checkbox" class="sr-only" checked={adminApplyDiscount.value} onChange$={(_, el) => { adminApplyDiscount.value = el.checked; if (!el.checked) adminDiscountAmount.value = 0; }} />
+                              <div class={cn("block w-10 h-6 rounded-full transition-colors", adminApplyDiscount.value ? "bg-emerald-500" : "bg-slate-600")}></div>
+                              <div class={cn("dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform", adminApplyDiscount.value && "transform translate-x-4")}></div>
+                            </div>
+                            <span class="text-xs font-bold text-slate-300 uppercase tracking-wider group-hover:text-white transition-colors">Aplicar Descuento</span>
+                          </label>
+
+                          <div class="flex items-center gap-3">
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-right">Costo Total</div>
+                            <div class="text-3xl font-black text-emerald-400">${finalPrice.toLocaleString('es-AR')}</div>
+                            <input type="hidden" name="price" value={finalPrice} />
+                            <input type="hidden" name="extras" value={JSON.stringify(adminSelectedExtras.value)} />
+                          </div>
+                        </div>
+
+                        {adminApplyDiscount.value && (
+                          <div class="flex gap-4 animate-in fade-in slide-in-from-top-1 duration-300">
+                            <div class="flex-1">
+                              <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Tipo de Dto.</label>
+                              <select
+                                value={adminDiscountType.value}
+                                onChange$={(_, el) => adminDiscountType.value = el.value as any}
+                                class="w-full px-3 py-2.5 border border-slate-600 rounded-xl bg-slate-700 focus:outline-none focus:border-emerald-500 text-sm font-bold text-white transition-all appearance-none"
+                              >
+                                <option value="FIXED">Monto Fijo ($)</option>
+                                <option value="PERCENTAGE">Porcentaje (%)</option>
+                              </select>
+                            </div>
+                            <div class="flex-1">
+                              <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Valor a descontar</label>
+                              <div class="relative">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">{adminDiscountType.value === 'FIXED' ? '$' : '%'}</span>
+                                <input
+                                  type="number"
+                                  value={adminDiscountAmount.value}
+                                  onInput$={(_, el) => adminDiscountAmount.value = el.value ? Number(el.value) : ""}
+                                  min="0"
+                                  placeholder="0"
+                                  class="w-full pl-8 pr-4 py-2.5 border border-slate-600 rounded-xl bg-slate-700 focus:outline-none focus:border-emerald-500 text-sm font-bold text-white transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div class="grid grid-cols-2 gap-4">
+                          <div class="col-span-2 md:col-span-1">
+                            <div class="flex items-center justify-between mb-1">
+                              <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">Monto Señado</label>
+                              <label class="flex items-center gap-1.5 cursor-pointer group">
+                                <div class="relative">
+                                  <input type="checkbox" class="sr-only" checked={adminIsFullPayment.value} onChange$={(_, el) => adminIsFullPayment.value = el.checked} />
+                                  <div class={cn("block w-6 h-3.5 rounded-full transition-colors", adminIsFullPayment.value ? "bg-emerald-500" : "bg-slate-600")}></div>
+                                  <div class={cn("dot absolute left-0.5 top-0.5 bg-white w-2.5 h-2.5 rounded-full transition-transform", adminIsFullPayment.value && "transform translate-x-2.5")}></div>
+                                </div>
+                                <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Pago Total</span>
+                              </label>
+                            </div>
+                            <div class="relative">
+                              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 font-black">$</span>
+                              <input
+                                type="number"
+                                name="paidAmount"
+                                value={adminIsFullPayment.value ? finalPrice : adminPaidAmount.value}
+                                onInput$={(_, el) => { if (!adminIsFullPayment.value) adminPaidAmount.value = el.value ? Number(el.value) : ""; }}
+                                readOnly={adminIsFullPayment.value}
+                                placeholder="0"
+                                min="0"
+                                class={cn("w-full pl-8 pr-4 py-2.5 border border-slate-600 rounded-xl bg-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-black transition-all placeholder:text-slate-500", adminIsFullPayment.value ? "text-emerald-300 bg-slate-800/50 cursor-not-allowed" : "text-emerald-400")}
+                              />
+                            </div>
+                          </div>
+
+                          <div class="col-span-2 md:col-span-1">
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Medio de Pago</label>
+                            <select name="paymentMethod" class="w-full px-3 py-2.5 border border-slate-600 rounded-xl bg-slate-700 focus:outline-none focus:border-emerald-500 text-sm font-bold text-white transition-all appearance-none">
+                              <option value="CASH">Efectivo</option>
+                              <option value="TRANSFER">Transferencia</option>
+                              <option value="MERCADO_PAGO">Mercado Pago</option>
+                            </select>
+                          </div>
+                        </div>
+
                       </div>
 
                       {createBookingAction.value?.failed && (
@@ -1499,13 +1877,14 @@ export default component$(() => {
                           {createBookingAction.value.message || "Error al crear la reserva. Verificá los campos."}
                         </div>
                       )}
+                      <button type="submit" id="hidden-submit-btn" class="hidden">Submit</button>
                     </Form>
                   </div>
 
                   {/* Footer Flotante */}
-                  <div class="bg-white border-t border-slate-100 p-6 shrink-0 flex justify-end gap-3 z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
-                    <Button type="button" onClick$={() => isCreateModalOpen.value = false} look="outline" class="font-bold rounded-xl px-6 border-slate-200 text-slate-600">Cancelar</Button>
-                    <Button type="button" onClick$={() => document.getElementById('create-booking-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} look="primary" disabled={createBookingAction.isRunning || !adminFormTime.value || !adminFormDate.value || !adminFormPitchId.value} class="font-bold rounded-xl px-8 bg-emerald-800 text-white hover:bg-emerald-900 disabled:opacity-50">
+                  <div class="bg-white border-t border-slate-200 p-6 shrink-0 flex justify-end gap-3 z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+                    <Button type="button" onClick$={() => isCreateModalOpen.value = false} look="outline" class="font-bold rounded-xl px-6 border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</Button>
+                    <Button type="button" onClick$={() => document.getElementById('hidden-submit-btn')?.click()} look="primary" disabled={createBookingAction.isRunning || !adminFormTime.value || !adminFormDate.value || !adminFormPitchId.value} class="font-bold rounded-xl px-8 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 border-none shadow-md shadow-emerald-600/20">
                       {createBookingAction.isRunning ? "Guardando..." : "Crear Reserva"}
                     </Button>
                   </div>
