@@ -1,5 +1,5 @@
-import { component$, useSignal, useVisibleTask$, useTask$, $ } from "@builder.io/qwik";
-import { routeLoader$, routeAction$, zod$, z, Link, useNavigate, Form } from "@builder.io/qwik-city";
+import { component$, useSignal, useVisibleTask$, useTask$, $, useComputed$ } from "@builder.io/qwik";
+import { routeLoader$, routeAction$, zod$, z, Link, useNavigate, Form, server$ } from "@builder.io/qwik-city";
 import { Button, Modal, Alert } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { eq, and, gte, lte } from "drizzle-orm";
@@ -47,6 +47,51 @@ export const useUpdateBookingStatusAction = routeAction$(
   zod$({
     bookingId: z.string(),
     status: z.enum(["CONFIRMED", "CANCELLED", "COMPLETED"]),
+  })
+);
+
+export const useCreateAdminBookingAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const bookingId = crypto.randomUUID();
+
+    // Parse date and times
+    const startDateTime = new Date(`${data.date}T${data.startTime}:00`);
+    const endDateTime = new Date(`${data.date}T${data.endTime}:00`);
+
+    // Insert booking
+    await db.insert(bookings).values({
+      id: bookingId,
+      pitchId: data.pitchId,
+      startTime: startDateTime,
+      endTime: endDateTime,
+      status: "CONFIRMED", // Admin bookings are confirmed by default
+      totalPrice: Number(data.price),
+      paidAmount: Number(data.paidAmount) || 0,
+      paymentStatus: (Number(data.paidAmount) || 0) >= Number(data.price) ? "PAID" : (Number(data.paidAmount) || 0) > 0 ? "PARTIAL" : "PENDING",
+      paymentMethod: data.paymentMethod as any,
+    });
+
+    // Insert guest request for the contact info
+    await db.insert(guestRequests).values({
+      id: crypto.randomUUID(),
+      bookingId,
+      name: data.customerName,
+      phone: data.customerPhone,
+    });
+
+    return { success: true, bookingId };
+  },
+  zod$({
+    pitchId: z.string(),
+    date: z.string(),
+    startTime: z.string(),
+    endTime: z.string(),
+    customerName: z.string().min(1, "Nombre requerido"),
+    customerPhone: z.string().min(1, "Teléfono requerido"),
+    price: z.string(),
+    paidAmount: z.string().optional(),
+    paymentMethod: z.enum(["CASH", "TRANSFER", "MERCADO_PAGO"]).default("CASH"),
   })
 );
 
@@ -154,9 +199,28 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
   };
 });
 
+export const getAdminDailyBookings = server$(async function(pitchId: string, dateStr: string) {
+  const db = getDB(this);
+  if (!pitchId || !dateStr) return [];
+  const startOfDay = new Date(`${dateStr}T00:00:00`);
+  const endOfDay = new Date(`${dateStr}T23:59:59`);
+  const { inArray, lt } = await import("drizzle-orm");
+  const daily = await db.query.bookings.findMany({
+    where: and(
+      eq(bookings.pitchId, pitchId),
+      gte(bookings.startTime, startOfDay),
+      lt(bookings.startTime, endOfDay),
+      inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"] as any)
+    ),
+    columns: { startTime: true, endTime: true },
+  });
+  return daily.map(b => ({ startTime: b.startTime.toISOString(), endTime: b.endTime.toISOString() }));
+});
+
 export default component$(() => {
   const calendarData = useCalendarData();
   const updateStatusAction = useUpdateBookingStatusAction();
+  const createBookingAction = useCreateAdminBookingAction();
   const nav = useNavigate();
 
   // Layout mode: 'timeline' (pitches×time) | 'list' (table) | 'grid' (time-grid per pitch)
@@ -179,6 +243,50 @@ export default component$(() => {
   // Modal State
   const isModalOpen = useSignal(false);
   const selectedBookingId = useSignal("");
+
+  const isCreateModalOpen = useSignal(false);
+
+  // Admin create form state
+  const adminFormPitchId = useSignal("");
+  const adminFormDate = useSignal("");
+  const adminFormTime = useSignal("");
+  const adminFormDuration = useSignal("60");
+  const adminOccupiedSlots = useSignal<{ startTime: string; endTime: string }[]>([]);
+  const adminIsChecking = useSignal(false);
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const tomorrowStr = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })();
+
+  const adminTimeOptions: string[] = [];
+  for (let h = 8; h <= 23; h++) {
+    adminTimeOptions.push(`${String(h).padStart(2, "0")}:00`);
+    adminTimeOptions.push(`${String(h).padStart(2, "0")}:30`);
+  }
+
+  const adminIsSlotDisabled = $((time: string) => {
+    if (!adminFormDate.value) return true;
+    const isToday = adminFormDate.value === todayStr;
+    if (isToday) {
+      const [h, m] = time.split(":").map(Number);
+      const slotTime = new Date(); slotTime.setHours(h, m, 0, 0);
+      if (slotTime <= new Date()) return true;
+    }
+    const start = new Date(`${adminFormDate.value}T${time}:00`).getTime();
+    const dur = parseInt(adminFormDuration.value, 10);
+    const end = start + dur * 60000;
+    return adminOccupiedSlots.value.some(slot => {
+      const s = new Date(slot.startTime).getTime();
+      const e = new Date(slot.endTime).getTime();
+      return start < e && end > s;
+    });
+  });
+
+  const adminEndTime = useComputed$(() => {
+    if (!adminFormTime.value) return "";
+    const [h, m] = adminFormTime.value.split(":").map(Number);
+    const totalMins = h * 60 + m + parseInt(adminFormDuration.value, 10);
+    return `${String(Math.floor(totalMins / 60) % 24).padStart(2, "0")}:${String(totalMins % 60).padStart(2, "0")}`;
+  });
 
   const handleBookingClick = $((id: string) => {
     selectedBookingId.value = id;
@@ -233,13 +341,37 @@ export default component$(() => {
     cleanup(() => clearInterval(interval));
   });
 
-  // Automatically close modal if action succeeds
+  // Automatically close modals if action succeeds
   useVisibleTask$(({ track }) => {
-    const success = track(() => updateStatusAction.value?.success);
-    if (success) {
+    const successUpdate = track(() => updateStatusAction.value?.success);
+    if (successUpdate) {
       isModalOpen.value = false;
     }
+    const successCreate = track(() => createBookingAction.value?.success);
+    if (successCreate) {
+      isCreateModalOpen.value = false;
+      adminFormDate.value = "";
+      adminFormTime.value = "";
+      adminOccupiedSlots.value = [];
+    }
   });
+
+  // Load availability when pitch or date changes in admin form
+  useTask$(({ track }) => {
+    const pitchId = track(() => adminFormPitchId.value);
+    const date = track(() => adminFormDate.value);
+    if (pitchId && date) {
+      adminIsChecking.value = true;
+      adminFormTime.value = "";
+      getAdminDailyBookings(pitchId, date).then(slots => {
+        adminOccupiedSlots.value = slots;
+        adminIsChecking.value = false;
+      });
+    } else {
+      adminOccupiedSlots.value = [];
+    }
+  });
+
 
   // Force grid layout for week/month views as timeline/list are day-only
   useTask$(({ track }) => {
@@ -352,8 +484,16 @@ export default component$(() => {
           </Link>
         </div>
 
-        {/* Right: Go to today + Layout toggle + View Switcher */}
+        {/* Right: Go to today + Layout toggle + View Switcher + New Reservation */}
         <div class="flex items-center gap-3 shrink-0">
+          <button
+            onClick$={() => isCreateModalOpen.value = true}
+            class="px-4 py-1.5 text-xs font-black text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-colors flex items-center gap-2"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+            Nueva Reserva
+          </button>
+
           {calendarData.value.selectedDateStr !== new Date().toISOString().split("T")[0] && (
             <Link
               href={`?date=${new Date().toISOString().split("T")[0]}&view=${calendarData.value.view}`}
@@ -534,15 +674,15 @@ export default component$(() => {
                       }}
                     ></div>
                   ))}
-                  {hours.map((hour) => (
                     <div
                       key={`line-half-${hour}`}
-                      class="absolute w-full border-t border-slate-100 border-dashed pointer-events-none"
+                      class="absolute w-full border-t border-dashed pointer-events-none"
                       style={{
                         top: `${(hour - CALENDAR_START_HOUR + 0.5) * PIXELS_PER_HOUR}px`,
+                        borderColor: 'rgba(148,163,184,0.2)',
                       }}
                     ></div>
-                  ))}
+
 
                   {/* Pitch Columns */}
                   {calendarData.value.pitches.map((pitch) => {
@@ -646,7 +786,7 @@ export default component$(() => {
                     <div key={`line-${hour}`} class="absolute w-full border-t border-slate-200 pointer-events-none" style={{ top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px` }}></div>
                   ))}
                   {hours.map((hour) => (
-                    <div key={`line-half-${hour}`} class="absolute w-full border-t border-slate-100 border-dashed pointer-events-none" style={{ top: `${(hour - CALENDAR_START_HOUR + 0.5) * PIXELS_PER_HOUR}px` }}></div>
+                    <div key={`line-half-${hour}`} class="absolute w-full border-t border-dashed pointer-events-none" style={{ top: `${(hour - CALENDAR_START_HOUR + 0.5) * PIXELS_PER_HOUR}px`, borderColor: 'rgba(148,163,184,0.2)' }}></div>
                   ))}
 
                   {/* Day Columns */}
@@ -890,8 +1030,183 @@ export default component$(() => {
               </div>
             </div>
           ) : (
-            <div class="py-8 text-center text-slate-500">Cargando detalles...</div>
+            <div class="py-12 text-center text-slate-500">Cargando detalles...</div>
           )}
+        </Modal.Panel>
+      </Modal.Root>
+
+      {/* Create Admin Booking Modal */}
+      <Modal.Root bind:show={isCreateModalOpen}>
+        <Modal.Panel class="bg-white border border-slate-200 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div class="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 px-6 pt-6 sticky top-0 bg-white z-10">
+            <Modal.Title class="text-xl font-black tracking-tight text-slate-800">Nueva Reserva Manual</Modal.Title>
+            <Modal.Close class="text-slate-400 hover:text-slate-800 transition-colors p-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </Modal.Close>
+          </div>
+
+          <Form action={createBookingAction} class="px-6 pb-6 space-y-5">
+            {/* Hidden computed fields */}
+            <input type="hidden" name="date" value={adminFormDate.value} />
+            <input type="hidden" name="startTime" value={adminFormTime.value} />
+            <input type="hidden" name="endTime" value={adminEndTime.value} />
+
+            {/* Cancha */}
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cancha</label>
+              <select
+                name="pitchId" required
+                class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-semibold text-slate-700"
+                onChange$={(_, el) => { adminFormPitchId.value = el.value; }}
+              >
+                <option value="">Seleccioná una cancha</option>
+                {calendarData.value.pitches.map(p => (
+                  <option key={p.id} value={p.id}>{`${p.name} (${p.type})`}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Fecha */}
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha</label>
+              <div class="flex gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick$={() => adminFormDate.value = todayStr}
+                  class={["flex-1 py-2 text-sm font-bold rounded-xl border transition-all", adminFormDate.value === todayStr ? "bg-emerald-500 text-white border-emerald-500" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400"]}
+                >Hoy</button>
+                <button
+                  type="button"
+                  onClick$={() => adminFormDate.value = tomorrowStr}
+                  class={["flex-1 py-2 text-sm font-bold rounded-xl border transition-all", adminFormDate.value === tomorrowStr ? "bg-emerald-500 text-white border-emerald-500" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400"]}
+                >Mañana</button>
+                <input
+                  type="date"
+                  value={adminFormDate.value}
+                  onInput$={(_, el) => adminFormDate.value = el.value}
+                  class="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Duración */}
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Duración</label>
+              <div class="flex gap-2">
+                {["60", "90", "120"].map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick$={() => { adminFormDuration.value = d; adminFormTime.value = ""; }}
+                    class={["flex-1 py-2 text-sm font-bold rounded-xl border transition-all", adminFormDuration.value === d ? "bg-slate-800 text-white border-slate-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400"]}
+                  >{d === "60" ? "1 hora" : d === "90" ? "1:30 hs" : "2 horas"}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Horario */}
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex justify-between">
+                <span>Horario de Inicio</span>
+                {adminIsChecking.value && <span class="text-emerald-500 animate-pulse">Cargando...</span>}
+                {adminFormTime.value && adminEndTime.value && <span class="text-emerald-600 font-black">{adminFormTime.value} → {adminEndTime.value}</span>}
+              </label>
+              {!adminFormDate.value || !adminFormPitchId.value ? (
+                <div class="text-sm text-slate-400 p-4 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                  Seleccioná cancha y fecha primero.
+                </div>
+              ) : (
+                <div class="grid grid-cols-4 gap-1.5">
+                  {adminTimeOptions.map((time) => {
+                    const disabled = adminIsChecking.value;
+                    const selected = adminFormTime.value === time;
+                    // Check overlap synchronously from cached slots
+                    const start = new Date(`${adminFormDate.value}T${time}:00`).getTime();
+                    const dur = parseInt(adminFormDuration.value, 10);
+                    const end = start + dur * 60000;
+                    const isToday2 = adminFormDate.value === todayStr;
+                    let occupied = false;
+                    if (isToday2) {
+                      const [hh, mm] = time.split(":").map(Number);
+                      const sl = new Date(); sl.setHours(hh, mm, 0, 0);
+                      if (sl <= new Date()) occupied = true;
+                    }
+                    if (!occupied) {
+                      occupied = adminOccupiedSlots.value.some(slot => {
+                        const s = new Date(slot.startTime).getTime();
+                        const e = new Date(slot.endTime).getTime();
+                        return start < e && end > s;
+                      });
+                    }
+                    return (
+                      <button
+                        key={time}
+                        type="button"
+                        disabled={disabled || occupied}
+                        onClick$={() => adminFormTime.value = time}
+                        class={[
+                          "py-1.5 text-xs font-bold rounded-lg border transition-all text-center",
+                          occupied
+                            ? "opacity-30 bg-slate-100 border-slate-100 cursor-not-allowed text-slate-400 line-through"
+                            : selected
+                              ? "bg-emerald-500 border-emerald-400 text-white shadow-sm shadow-emerald-500/20"
+                              : "bg-white border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"
+                        ]}
+                      >{time}</button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Cliente */}
+            <div class="border-t border-slate-100 pt-4 grid grid-cols-2 gap-4">
+              <div class="col-span-2">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Nombre del Cliente</label>
+                <input type="text" name="customerName" required placeholder="Ej: Juan Pérez" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm" />
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Teléfono</label>
+                <input type="tel" name="customerPhone" required placeholder="Ej: 1123456789" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm" />
+              </div>
+            </div>
+
+            {/* Pago */}
+            <div class="border-t border-slate-100 pt-4 grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Precio Total ($)</label>
+                <input type="number" name="price" required min="0" placeholder="0" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Seña Pagada ($)</label>
+                <input type="number" name="paidAmount" min="0" defaultValue="0" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm" />
+              </div>
+              <div class="col-span-2">
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Método de Pago</label>
+                <select name="paymentMethod" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-semibold text-slate-700">
+                  <option value="CASH">Efectivo</option>
+                  <option value="TRANSFER">Transferencia</option>
+                  <option value="MERCADO_PAGO">Mercado Pago</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="pt-2">
+              <Button
+                look="primary"
+                type="submit"
+                disabled={createBookingAction.isRunning || !adminFormTime.value || !adminFormDate.value || !adminFormPitchId.value}
+                class="w-full py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {createBookingAction.isRunning ? "Guardando..." : "Crear Reserva"}
+              </Button>
+            </div>
+            {createBookingAction.value?.failed && (
+              <div class="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-bold">
+                Error al crear la reserva. Verificá los campos e intentá de nuevo.
+              </div>
+            )}
+          </Form>
         </Modal.Panel>
       </Modal.Root>
 

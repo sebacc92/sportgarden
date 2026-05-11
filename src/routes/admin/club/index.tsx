@@ -47,6 +47,7 @@ export const useSaveClubSettingsAction = routeAction$(
         clubName: data.clubName,
         clubAddress: data.clubAddress,
         clubPhone: data.clubPhone,
+        bankAlias: data.bankAlias,
         operatingHours: JSON.parse(data.operatingHours as string),
         services: JSON.parse(data.services as string),
         updatedAt: new Date()
@@ -59,6 +60,7 @@ export const useSaveClubSettingsAction = routeAction$(
     clubName: z.string().optional(),
     clubAddress: z.string().optional(),
     clubPhone: z.string().optional(),
+    bankAlias: z.string().optional(),
     operatingHours: z.string(), // JSON array
     services: z.string() // JSON array
   })
@@ -97,6 +99,7 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
   const clubName = useSignal(props.settings?.clubName || "");
   const clubAddress = useSignal(props.settings?.clubAddress || "");
   const clubPhone = useSignal(props.settings?.clubPhone || "");
+  const bankAlias = useSignal(props.settings?.bankAlias || "");
 
   const store = useStore({
     operatingHours: initialHours,
@@ -164,6 +167,17 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
               bind:value={clubPhone}
               class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
               placeholder="Ej: 1144796321"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-black text-slate-800 mb-2">Alias Bancario (Transferencias)</label>
+            <input 
+              type="text" 
+              name="bankAlias"
+              bind:value={bankAlias}
+              class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
+              placeholder="Ej: club.deportes.mp"
             />
           </div>
 

@@ -9,6 +9,7 @@ import { SocialFeed, MOCK_INSTAGRAM_POSTS } from "~/components/ui/social-feed";
 import { Chatbot } from "~/components/chatbot/chatbot";
 import { WhatsAppButton } from "~/components/ui/whatsapp-button";
 import { siteSettings } from "../db/schema";
+import logo from "~/media/SportGarden8.png";
 
 export { useGuestBookingAction, useUserBookingAction };
 
@@ -51,7 +52,13 @@ export const useAISettingsLoader = routeLoader$(async (requestEvent) => {
   return settings;
 });
 
-export const getDailyBookings = server$(async function(this: RequestEventBase, pitchId: string, dateStr: string) {
+export const useGalleryLoader = routeLoader$(async (requestEvent) => {
+  const db = getDB(requestEvent);
+  const [settings] = await db.select({ galleryImages: siteSettings.galleryImages }).from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+  return (settings?.galleryImages as string[] | null) ?? [];
+});
+
+export const getDailyBookings = server$(async function (this: RequestEventBase, pitchId: string, dateStr: string) {
   const db = getDB(this);
   if (!pitchId || !dateStr) return [];
 
@@ -83,8 +90,30 @@ export default component$(() => {
   const user = useUserLoader();
   const instagramFeed = useInstagramFeed();
   const aiSettings = useAISettingsLoader();
+  const gallery = useGalleryLoader();
   const guestAction = useGuestBookingAction();
   const userAction = useUserBookingAction();
+
+  // Gallery lightbox
+  const lightboxUrl = useSignal<string | null>(null);
+  const lightboxIdx = useSignal(0);
+  const closeLightbox = $(() => { lightboxUrl.value = null; });
+  const openLightbox = $((url: string) => {
+    lightboxIdx.value = gallery.value.indexOf(url);
+    lightboxUrl.value = url;
+  });
+  const prevLightbox = $(() => {
+    const imgs = gallery.value;
+    const newIdx = (lightboxIdx.value - 1 + imgs.length) % imgs.length;
+    lightboxIdx.value = newIdx;
+    lightboxUrl.value = imgs[newIdx];
+  });
+  const nextLightbox = $(() => {
+    const imgs = gallery.value;
+    const newIdx = (lightboxIdx.value + 1) % imgs.length;
+    lightboxIdx.value = newIdx;
+    lightboxUrl.value = imgs[newIdx];
+  });
 
   const isModalOpen = useSignal(false);
   const selectedPitchId = useSignal("");
@@ -114,19 +143,22 @@ export default component$(() => {
     }, 5000);
     return () => clearInterval(interval);
   });
-  
+
   // Form signals for availability checking
   const dateStr = useSignal("");
   const timeStr = useSignal("");
-  const occupiedSlots = useSignal<{startTime: string, endTime: string}[]>([]);
+  const occupiedSlots = useSignal<{ startTime: string, endTime: string }[]>([]);
   const isCheckingAvailability = useSignal(false);
-  
-  const currentStep = useSignal(1);
-  const selectedExtras = useSignal<string[]>([]);
 
-  const toggleExtra = $((extra: string) => {
-    if (selectedExtras.value.includes(extra)) {
-      selectedExtras.value = selectedExtras.value.filter((e) => e !== extra);
+  const currentStep = useSignal(1);
+  const selectedExtras = useSignal<{name: string, price: number}[]>([]);
+  const paymentMethod = useSignal("CASH");
+  const paymentOption = useSignal("LATER");
+
+  const toggleExtra = $((extra: {name: string, price: number}) => {
+    const exists = selectedExtras.value.find((e) => e.name === extra.name);
+    if (exists) {
+      selectedExtras.value = selectedExtras.value.filter((e) => e.name !== extra.name);
     } else {
       selectedExtras.value = [...selectedExtras.value, extra];
     }
@@ -138,7 +170,7 @@ export default component$(() => {
   const prevStep = $(() => {
     if (currentStep.value > 1) currentStep.value--;
   });
-  
+
   // Keep track of selected pitch for calculation
   const selectedPitch = activePitches.value.find(p => p.id === selectedPitchId.value);
   const durationStr = useSignal("60");
@@ -196,7 +228,7 @@ export default component$(() => {
     if (!selectedPitch || !dateStr.value || !timeStr.value) return 0;
     const start = new Date(`${dateStr.value}T${timeStr.value}:00`);
     const durationMins = parseInt(durationStr.value, 10);
-    
+
     return calculateDynamicPrice(
       start,
       durationMins,
@@ -206,7 +238,11 @@ export default component$(() => {
     );
   });
 
-  const totalPrice = dynamicPrice.value;
+  const extrasTotal = useComputed$(() => {
+    return selectedExtras.value.reduce((acc, extra) => acc + extra.price, 0);
+  });
+
+  const totalPrice = dynamicPrice.value + extrasTotal.value;
   const depositType = (selectedPitch as any)?.depositType ?? "PERCENTAGE";
   const depositAmount = (selectedPitch as any)?.depositAmount ?? 0;
   const senaAmount = selectedPitch
@@ -224,6 +260,19 @@ export default component$(() => {
 
   const isSlotDisabled = (time: string) => {
     if (!dateStr.value) return true;
+
+    // Check if it's today and time has passed
+    const today = new Date();
+    const isToday = dateStr.value === today.toISOString().split('T')[0];
+    if (isToday) {
+      const [hours, minutes] = time.split(':').map(Number);
+      const slotTime = new Date();
+      slotTime.setHours(hours, minutes, 0, 0);
+      if (slotTime <= today) {
+        return true;
+      }
+    }
+
     const start = new Date(`${dateStr.value}T${time}:00`).getTime();
     const duration = parseInt(durationStr.value, 10);
     const end = start + duration * 60000;
@@ -241,7 +290,7 @@ export default component$(() => {
         <span>Horario</span>
         {isCheckingAvailability.value && <span class="text-emerald-400 animate-pulse">Cargando...</span>}
       </label>
-      
+
       {!dateStr.value ? (
         <div class="text-sm text-slate-500 font-medium p-4 bg-slate-800/50 rounded-xl border border-white/10 text-center">
           Selecciona una fecha primero.
@@ -259,8 +308,8 @@ export default component$(() => {
                 onClick$={() => timeStr.value = time}
                 class={[
                   "py-2 px-1 text-sm font-bold rounded-lg border transition-all text-center",
-                  disabled 
-                    ? "opacity-30 border-white/5 bg-slate-900 cursor-not-allowed text-slate-500 line-through" 
+                  disabled
+                    ? "opacity-30 border-white/5 bg-slate-900 cursor-not-allowed text-slate-500 line-through"
                     : selected
                       ? "bg-emerald-500 border-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20"
                       : "bg-slate-800 border-white/10 text-white hover:border-emerald-500/50 hover:bg-slate-700"
@@ -289,12 +338,18 @@ export default component$(() => {
       {/* Navbar */}
       <nav class="fixed top-0 inset-x-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/5">
         <div class="mx-auto max-w-7xl px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div class="font-black text-2xl tracking-tighter uppercase">
-            Sport<span class="text-emerald-500">Garden</span>
-          </div>
+          <Link href="/" class="flex items-center gap-2 group py-2">
+            <img src={logo} alt="SportGarden Logo" class="h-12 w-auto object-contain transition-transform group-hover:scale-105" />
+            <div class="font-black text-2xl tracking-tighter uppercase hidden sm:block">
+              Sport<span class="text-emerald-500">Garden</span>
+            </div>
+          </Link>
           <div class="hidden md:flex gap-8 items-center text-sm font-medium text-slate-300">
             <a href="#historia" class="hover:text-emerald-400 transition-colors">Historia</a>
             <a href="#canchas" class="hover:text-emerald-400 transition-colors">Canchas</a>
+            {gallery.value.length > 0 && (
+              <a href="#galeria" class="hover:text-emerald-400 transition-colors">Galería</a>
+            )}
             <a href="#contacto" class="hover:text-emerald-400 transition-colors">Contacto</a>
             {user.value?.role === "ADMIN" && (
               <a href="/admin/calendar" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white">Panel Admin</a>
@@ -325,7 +380,7 @@ export default component$(() => {
             <div class="absolute inset-0 bg-slate-950/60 z-10 mix-blend-multiply"></div>
             <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent z-10"></div>
             <img src={slide.image} alt={slide.title} class="absolute inset-0 w-full h-full object-cover" />
-            
+
             <div class="absolute inset-0 flex items-center justify-center z-20">
               <div class="text-center px-6 max-w-4xl mx-auto transform transition-transform duration-1000 delay-100 translate-y-0">
                 {activeSlide.value === index && (
@@ -349,7 +404,7 @@ export default component$(() => {
             </div>
           </div>
         ))}
-        
+
         {/* Slider Controls */}
         <div class="absolute bottom-10 inset-x-0 z-30 flex justify-center gap-3">
           {slides.map((_, index) => (
@@ -418,9 +473,9 @@ export default component$(() => {
                   {pitch.imageUrl && (
                     <img src={pitch.imageUrl} alt={pitch.name} class="absolute inset-0 w-full h-full object-cover z-0 group-hover:scale-105 transition-transform duration-700" />
                   )}
-                  
+
                   <div class={["absolute inset-0 z-10", pitch.imageUrl ? "bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" : "bg-gradient-to-t from-slate-900 via-transparent to-transparent"]}></div>
-                  
+
                   {!pitch.imageUrl && (
                     <>
                       <div class="absolute inset-x-0 bottom-0 h-1/2 border-t-2 border-white/10 w-full flex justify-center z-10">
@@ -446,6 +501,14 @@ export default component$(() => {
                     <p class="text-slate-400 leading-relaxed text-sm">
                       Superficie profesional {pitch.isCovered ? "techada" : "descubierta"}. Capacidad para {pitch.type.replace("F", "")} jugadores por lado.
                     </p>
+                    {pitch.notes && (
+                      <div class="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                        <p class="text-emerald-400 text-xs font-medium italic">
+                          <span class="font-bold uppercase tracking-wider mr-1">Nota:</span>
+                          {pitch.notes}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <div class="mt-8 flex items-end justify-between border-t border-white/5 pt-6">
                     <div>
@@ -467,17 +530,113 @@ export default component$(() => {
         </div>
       </section>
 
+      {/* Photo Gallery Section — only shown when there are images */}
+      {gallery.value.length > 0 && (
+        <section id="galeria" class="py-24 bg-slate-950 relative z-20">
+          <div class="mx-auto max-w-7xl px-6 lg:px-8">
+            <div class="text-center mb-14">
+              <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">
+                Nuestras <span class="text-emerald-500">Instalaciones</span>
+              </h2>
+              <p class="text-lg text-slate-400 max-w-xl mx-auto">
+                Conocé cada rincón de SportGarden antes de tu próxima visita.
+              </p>
+            </div>
+
+            {/* Masonry-style grid */}
+            <div class="columns-2 sm:columns-3 lg:columns-4 gap-3 space-y-3">
+              {gallery.value.map((url, idx) => (
+                <div
+                  key={url}
+                  class="break-inside-avoid rounded-2xl overflow-hidden cursor-pointer group relative"
+                  onClick$={() => openLightbox(url)}
+                >
+                  <img
+                    src={url}
+                    alt={`Instalación ${idx + 1}`}
+                    class="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-700"
+                    loading="lazy"
+                  />
+                  {/* Hover overlay */}
+                  <div class="absolute inset-0 bg-emerald-500/0 group-hover:bg-emerald-500/10 transition-all duration-300 flex items-center justify-center">
+                    <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Lightbox */}
+          {lightboxUrl.value && (
+            <div
+              class="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center"
+              onClick$={closeLightbox}
+            >
+              {/* Close */}
+              <button
+                type="button"
+                onClick$={closeLightbox}
+                class="absolute top-5 right-5 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors z-10"
+                aria-label="Cerrar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+
+              {/* Prev */}
+              {gallery.value.length > 1 && (
+                <button
+                  type="button"
+                  onClick$={(e) => { e.stopPropagation(); prevLightbox(); }}
+                  class="absolute left-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
+                  aria-label="Anterior"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+              )}
+
+              <img
+                src={lightboxUrl.value}
+                alt="Vista ampliada"
+                class="max-h-[88vh] max-w-[92vw] object-contain rounded-2xl shadow-2xl select-none"
+                onClick$={(e) => e.stopPropagation()}
+              />
+
+              {/* Next */}
+              {gallery.value.length > 1 && (
+                <button
+                  type="button"
+                  onClick$={(e) => { e.stopPropagation(); nextLightbox(); }}
+                  class="absolute right-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/25 text-white flex items-center justify-center transition-colors z-10"
+                  aria-label="Siguiente"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              )}
+
+              {/* Counter */}
+              <div class="absolute bottom-5 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm text-white/70 text-sm font-medium tabular-nums">
+                {lightboxIdx.value + 1} / {gallery.value.length}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* Location Section */}
       <section id="contacto" class="py-24 bg-slate-950 relative z-20">
         <div class="mx-auto max-w-7xl px-6 lg:px-8">
           <div class="mb-12">
             <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">Donde <span class="text-emerald-500">estamos</span></h2>
           </div>
-          
+
           <div class="grid lg:grid-cols-5 gap-8 items-start">
             {/* Map Column */}
             <div class="lg:col-span-3 aspect-[16/10] lg:aspect-auto lg:h-[600px] rounded-3xl overflow-hidden border border-white/10 bg-slate-900 shadow-2xl relative group">
-              <iframe 
+              <iframe
                 src={`https://www.google.com/maps?q=${encodeURIComponent(aiSettings.value?.clubAddress || "Pedro Moran 2379, CABA")}&output=embed&z=16`}
                 class="w-full h-full group-hover:scale-[1.02] transition-all duration-700"
                 loading="lazy"
@@ -493,7 +652,7 @@ export default component$(() => {
                 <div class="p-6">
                   <div class="flex items-center justify-between mb-4">
                     <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Ubicación</h3>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6" /></svg>
                   </div>
                   <p class="text-white font-bold leading-relaxed">
                     {aiSettings.value?.clubAddress || "Pedro moran 2379. Capital Federal. Argentina"}
@@ -506,7 +665,7 @@ export default component$(() => {
                 <div class="p-6">
                   <div class="flex items-center justify-between mb-6">
                     <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Horarios del Club</h3>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6" /></svg>
                   </div>
                   <div class="space-y-4">
                     {(() => {
@@ -529,11 +688,11 @@ export default component$(() => {
                           </>
                         );
                       }
-                      
+
                       // Group same hours
                       const groups: Record<string, string[]> = {};
                       const dayNames = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
-                      
+
                       hours.forEach(h => {
                         const timeStr = h.isOpen ? `${h.openTime} a ${h.closeTime}` : "Cerrado";
                         if (!groups[timeStr]) groups[timeStr] = [];
@@ -556,30 +715,30 @@ export default component$(() => {
                 <div class="p-6">
                   <div class="flex items-center justify-between mb-8">
                     <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Servicios del Club</h3>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6" /></svg>
                   </div>
-                  
+
                   <div class="grid grid-cols-2 gap-y-6 gap-x-4">
                     {(() => {
                       const services = (aiSettings.value?.services as string[]) || [
                         "Wi-Fi", "Vestuario", "Ayuda Médica", "Torneos", "Colegios", "Bar / Restaurante", "Estacionamiento", "Cumpleaños"
                       ];
-                      
+
                       const iconMap: Record<string, any> = {
-                        "wi-fi": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01"/><path d="M2 8.82a15 15 0 0 1 20 0"/><path d="M5 12.859a10 10 0 0 1 14 0"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/></svg>,
-                        "vestuario": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/></svg>,
-                        "ayuda médica": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>,
-                        "torneos": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>,
-                        "colegios": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z"/><path d="M6 12v5c3 3 9 3 12 0v5"/><path d="M11 10v4"/></svg>,
-                        "bar": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 9H5L3 3z"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/><path d="m9 3 1 9"/><path d="m15 3-1 9"/></svg>,
-                        "estacionamiento": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="12" x="3" y="10" rx="2"/><path d="M7 10V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6"/><circle cx="7" cy="15" r="1"/><circle cx="17" cy="15" r="1"/></svg>,
-                        "cumpleaños": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        "wi-fi": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h.01" /><path d="M2 8.82a15 15 0 0 1 20 0" /><path d="M5 12.859a10 10 0 0 1 14 0" /><path d="M8.5 16.429a5 5 0 0 1 7 0" /></svg>,
+                        "vestuario": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" /></svg>,
+                        "ayuda médica": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>,
+                        "torneos": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" /><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></svg>,
+                        "colegios": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m22 10-10-5L2 10l10 5 10-5z" /><path d="M6 12v5c3 3 9 3 12 0v5" /><path d="M11 10v4" /></svg>,
+                        "bar": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 9H5L3 3z" /><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" /><path d="m9 3 1 9" /><path d="m15 3-1 9" /></svg>,
+                        "estacionamiento": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="12" x="3" y="10" rx="2" /><path d="M7 10V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6" /><circle cx="7" cy="15" r="1" /><circle cx="17" cy="15" r="1" /></svg>,
+                        "cumpleaños": <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                       };
 
                       return services.map(s => {
                         const lowS = s.toLowerCase();
-                        let icon = <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>;
-                        
+                        let icon = <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>;
+
                         Object.keys(iconMap).forEach(key => {
                           if (lowS.includes(key)) icon = iconMap[key];
                         });
@@ -632,8 +791,8 @@ export default component$(() => {
                 </div>
                 <h3 class="text-2xl font-black text-white mb-2">¡Reserva Exitosa!</h3>
                 <p class="text-slate-400 text-sm mb-8">
-                  {guestAction.value?.success 
-                    ? "El club revisará tu pedido y lo confirmará en breve. (Estado: Pendiente)" 
+                  {guestAction.value?.success
+                    ? "El club revisará tu pedido y lo confirmará en breve. (Estado: Pendiente)"
                     : "Tu reserva ha sido confirmada directamente. ¡Te esperamos!"}
                 </p>
                 <Button
@@ -650,7 +809,7 @@ export default component$(() => {
                 <div class="flex items-center justify-between mb-8 relative px-4">
                   <div class="absolute left-8 right-8 top-1/2 -translate-y-1/2 h-1 bg-slate-800 -z-10 rounded-full"></div>
                   <div class="absolute left-8 top-1/2 -translate-y-1/2 h-1 bg-emerald-500 -z-10 transition-all duration-300 rounded-full" style={{ width: `calc(${(currentStep.value - 1) * 50}% - 2rem)` }}></div>
-                  
+
                   {[1, 2, 3].map((step) => (
                     <div key={step} class={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black border-4 border-slate-900 transition-colors ${currentStep.value >= step ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
                       {step}
@@ -662,7 +821,7 @@ export default component$(() => {
                   <input type="hidden" name="pitchId" value={selectedPitchId.value} />
                   <input type="hidden" name="time" value={timeStr.value} />
                   {selectedExtras.value.map((ext) => (
-                    <input key={ext} type="hidden" name="extras[]" value={ext} />
+                    <input key={ext.name} type="hidden" name="extras[]" value={JSON.stringify(ext)} />
                   ))}
 
                   {((userAction.value as any)?.message || (guestAction.value as any)?.message) && (
@@ -674,31 +833,32 @@ export default component$(() => {
                   {/* Step 1: Horario */}
                   <div class={["space-y-6 animate-fade-in", currentStep.value !== 1 && "hidden"]}>
                     {selectedPitch && (
-                        <div class="bg-slate-800/50 p-4 rounded-xl border border-white/5 flex justify-between items-center">
-                          <div>
-                            <h4 class="text-white font-bold">{selectedPitch.name}</h4>
-                            <span class="text-xs text-emerald-400 font-black tracking-widest uppercase">{selectedPitch.type}</span>
-                          </div>
-                          <div class="text-right">
-                            <span class="block text-sm text-slate-400">Precio Base</span>
-                            <span class="text-white font-bold">${selectedPitch.pricePerHour}/hr</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {!user.value && (
-                        <div class="bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-xl p-4 text-sm leading-relaxed">
-                          <strong class="font-black block mb-1">Atención Invitado:</strong> 
-                          Tu solicitud requerirá aprobación. Para confirmar al instante, <Link href="/auth/register" class="font-bold underline hover:text-amber-200">crea un usuario</Link>.
-                        </div>
-                      )}
-
-                      <div class="grid grid-cols-2 gap-4">
+                      <div class="bg-slate-800/50 p-4 rounded-xl border border-white/5 flex justify-between items-center">
                         <div>
-                          <div class="flex justify-between items-center mb-2">
-                            <label class="block text-xs font-black text-slate-400 uppercase tracking-widest">Fecha</label>
-                            <button 
-                              type="button" 
+                          <h4 class="text-white font-bold">{selectedPitch.name}</h4>
+                          <span class="text-xs text-emerald-400 font-black tracking-widest uppercase">{selectedPitch.type}</span>
+                        </div>
+                        <div class="text-right">
+                          <span class="block text-sm text-slate-400">Precio Base</span>
+                          <span class="text-white font-bold">${selectedPitch.pricePerHour}/hr</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {!user.value && (
+                      <div class="bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-xl p-4 text-sm leading-relaxed">
+                        <strong class="font-black block mb-1">Atención Invitado:</strong>
+                        Tu solicitud requerirá aprobación. Para confirmar al instante, <Link href="/auth/register" class="font-bold underline hover:text-amber-200">crea un usuario</Link>.
+                      </div>
+                    )}
+
+                    <div class="grid grid-cols-2 gap-4">
+                      <div>
+                        <div class="flex justify-between items-center mb-2">
+                          <label class="block text-xs font-black text-slate-400 uppercase tracking-widest">Fecha</label>
+                          <div class="flex gap-2">
+                            <button
+                              type="button"
                               onClick$={() => {
                                 const today = new Date();
                                 const yyyy = today.getFullYear();
@@ -710,127 +870,191 @@ export default component$(() => {
                             >
                               Hoy
                             </button>
+                            <button
+                              type="button"
+                              onClick$={() => {
+                                const tomorrow = new Date();
+                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                const yyyy = tomorrow.getFullYear();
+                                const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+                                const dd = String(tomorrow.getDate()).padStart(2, '0');
+                                dateStr.value = `${yyyy}-${mm}-${dd}`;
+                              }}
+                              class="text-[10px] font-black text-emerald-500 hover:text-emerald-400 px-2 py-0.5 border border-emerald-500/30 hover:border-emerald-500 rounded-md transition-all uppercase tracking-widest"
+                            >
+                              Mañana
+                            </button>
                           </div>
-                          <input type="date" name="date" required bind:value={dateStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium" />
                         </div>
-                        <div>
-                          <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Duración</label>
-                          <select name="duration" required bind:value={durationStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium appearance-none">
-                            <option value="60">60 min (1h)</option>
-                            <option value="90">90 min (1.5h)</option>
-                            <option value="120">120 min (2h)</option>
-                          </select>
-                        </div>
+                        <input type="date" name="date" required bind:value={dateStr} min={new Date().toISOString().split('T')[0]} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium" />
                       </div>
-
-                      {timeGridUI}
-
-                      <div class="pt-4 border-t border-white/5">
-                        <Button type="button" onClick$={nextStep} disabled={!timeStr.value || isSubmitDisabled} look="primary" class="w-full py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20">
-                          Siguiente Paso
-                        </Button>
+                      <div>
+                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Duración</label>
+                        <select name="duration" required bind:value={durationStr} class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors font-medium appearance-none">
+                          <option value="60">60 min (1h)</option>
+                          <option value="90">90 min (1.5h)</option>
+                          <option value="120">120 min (2h)</option>
+                        </select>
                       </div>
                     </div>
+
+                    {timeGridUI}
+
+                    <div class="pt-4 border-t border-white/5">
+                      <Button type="button" onClick$={nextStep} disabled={!timeStr.value || isSubmitDisabled} look="primary" class="w-full py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20">
+                        Siguiente Paso
+                      </Button>
+                    </div>
+                  </div>
 
                   {/* Step 2: Contacto */}
                   <div class={["space-y-6 animate-fade-in", currentStep.value !== 2 && "hidden"]}>
                     <h4 class="text-lg font-black text-white text-center">Tus Datos</h4>
-                      
-                      {!user.value ? (
-                        <div class="space-y-4">
-                          <div>
-                            <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Nombre Completo *</label>
-                            <input type="text" name="guestName" placeholder="Ej: Juan Pérez" required class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
-                          </div>
-                          <div>
-                            <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Teléfono (WhatsApp) *</label>
-                            <input type="tel" name="guestPhone" placeholder="+54 9 11 1234-5678" required class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
-                          </div>
-                          <div>
-                            <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Email (Opcional)</label>
-                            <input type="email" name="guestEmail" placeholder="juan@ejemplo.com" class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div class="bg-slate-800/50 p-6 rounded-xl border border-emerald-500/20 text-center">
-                          <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-black">
-                            U
-                          </div>
-                          <h5 class="text-white font-bold text-lg">Usuario Registrado</h5>
-                          <p class="text-emerald-400 text-sm mt-1">Usaremos tu cuenta para la reserva</p>
-                        </div>
-                      )}
 
-                      <div class="flex gap-4 pt-4 border-t border-white/5">
-                        <Button type="button" onClick$={prevStep} look="secondary" class="flex-[1] py-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold uppercase tracking-wider transition-colors">
-                          Atrás
-                        </Button>
-                        <Button type="button" onClick$={nextStep} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
-                          Siguiente Paso
-                        </Button>
+                    {!user.value ? (
+                      <div class="space-y-4">
+                        <div>
+                          <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Nombre Completo *</label>
+                          <input type="text" name="guestName" placeholder="Ej: Juan Pérez" required class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Teléfono (WhatsApp) *</label>
+                          <input type="tel" name="guestPhone" placeholder="+54 9 11 1234-5678" required class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Email (Opcional)</label>
+                          <input type="email" name="guestEmail" placeholder="juan@ejemplo.com" class="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500" />
+                        </div>
                       </div>
+                    ) : (
+                      <div class="bg-slate-800/50 p-6 rounded-xl border border-emerald-500/20 text-center">
+                        <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-black">
+                          U
+                        </div>
+                        <h5 class="text-white font-bold text-lg">Usuario Registrado</h5>
+                        <p class="text-emerald-400 text-sm mt-1">Usaremos tu cuenta para la reserva</p>
+                      </div>
+                    )}
+
+                    <div class="flex gap-4 pt-4 border-t border-white/5">
+                      <Button type="button" onClick$={prevStep} look="secondary" class="flex-[1] py-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold uppercase tracking-wider transition-colors">
+                        Atrás
+                      </Button>
+                      <Button type="button" onClick$={nextStep} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
+                        Siguiente Paso
+                      </Button>
                     </div>
+                  </div>
 
                   {/* Step 3: Extras y Pago */}
                   <div class={["space-y-6 animate-fade-in", currentStep.value !== 3 && "hidden"]}>
                     <div>
                       <h4 class="text-lg font-black text-white mb-4">Servicios Adicionales (Opcional)</h4>
-                        <div class="grid grid-cols-3 gap-2">
-                          {['⚽ Pelota Extra', '👕 Camisetas', '🥤 Pack Bebidas'].map((extra) => {
-                            const isSelected = selectedExtras.value.includes(extra);
-                            return (
-                              <button
-                                key={extra}
-                                type="button"
-                                onClick$={() => toggleExtra(extra)}
-                                class={`p-3 rounded-xl border transition-all flex flex-col items-center gap-2 ${isSelected ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'bg-slate-800 border-white/10 text-slate-400 hover:border-emerald-500/50'}`}
-                              >
-                                <span class="text-2xl">{extra.split(' ')[0]}</span>
-                                <span class="text-center text-[10px] font-bold uppercase leading-tight">{extra.substring(2)}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div class="bg-slate-800/50 rounded-xl p-4 border border-emerald-500/20 mt-6">
-                        <div class="flex justify-between items-center mb-4 pb-4 border-b border-white/5">
-                          <span class="text-sm font-medium text-slate-300">Total a pagar:</span>
-                          <span class="text-2xl font-black text-white">${totalPrice}</span>
-                        </div>
-                        
-                        <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Opciones de Pago</label>
-                        <div class="space-y-2">
-                          <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                            <input type="radio" name="paymentOption" value="LATER" class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" checked />
-                            <span class="text-sm font-medium text-white flex-1">Pagar en el club</span>
-                          </label>
-                          <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                            <input type="radio" name="paymentOption" value="SENA" class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
-                            <div class="flex-1">
-                              <span class="text-sm font-medium text-white block">Pagar Seña ({senaLabel})</span>
-                              <span class="text-xs text-slate-400">Pagas hoy: ${senaAmount}</span>
-                            </div>
-                          </label>
-                          <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                            <input type="radio" name="paymentOption" value="TOTAL" class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
-                            <div class="flex-1">
-                              <span class="text-sm font-medium text-white block">Pagar Total</span>
-                              <span class="text-xs text-slate-400">Pagas hoy: ${totalPrice}</span>
-                            </div>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div class="flex gap-4 pt-4 border-t border-white/5">
-                        <Button type="button" onClick$={prevStep} look="secondary" class="flex-[1] py-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold uppercase tracking-wider transition-colors">
-                          Atrás
-                        </Button>
-                        <Button type="submit" disabled={userAction.isRunning || guestAction.isRunning} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
-                          {(userAction.isRunning || guestAction.isRunning) ? "Procesando..." : "Confirmar Reserva"}
-                        </Button>
+                      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {((aiSettings.value?.extraServices as any[]) || []).map((extra) => {
+                          const isSelected = selectedExtras.value.some(e => e.name === extra.name);
+                          return (
+                            <button
+                              key={extra.name}
+                              type="button"
+                              onClick$={() => toggleExtra({ name: extra.name, price: Number(extra.price) })}
+                              class={`p-3 rounded-xl border transition-all flex flex-col items-center gap-2 ${isSelected ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'bg-slate-800 border-white/10 text-slate-400 hover:border-emerald-500/50 hover:bg-slate-800/80'}`}
+                            >
+                              <span class="text-2xl">{extra.icon}</span>
+                              <div class="text-center">
+                                <div class="text-[10px] font-bold uppercase leading-tight text-white mb-1">{extra.name}</div>
+                                <div class="text-xs font-black text-emerald-500">+${extra.price}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {((aiSettings.value?.extraServices as any[]) || []).length === 0 && (
+                          <div class="col-span-full text-center text-slate-500 text-sm py-4 border border-dashed border-white/10 rounded-xl">
+                            No hay servicios adicionales configurados.
+                          </div>
+                        )}
                       </div>
                     </div>
+
+                    <div class="bg-slate-800/50 rounded-xl p-4 border border-emerald-500/20 mt-6">
+                      <div class="space-y-2 mb-4 pb-4 border-b border-white/5">
+                        <div class="flex justify-between items-center">
+                          <span class="text-sm text-slate-400">Precio de la Cancha:</span>
+                          <span class="text-sm font-medium text-white">${dynamicPrice.value}</span>
+                        </div>
+                        {extrasTotal.value > 0 && (
+                          <div class="flex justify-between items-center">
+                            <span class="text-sm text-slate-400">Servicios Adicionales:</span>
+                            <span class="text-sm font-medium text-white">${extrasTotal.value}</span>
+                          </div>
+                        )}
+                        <div class="flex justify-between items-center pt-2 border-t border-white/5">
+                          <span class="text-sm font-bold text-emerald-400">Total general:</span>
+                          <span class="text-2xl font-black text-white">${totalPrice}</span>
+                        </div>
+                      </div>
+
+                      <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Método de Pago</label>
+                      <div class="flex gap-2 mb-6">
+                        <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
+                          <input type="radio" name="paymentMethod" value="CASH" bind:value={paymentMethod} class="hidden" />
+                          <span class="text-sm font-bold text-white">Efectivo</span>
+                        </label>
+                        <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
+                          <input type="radio" name="paymentMethod" value="TRANSFER" bind:value={paymentMethod} class="hidden" />
+                          <span class="text-sm font-bold text-white">Transferencia</span>
+                        </label>
+                      </div>
+
+                      {paymentMethod.value === "TRANSFER" && (
+                        <div class="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                          <p class="text-sm text-emerald-100 mb-2">Para confirmar tu reserva, envía la transferencia al siguiente alias:</p>
+                          <div class="text-lg font-black text-emerald-400 mb-3 bg-slate-900/50 p-2 rounded text-center select-all">
+                            {aiSettings.value?.bankAlias || "No configurado"}
+                          </div>
+                          <p class="text-xs text-emerald-200/70">
+                            Por favor, envía el comprobante por WhatsApp al: <br/>
+                            <a href={`https://wa.me/${aiSettings.value?.whatsappNumber?.replace(/[^0-9]/g, '')}`} target="_blank" class="font-bold text-emerald-400 hover:underline">
+                              {aiSettings.value?.whatsappNumber || "No configurado"}
+                            </a>
+                          </p>
+                        </div>
+                      )}
+
+                      <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Modalidad de Pago</label>
+                      <div class="space-y-2">
+                        {paymentMethod.value === "CASH" && (
+                          <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
+                            <input type="radio" name="paymentOption" value="LATER" bind:value={paymentOption} class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                            <span class="text-sm font-medium text-white flex-1">Abonar en el club</span>
+                          </label>
+                        )}
+                        <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
+                          <input type="radio" name="paymentOption" value="SENA" bind:value={paymentOption} class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                          <div class="flex-1">
+                            <span class="text-sm font-medium text-white block">Abonar Seña ({senaLabel})</span>
+                            <span class="text-xs text-slate-400">Pagas hoy: ${senaAmount}</span>
+                          </div>
+                        </label>
+                        <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
+                          <input type="radio" name="paymentOption" value="TOTAL" bind:value={paymentOption} class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                          <div class="flex-1">
+                            <span class="text-sm font-medium text-white block">Abonar Total</span>
+                            <span class="text-xs text-slate-400">Pagas hoy: ${totalPrice}</span>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="flex gap-4 pt-4 border-t border-white/5">
+                      <Button type="button" onClick$={prevStep} look="secondary" class="flex-[1] py-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold uppercase tracking-wider transition-colors">
+                        Atrás
+                      </Button>
+                      <Button type="submit" disabled={userAction.isRunning || guestAction.isRunning} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
+                        {(userAction.isRunning || guestAction.isRunning) ? "Procesando..." : "Confirmar Reserva"}
+                      </Button>
+                    </div>
+                  </div>
                 </Form>
               </div>
             )}

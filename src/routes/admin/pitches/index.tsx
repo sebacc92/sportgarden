@@ -2,7 +2,7 @@ import { component$, $, useStore, useSignal, useTask$ } from "@builder.io/qwik";
 import { Form, routeAction$, routeLoader$, zod$, z } from "@builder.io/qwik-city";
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
-import { pitches, pitchPricingRules } from "~/db/schema";
+import { pitches, pitchPricingRules, siteSettings } from "~/db/schema";
 import { Button, Modal } from "~/components/ui";
 import { LuImage, LuPlus, LuSettings, LuTrash2 } from '@qwikest/icons/lucide';
 import { put } from '@vercel/blob';
@@ -15,6 +15,12 @@ export const usePitchesData = routeLoader$(async (requestEvent) => {
     orderBy: (pitches, { asc }) => [asc(pitches.name)],
     with: { pricingRules: true },
   });
+});
+
+export const useSiteSettingsData = routeLoader$(async (requestEvent) => {
+  const db = getDB(requestEvent);
+  const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+  return settings;
 });
 
 // 2. Actions
@@ -179,6 +185,18 @@ export const useSavePricingRulesAction = routeAction$(
   })
 );
 
+export const useUpdateExtraServicesAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const extras = JSON.parse(data.extrasJson as string) as any[];
+    await db.update(siteSettings).set({ extraServices: extras }).where(eq(siteSettings.id, 1));
+    return { success: true };
+  },
+  zod$({
+    extrasJson: z.string(),
+  })
+);
+
 // Loading Spinner Component
 export const LoadingSpinner = component$(({ class: className }: { class?: string }) => (
   <svg class={["animate-spin", className]} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -190,6 +208,7 @@ export const LoadingSpinner = component$(({ class: className }: { class?: string
 // 3. UI Component
 export default component$(() => {
   const pitchesData = usePitchesData();
+  const siteSettingsData = useSiteSettingsData();
   const createPitchAction = useCreatePitchAction();
   const updatePitchAction = useUpdatePitchAction();
   const toggleStatusAction = useTogglePitchStatusAction();
@@ -202,6 +221,8 @@ export default component$(() => {
 
   const isPricingModalOpen = useSignal(false);
   const selectedPitchForPricing = useSignal<{ id: string; name: string; rules: any[] } | null>(null);
+
+  const isExtrasModalOpen = useSignal(false);
 
   // State to handle edit mode
   const editingPitch = useStore<{ id: string | null; name: string; type: string; pricePerHour: number; depositType: string; depositAmount: number; isCovered: boolean; isLit: boolean; notes: string; imageUrl: string | null }>({
@@ -255,6 +276,12 @@ export default component$(() => {
       } else {
         await createPitchAction.submit(formData);
       }
+
+      // Cerrar modal y resetear si fue exitoso
+      if (updatePitchAction.value?.success || createPitchAction.value?.success) {
+        isFormModalOpen.value = false;
+        resetForm();
+      }
     } catch (error) {
       console.error('Error al comprimir/subir imagen:', error);
     } finally {
@@ -262,14 +289,6 @@ export default component$(() => {
     }
   });
 
-  useTask$(({ track }) => {
-    const createSuccess = track(() => createPitchAction.value?.success);
-    const updateSuccess = track(() => updatePitchAction.value?.success);
-    if (createSuccess || updateSuccess) {
-      isFormModalOpen.value = false;
-      resetForm();
-    }
-  });
 
   const resetForm = $(() => {
     editingPitch.id = null;
@@ -326,6 +345,13 @@ export default component$(() => {
         </div>
         <div class="flex gap-3">
           <Button
+            onClick$={() => isExtrasModalOpen.value = true}
+            look="outline"
+            class="border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 px-6 py-2 rounded-xl font-bold shadow-sm"
+          >
+            Configurar Extras
+          </Button>
+          <Button
             onClick$={() => isSelectionModalOpen.value = true}
             look="outline"
             class="border-red-100 text-red-600 hover:bg-red-50 hover:border-red-200 px-6 py-2 rounded-xl font-bold shadow-sm"
@@ -357,25 +383,23 @@ export default component$(() => {
                 key={pitch.id}
                 class={["group p-6 rounded-3xl border shadow-sm transition-all relative overflow-hidden", pitch.isActive ? "bg-white border-slate-200" : "bg-slate-100 border-slate-300 opacity-80"]}
               >
-                {/* Decorative Number Badge or Image Background */}
+                {/* Decorative Number Badge */}
                 <div class="absolute inset-0 z-0">
-                  {pitch.imageUrl ? (
-                    <div class="w-full h-full relative">
-                      <img src={pitch.imageUrl} alt={pitch.name} class="w-full h-full object-cover" />
-                      <div class="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent"></div>
-                    </div>
-                  ) : (
-                    <div class="absolute top-0 right-0 w-16 h-16 bg-slate-50 flex items-center justify-center rounded-bl-3xl transition-colors group-hover:bg-slate-100">
-                      <span class="text-4xl font-black text-slate-200 group-hover:text-slate-300 transition-colors leading-none">{index + 1}</span>
-                    </div>
-                  )}
+                  <div class="absolute top-0 right-0 w-16 h-16 bg-slate-50 flex items-center justify-center rounded-bl-3xl transition-colors group-hover:bg-slate-100">
+                    <span class="text-4xl font-black text-slate-200 group-hover:text-slate-300 transition-colors leading-none">{index + 1}</span>
+                  </div>
                 </div>
 
                 <div class="relative z-10">
                   <div class="flex justify-between items-start mb-4">
                     <div>
-                      <h3 class={["font-black text-xl mb-1 leading-tight", pitch.imageUrl ? "text-white" : "text-slate-800"]}>
+                      <h3 class="font-black text-xl mb-1 leading-tight text-slate-800 flex items-center gap-2">
                         {pitch.name}
+                        {pitch.imageUrl && (
+                          <a href={pitch.imageUrl} target="_blank" rel="noopener noreferrer" class="text-slate-400 hover:text-emerald-500 transition-colors" title="Ver foto de la cancha">
+                            <LuImage class="w-5 h-5" />
+                          </a>
+                        )}
                       </h3>
                       <div class="flex flex-wrap gap-1.5">
                         <span class="bg-slate-800 text-white px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest">{pitch.type}</span>
@@ -774,6 +798,12 @@ export default component$(() => {
         initialRules={selectedPitchForPricing.value?.rules || []}
       />
 
+      {/* Global Extras Modal */}
+      <GlobalExtraServicesModal
+        showSignal={isExtrasModalOpen}
+        initialExtras={(siteSettingsData.value?.extraServices as any[]) || []}
+      />
+
     </div>
   );
 });
@@ -938,6 +968,155 @@ export const PitchPricingModal = component$((props: {
                 <LoadingSpinner class="w-5 h-5" />
               ) : (
                 "Guardar Precios"
+              )}
+            </Button>
+          </div>
+        </Form>
+      </Modal.Panel>
+    </Modal.Root>
+  );
+});
+
+export const GlobalExtraServicesModal = component$((props: {
+  showSignal: Signal<boolean>,
+  initialExtras: any[]
+}) => {
+  const saveAction = useUpdateExtraServicesAction();
+  const extrasStore = useStore<{ extras: any[] }>({
+    extras: []
+  });
+
+  useTask$(({ track }) => {
+    track(() => props.initialExtras);
+    extrasStore.extras = props.initialExtras.map(e => ({
+      ...e,
+      id: e.id || Math.random().toString(36).substring(2, 9)
+    }));
+  });
+
+  const addExtra = $(() => {
+    extrasStore.extras = [...extrasStore.extras, {
+      id: Math.random().toString(36).substring(2, 9),
+      name: "",
+      price: 0,
+      icon: "⚽"
+    }];
+  });
+
+  const removeExtra = $((id: string) => {
+    extrasStore.extras = extrasStore.extras.filter(e => e.id !== id);
+  });
+
+  const updateExtra = $((id: string, field: string, value: any) => {
+    extrasStore.extras = extrasStore.extras.map(e => e.id === id ? { ...e, [field]: value } : e);
+  });
+
+  return (
+    <Modal.Root bind:show={props.showSignal}>
+      <Modal.Panel class="bg-white p-8 rounded-[2rem] border shadow-2xl max-w-2xl w-full">
+        <Modal.Title class="text-3xl font-black text-slate-800 mb-2 tracking-tighter">
+          Servicios Adicionales
+        </Modal.Title>
+        <p class="text-slate-500 mb-8 font-medium">
+          Configura los servicios extras (pelotas, bebidas, etc.) disponibles para todas las reservas.
+        </p>
+
+        <Form
+          action={saveAction}
+          class="space-y-6"
+          onSubmitCompleted$={() => {
+            props.showSignal.value = false;
+          }}
+        >
+          <input type="hidden" name="extrasJson" value={JSON.stringify(extrasStore.extras)} />
+
+          <div class="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
+            {extrasStore.extras.map((extra) => (
+              <div key={extra.id} class="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div class="w-16">
+                  <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Icono</label>
+                  <input
+                    type="text"
+                    value={extra.icon}
+                    onChange$={(e) => updateExtra(extra.id, 'icon', (e.target as HTMLInputElement).value)}
+                    required
+                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-center"
+                  />
+                </div>
+                <div class="flex-1">
+                  <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Nombre</label>
+                  <input
+                    type="text"
+                    value={extra.name}
+                    placeholder="Ej: Pelota Extra"
+                    onChange$={(e) => updateExtra(extra.id, 'name', (e.target as HTMLInputElement).value)}
+                    required
+                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-bold"
+                  />
+                </div>
+                <div class="w-32">
+                  <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Precio ($)</label>
+                  <input
+                    type="number"
+                    value={extra.price}
+                    onChange$={(e) => updateExtra(extra.id, 'price', Number((e.target as HTMLInputElement).value))}
+                    required
+                    min="0"
+                    step="1"
+                    class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-emerald-700"
+                  />
+                </div>
+                <div class="pt-5">
+                  <button
+                    type="button"
+                    onClick$={() => removeExtra(extra.id)}
+                    class="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Eliminar extra"
+                  >
+                    <LuTrash2 class="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {extrasStore.extras.length === 0 && (
+              <div class="text-center py-8 text-slate-400 font-medium italic border-2 border-dashed border-slate-200 rounded-2xl bg-white">
+                No hay servicios adicionales configurados.
+              </div>
+            )}
+          </div>
+
+          <div class="pt-2">
+            <Button
+              type="button"
+              onClick$={addExtra}
+              look="outline"
+              class="w-full border-dashed border-2 border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 rounded-2xl py-3 font-bold flex justify-center items-center gap-2"
+            >
+              <LuPlus class="w-5 h-5" />
+              Añadir Servicio Extra
+            </Button>
+          </div>
+
+          <div class="pt-6 flex gap-3 border-t border-slate-100">
+            <Button
+              type="button"
+              onClick$={() => props.showSignal.value = false}
+              look="outline"
+              class="flex-1 rounded-2xl py-4 font-bold border-slate-200"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              look="primary"
+              disabled={saveAction.isRunning}
+              class="flex-1 bg-slate-800 text-white hover:bg-slate-900 rounded-2xl py-4 font-black uppercase tracking-widest flex items-center justify-center gap-2"
+            >
+              {saveAction.isRunning ? (
+                <LoadingSpinner class="w-5 h-5" />
+              ) : (
+                "Guardar Extras"
               )}
             </Button>
           </div>

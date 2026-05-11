@@ -217,13 +217,14 @@ export const BookingTimelineView = component$<Props>(
                       return (
                         <td
                           key={slot}
-                          class="border-b border-r border-slate-100 p-1 align-top"
+                          class="border-b border-r border-slate-100 p-1 align-top relative"
                           style={`min-width: ${SLOT_MIN_WIDTH_PX}px; width: ${SLOT_MIN_WIDTH_PX}px; height: 80px`}
                         >
+                          <div class="absolute inset-y-0 left-1/2 w-px border-l border-dashed pointer-events-none" style="border-color: rgba(148,163,184,0.2);"></div>
                           {cells.length === 0 ? (
-                            <div class="h-full w-full rounded-lg hover:bg-slate-100/60 transition-colors" />
+                            <div class="h-full w-full rounded-lg hover:bg-slate-100/60 transition-colors relative z-10" />
                           ) : (
-                            <div class="flex flex-col gap-1 h-full">
+                            <div class="flex flex-col gap-1 h-full relative z-10">
                               {cells.map(({ booking, user, guest }) => {
                                 const name = guest?.name || user?.name || "—";
                                 const phone = guest?.phone || user?.phone || "";

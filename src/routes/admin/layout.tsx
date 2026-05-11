@@ -3,15 +3,23 @@ import { Link, useLocation, routeLoader$, server$ } from "@builder.io/qwik-city"
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
 import { siteSettings, users } from "~/db/schema";
+import logo from "../../media/SportGarden8.png";
 
 export const useAdminUser = routeLoader$(async (requestEvent) => {
+  const isLogin = requestEvent.url.pathname.startsWith('/admin/login');
+  if (isLogin) return null;
+
   const db = getDB(requestEvent);
   const adminId = requestEvent.cookie.get('auth_session')?.value;
-  if (!adminId) return null;
+  if (!adminId) throw requestEvent.redirect(302, '/admin/login/');
   const user = await db.query.users.findFirst({
     where: eq(users.id, adminId),
     columns: { role: true, name: true }
   });
+  if (!user) {
+    requestEvent.cookie.delete('auth_session', { path: '/' });
+    throw requestEvent.redirect(302, '/admin/login/');
+  }
   return user;
 });
 
@@ -35,7 +43,7 @@ export default component$(() => {
   const isCollapsed = useSignal(false);
   const settings = useSiteSettings();
   const adminUser = useAdminUser();
-  const userRole = adminUser.value?.role || 'GUEST';
+  const userRole = adminUser.value?.role ?? 'GUEST';
 
   const navItems = [
     {
@@ -71,6 +79,16 @@ export default component$(() => {
           <path d="M12 22v-7l2-2"></path>
           <path d="M22 10a9 9 0 0 0-18 0c0 4 3 6 8 11.5 5-5.5 8-7.5 8-11.5z"></path>
           <circle cx="12" cy="10" r="3"></circle>
+        </svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER"]
+    },
+    {
+      name: "Galería",
+      href: "/admin/gallery/",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
         </svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
@@ -186,13 +204,18 @@ export default component$(() => {
         </button>
 
         <div class="h-20 flex items-center px-6 border-b border-white/5 overflow-hidden">
-          <div class="font-black text-2xl tracking-tighter text-white uppercase whitespace-nowrap">
-            {isCollapsed.value ? (
-              <span class="text-emerald-500">SG</span>
-            ) : (
-              <>Sport<span class="text-emerald-500">Garden</span></>
-            )}
-          </div>
+          {isCollapsed.value ? (
+            <div class="w-full flex justify-center">
+              <img src={logo} alt="SG" class="h-10 w-auto object-contain" />
+            </div>
+          ) : (
+            <div class="flex items-center gap-3">
+              <img src={logo} alt="SportGarden" class="h-10 w-auto object-contain" />
+              <div class="font-black text-xl tracking-tighter text-white uppercase whitespace-nowrap">
+                Sport<span class="text-emerald-500">Garden</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Club Status Indicator */}

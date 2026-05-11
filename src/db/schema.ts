@@ -59,6 +59,7 @@ export const bookings = sqliteTable("bookings", {
     .default("PENDING"),
   preferenceId: text("preference_id"),
   paymentId: text("payment_id"),
+  paymentMethod: text("payment_method", { enum: ["CASH", "TRANSFER", "MERCADO_PAGO"] }).default("CASH"),
   extras: text("extras", { mode: "json" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
@@ -109,6 +110,9 @@ export const siteSettings = sqliteTable('site_settings', {
   clubStatus: text('club_status').notNull().default('AUTO'), // 'AUTO', 'OPEN', 'CLOSED'
   operatingHours: text('operating_hours', { mode: 'json' }), // array of { day: 0-6, isOpen: boolean, openTime: string, closeTime: string }
   services: text('services', { mode: 'json' }), // array of strings
+  extraServices: text('extra_services', { mode: 'json' }), // array of { name: string, price: number, icon: string }
+  bankAlias: text('bank_alias'),
+  galleryImages: text('gallery_images', { mode: 'json' }), // array of image URLs (max 20)
   
   updatedAt: integer('updated_at', { mode: 'timestamp' }),
 });

@@ -105,16 +105,23 @@ export default component$(() => {
     <div class="p-6 bg-slate-50 min-h-full font-sans">
       <div class="max-w-6xl mx-auto space-y-6">
 
+        {/* Header Navigation */}
+        <div class="flex gap-4 mb-4 border-b border-slate-200 pb-4 print:hidden">
+          <a href="/admin/cash/" class="px-4 py-2 font-bold text-emerald-600 border-b-2 border-emerald-600">Caja Actual</a>
+          <a href="/admin/cash/history/" class="px-4 py-2 font-bold text-slate-500 hover:text-slate-800 transition-colors">Historial</a>
+          <a href="/admin/cash/balances/" class="px-4 py-2 font-bold text-slate-500 hover:text-slate-800 transition-colors">Balances</a>
+        </div>
+
         {/* Header */}
-        <div class="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-200 print:shadow-none print:border-none print:p-0">
           <div>
-            <h1 class="text-3xl font-black tracking-tight text-slate-800">Caja</h1>
-            <p class="text-slate-500 mt-1">
+            <h1 class="text-3xl font-black tracking-tight text-slate-800 print:text-xl">Caja Actual</h1>
+            <p class="text-slate-500 mt-1 print:hidden">
               {isOpen ? "Caja actualmente abierta." : "Caja cerrada. Ábrela para comenzar a operar."}
             </p>
           </div>
 
-          <Form action={toggleAction} class="flex gap-3">
+          <Form action={toggleAction} class="flex gap-3 print:hidden">
             {isOpen ? (
               <>
                 <input type="hidden" name="action" value="CLOSE" />
@@ -157,7 +164,7 @@ export default component$(() => {
             </div>
 
             {/* Add Movement Form */}
-            <div class="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
+            <div class="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit print:hidden">
               <h2 class="text-xl font-black text-slate-800 mb-4">Nuevo Movimiento</h2>
               <Form action={addMovementAction} class="space-y-4">
                 <input type="hidden" name="registerId" value={cashData.value.latestRegister?.id} />
@@ -208,11 +215,11 @@ export default component$(() => {
             </div>
 
             {/* Movements List */}
-            <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-              <div class="p-6 border-b border-slate-100 bg-slate-50/50">
+            <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col print:col-span-3 print:border-none print:shadow-none">
+              <div class="p-6 border-b border-slate-100 bg-slate-50/50 print:bg-white print:p-0 print:pb-4">
                 <h2 class="text-xl font-black text-slate-800">Movimientos Recientes</h2>
               </div>
-              <div class="flex-1 overflow-auto p-0">
+              <div class="flex-1 overflow-auto p-0 print:overflow-visible">
                 <table class="w-full text-left border-collapse">
                   <thead>
                     <tr class="bg-slate-50/80 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
