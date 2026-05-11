@@ -1184,7 +1184,7 @@ export default component$(() => {
 
       {/* Create Admin Booking Modal */}
       <Modal.Root bind:show={isCreateModalOpen}>
-        <Modal.Panel position="right" class="fixed right-0 top-0 inset-y-0 p-0 w-[500px] max-w-[90vw] overflow-hidden bg-white shadow-2xl">
+        <Modal.Panel position="right" class="fixed right-0 top-0 inset-y-0 p-0 w-[700px] max-w-[95vw] overflow-hidden bg-white shadow-2xl">
           <div class="flex flex-col h-[100dvh] w-full">
             {(() => {
               const pitch = calendarData.value.pitches.find(p => p.id === adminFormPitchId.value);
@@ -1213,9 +1213,9 @@ export default component$(() => {
                 <>
                   <div class="bg-slate-50 border-b border-slate-200 px-8 pt-8 pb-6 flex flex-col gap-3 shrink-0 relative">
                     {isPast && (
-                      <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
-                        Horario Pasado
+                      <div class="bg-amber-100 border border-amber-200 text-amber-700 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-sm flex items-center justify-center gap-2 mb-2 w-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                        Horario Pasado o en Curso
                       </div>
                     )}
                     <div class="flex justify-between items-start">
@@ -1254,7 +1254,7 @@ export default component$(() => {
                     </div>
                   </div>
 
-                  <div class="flex-1 overflow-y-auto px-8 py-8">
+                  <div class="flex-1 overflow-y-auto overflow-x-hidden px-8 py-8">
                     <Form action={createBookingAction} id="create-booking-form" class="space-y-8 pb-10" onSubmitCompleted$={() => { if (createBookingAction.value?.success) isCreateModalOpen.value = false; }}>
                       <input type="hidden" name="date" value={adminFormDate.value} />
                       <input type="hidden" name="startTime" value={adminFormTime.value} />
@@ -1318,23 +1318,26 @@ export default component$(() => {
                                 <span>${basePrice.toLocaleString('es-AR')}</span>
                               </div>
 
-                              <div class="flex items-center gap-2">
-                                <select
-                                  value={adminDiscountType.value}
-                                  onChange$={(_, el) => adminDiscountType.value = el.value as any}
-                                  class="w-1/3 px-2 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none text-xs font-bold text-slate-600"
-                                >
-                                  <option value="FIXED">Desc. ($)</option>
-                                  <option value="PERCENTAGE">Desc. (%)</option>
-                                </select>
-                                <input
-                                  type="number"
-                                  value={adminDiscountAmount.value}
-                                  onInput$={(_, el) => adminDiscountAmount.value = el.value ? Number(el.value) : ""}
-                                  min="0"
-                                  placeholder="0"
-                                  class="w-2/3 px-4 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-emerald-500 text-sm font-bold text-slate-800"
-                                />
+                              <div class="flex flex-col gap-2 mt-1">
+                                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Aplicar Descuento</label>
+                                <div class="flex gap-2">
+                                  <select
+                                    value={adminDiscountType.value}
+                                    onChange$={(_, el) => adminDiscountType.value = el.value as any}
+                                    class="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-bold text-slate-600 transition-all"
+                                  >
+                                    <option value="FIXED">Monto Fijo ($)</option>
+                                    <option value="PERCENTAGE">Porcentaje (%)</option>
+                                  </select>
+                                  <input
+                                    type="number"
+                                    value={adminDiscountAmount.value}
+                                    onInput$={(_, el) => adminDiscountAmount.value = el.value ? Number(el.value) : ""}
+                                    min="0"
+                                    placeholder="0"
+                                    class="flex-1 px-4 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500 text-sm font-bold text-slate-800 transition-all"
+                                  />
+                                </div>
                               </div>
 
                               {calendarData.value.extraServices.length > 0 && (
