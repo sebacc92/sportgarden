@@ -259,6 +259,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
       operatingHours: (settings.operatingHours || []) as any[],
       services: (settings.services || []) as string[],
       galleryImages: (settings.galleryImages || []) as string[],
+      schoolCategories: (settings.schoolCategories || []) as any[],
     } : null,
   };
 });
@@ -492,8 +493,16 @@ export default component$(() => {
   });
 
 
-  const calendarViewComputed = useComputed$(() => calendarData.value.view);
-  const selectedDateStrComputed = useComputed$(() => calendarData.value.selectedDateStr);
+  const calendarViewComputed = useComputed$(() => {
+    // Accedemos a .value para que Qwik sepa que debe re-ejecutar esto si cambia
+    const data = calendarData.value; 
+    return data.view;
+  });
+
+  const selectedDateStrComputed = useComputed$(() => {
+    const data = calendarData.value;
+    return data.selectedDateStr;
+  });
 
   // Force grid layout for week/month views as timeline/list are day-only
   useTask$(({ track }) => {
@@ -713,6 +722,7 @@ export default component$(() => {
         <main class="flex-1 overflow-auto p-6">
           <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
             {(() => {
+              const selectedDateStr = calendarData.value.selectedDateStr;
               return (
                 <BookingTimelineView
                   pitches={calendarData.value.pitches}
@@ -724,19 +734,19 @@ export default component$(() => {
                     selectedBookingId.value = id;
                     isModalOpen.value = true;
                   }}
-              onEmptySlotDragEnd$={(pitchId, time, duration) => {
-                adminFormPitchId.value = pitchId;
-                adminFormDate.value = getBAFormatDate(new Date(calendarData.value.selectedDateStr + 'T12:00:00'));
-                adminFormTime.value = time;
-                adminFormDuration.value = String(duration);
-                adminIsSubscription.value = false;
-                adminEndDate.value = "";
-                adminNotes.value = "";
-                adminDiscountAmount.value = "";
-                adminDiscountType.value = "FIXED";
-                adminSelectedExtras.value = [];
-                isCreateModalOpen.value = true;
-              }}
+                  onEmptySlotDragEnd$={(pitchId, time, duration) => {
+                    adminFormPitchId.value = pitchId;
+                    adminFormDate.value = getBAFormatDate(new Date(selectedDateStr + 'T12:00:00'));
+                    adminFormTime.value = time;
+                    adminFormDuration.value = String(duration);
+                    adminIsSubscription.value = false;
+                    adminEndDate.value = "";
+                    adminNotes.value = "";
+                    adminDiscountAmount.value = "";
+                    adminDiscountType.value = "FIXED";
+                    adminSelectedExtras.value = [];
+                    isCreateModalOpen.value = true;
+                  }}
                 />
               );
             })()}

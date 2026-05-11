@@ -214,7 +214,6 @@ export default component$(() => {
   const toggleStatusAction = useTogglePitchStatusAction();
   const deleteAction = useDeletePitchAction();
 
-  const isFormModalOpen = useSignal(false);
   const isSelectionModalOpen = useSignal(false);
   const isDeleteConfirmModalOpen = useSignal(false);
   const pitchToDelete = useSignal<{ id: string; name: string } | null>(null);
@@ -224,29 +223,31 @@ export default component$(() => {
 
   const isExtrasModalOpen = useSignal(false);
 
-  // State to handle edit mode
-  const editingPitch = useStore<{ id: string | null; name: string; type: string; pricePerHour: number; depositType: string; depositAmount: number; isCovered: boolean; isLit: boolean; notes: string; imageUrl: string | null }>({
-    id: null,
-    name: "",
-    type: "F5",
-    pricePerHour: 0,
-    depositType: "PERCENTAGE",
-    depositAmount: 0,
-    isCovered: false,
-    isLit: false,
-    notes: "",
-    imageUrl: null,
-  });
+  // Single atomic signal: null = modal closed, object = modal open with data
+  type EditModalState = {
+    id: string | null;
+    name: string;
+    type: string;
+    pricePerHour: number;
+    depositType: string;
+    depositAmount: number;
+    isCovered: boolean;
+    isLit: boolean;
+    notes: string;
+    imageUrl: string | null;
+    previewUrl: string | null;
+  };
+  const editModalState = useSignal<EditModalState | null>(null);
 
   const isCompressing = useSignal(false);
-  const previewUrl = useSignal<string | null>(null);
 
   const handleFileChange = $((event: Event) => {
     const element = event.target as HTMLInputElement;
     if (!element.files || element.files.length === 0) return;
     const file = element.files[0];
-    previewUrl.value = URL.createObjectURL(file);
-    editingPitch.imageUrl = null; // Clear existing if new one is selected
+    if (editModalState.value) {
+      editModalState.value = { ...editModalState.value, previewUrl: URL.createObjectURL(file), imageUrl: null };
+    }
   });
 
   const handleSubmit = $(async (e: Event, currentTarget: HTMLFormElement) => {
@@ -267,19 +268,18 @@ export default component$(() => {
         const compressedBlob = await imageCompression(imageFile, options);
         const newFileName = imageFile.name.replace(/\.[^/.]+$/, "") + ".webp";
         const compressedFile = new File([compressedBlob], newFileName, { type: 'image/webp' });
-        
         formData.set('image', compressedFile);
       }
 
-      if (editingPitch.id) {
+      const isEditing = !!editModalState.value?.id;
+      if (isEditing) {
         await updatePitchAction.submit(formData);
       } else {
         await createPitchAction.submit(formData);
       }
 
-      // Cerrar modal y resetear si fue exitoso
       if (updatePitchAction.value?.success || createPitchAction.value?.success) {
-        isFormModalOpen.value = false;
+        editModalState.value = null;
       }
     } catch (error) {
       console.error('Error al comprimir/subir imagen:', error);
@@ -288,44 +288,34 @@ export default component$(() => {
     }
   });
 
-
-  const resetForm = $(() => {
-    editingPitch.id = null;
-    editingPitch.name = "";
-    editingPitch.type = "F5";
-    editingPitch.pricePerHour = 0;
-    editingPitch.depositType = "PERCENTAGE";
-    editingPitch.depositAmount = 0;
-    editingPitch.isCovered = false;
-    editingPitch.isLit = false;
-    editingPitch.notes = "";
-    editingPitch.imageUrl = null;
-    previewUrl.value = null;
-  });
-
   const openCreateModal = $(() => {
-    resetForm();
-    isFormModalOpen.value = true;
+    editModalState.value = {
+      id: null, name: "", type: "F5", pricePerHour: 0,
+      depositType: "PERCENTAGE", depositAmount: 0,
+      isCovered: false, isLit: false, notes: "",
+      imageUrl: null, previewUrl: null,
+    };
   });
 
   const openEditModal = $((pitch: any) => {
-    editingPitch.id = pitch.id;
-    editingPitch.name = pitch.name;
-    editingPitch.type = pitch.type;
-    editingPitch.pricePerHour = pitch.pricePerHour;
-    editingPitch.depositType = pitch.depositType || "PERCENTAGE";
-    editingPitch.depositAmount = pitch.depositAmount || 0;
-    editingPitch.isCovered = pitch.isCovered;
-    editingPitch.isLit = pitch.isLit || false;
-    editingPitch.notes = pitch.notes || "";
-    editingPitch.imageUrl = pitch.imageUrl;
-    // Also load pricing rules for this pitch
     selectedPitchForPricing.value = {
       id: pitch.id,
       name: pitch.name,
       rules: pitch.pricingRules || []
     };
-    isFormModalOpen.value = true;
+    editModalState.value = {
+      id: pitch.id,
+      name: pitch.name,
+      type: pitch.type,
+      pricePerHour: pitch.pricePerHour,
+      depositType: pitch.depositType || "PERCENTAGE",
+      depositAmount: pitch.depositAmount || 0,
+      isCovered: pitch.isCovered,
+      isLit: pitch.isLit || false,
+      notes: pitch.notes || "",
+      imageUrl: pitch.imageUrl,
+      previewUrl: null,
+    };
   });
 
   const selectForDeletion = $((pitch: any) => {
@@ -491,33 +481,40 @@ export default component$(() => {
         </div>
       </div>
 
-      {/* Form Modal */}
-      <Modal.Root bind:show={isFormModalOpen}>
-        <Modal.Panel class="bg-white rounded-[2rem] border shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] p-0 overflow-hidden">
-          {/* Fixed header */}
-          <div class="px-8 pt-8 pb-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-            <Modal.Title class="text-3xl font-black text-slate-800 tracking-tighter">
-              {editingPitch.id ? "Editar Cancha" : "Nueva Cancha"}
-            </Modal.Title>
-            <button
-              type="button"
-              onClick$={() => { isFormModalOpen.value = false; }}
-              class="text-slate-400 hover:text-slate-700 transition-colors p-1"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-            </button>
-          </div>
+      {/* Form Modal - controlled solely by editModalState (no race condition) */}
+      {editModalState.value && (
+        <div
+          class="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style="background: rgba(0,0,0,0.5)"
+          onClick$={(e) => { if ((e.target as HTMLElement).dataset.overlay) editModalState.value = null; }}
+          data-overlay="true"
+        >
+          <div class="bg-white rounded-[2rem] border shadow-2xl w-full max-w-3xl flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Fixed header */}
+            <div class="px-8 pt-8 pb-4 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <h2 class="text-3xl font-black text-slate-800 tracking-tighter">
+                {editModalState.value.id ? "Editar Cancha" : "Nueva Cancha"}
+              </h2>
+              <button
+                type="button"
+                onClick$={() => { editModalState.value = null; }}
+                class="text-slate-400 hover:text-slate-700 transition-colors p-1"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
 
-          {/* Scrollable body */}
-          <div class="overflow-y-auto flex-1 px-8 py-6">
+            {/* Scrollable body */}
+            <div class="overflow-y-auto flex-1 px-8 py-6">
+              <div>
             <Form
-              action={editingPitch.id ? updatePitchAction : createPitchAction}
+              action={editModalState.value.id ? updatePitchAction : createPitchAction}
               class="space-y-6"
               preventdefault:submit
               onSubmit$={handleSubmit}
             >
-              {editingPitch.id && <input type="hidden" name="id" value={editingPitch.id} />}
-              <input type="hidden" name="imageUrl" value={editingPitch.imageUrl || ""} />
+              {editModalState.value.id && <input type="hidden" name="id" value={editModalState.value.id} />}
+              <input type="hidden" name="imageUrl" value={editModalState.value.imageUrl || ""} />
 
               {/* Top row: image + nombre/tipo/atributos */}
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -525,14 +522,15 @@ export default component$(() => {
                 <div>
                   <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Foto de la Cancha</label>
                   <div class="h-44 rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden relative group">
-                    {(previewUrl.value || editingPitch.imageUrl) ? (
+                    {(editModalState.value.previewUrl || editModalState.value.imageUrl) ? (
                       <>
-                        <img src={previewUrl.value || editingPitch.imageUrl!} alt="Foto cancha" class="w-full h-full object-cover" />
+                        <img src={editModalState.value.previewUrl || editModalState.value.imageUrl!} alt="Foto cancha" class="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick$={() => {
-                            editingPitch.imageUrl = null;
-                            previewUrl.value = null;
+                            if (editModalState.value) {
+                              editModalState.value = { ...editModalState.value, imageUrl: null, previewUrl: null };
+                            }
                           }}
                           class="absolute inset-0 bg-black/50 hidden group-hover:flex items-center justify-center text-white"
                           title="Eliminar foto"
@@ -569,7 +567,7 @@ export default component$(() => {
                     <input
                       type="text"
                       name="name"
-                      value={editingPitch.name}
+                      value={editModalState.value.name}
                       required
                       placeholder="Ej: Cancha 1 (Sintético)"
                       class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all font-bold"
@@ -579,7 +577,7 @@ export default component$(() => {
                     <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Tipo</label>
                     <select
                       name="type"
-                      value={editingPitch.type}
+                      value={editModalState.value.type}
                       class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all font-bold appearance-none"
                     >
                       <option value="F5">F5 (5 vs 5)</option>
@@ -590,11 +588,11 @@ export default component$(() => {
                   </div>
                   <div class="flex gap-3">
                     <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-3 py-3 rounded-2xl border border-slate-200 hover:bg-slate-100 transition-colors">
-                      <input type="checkbox" name="isCovered" checked={editingPitch.isCovered} class="w-4 h-4 rounded accent-slate-800 cursor-pointer" />
+                      <input type="checkbox" name="isCovered" checked={editModalState.value.isCovered} class="w-4 h-4 rounded accent-slate-800 cursor-pointer" />
                       <span class="text-xs font-black text-slate-600 uppercase tracking-widest">Cubierta</span>
                     </label>
                     <label class="flex-1 flex items-center gap-2 cursor-pointer bg-amber-50 px-3 py-3 rounded-2xl border border-amber-200 hover:bg-amber-100 transition-colors">
-                      <input type="checkbox" name="isLit" checked={editingPitch.isLit} class="w-4 h-4 rounded accent-amber-500 cursor-pointer" />
+                      <input type="checkbox" name="isLit" checked={editModalState.value.isLit} class="w-4 h-4 rounded accent-amber-500 cursor-pointer" />
                       <span class="text-xs font-black text-amber-700 uppercase tracking-widest">Iluminada</span>
                     </label>
                   </div>
@@ -603,13 +601,12 @@ export default component$(() => {
 
               {/* Precios: hora + seña en fila */}
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                {/* Precio por hora */}
                 <div>
                   <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Precio x Hora ($)</label>
                   <input
                     type="number"
                     name="pricePerHour"
-                    value={editingPitch.pricePerHour}
+                    value={editModalState.value.pricePerHour}
                     required
                     min="0"
                     step="1"
@@ -617,34 +614,33 @@ export default component$(() => {
                   />
                 </div>
 
-                {/* Seña */}
                 <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
                   <label class="block text-xs font-black text-emerald-700 uppercase tracking-widest mb-2">Seña requerida</label>
                   <div class="flex gap-2 mb-2">
                     <button
                       type="button"
-                      onClick$={() => editingPitch.depositType = "PERCENTAGE"}
-                      class={["flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editingPitch.depositType === "PERCENTAGE" ? "bg-emerald-600 text-white" : "bg-white text-slate-500 border border-slate-200"]}
+                      onClick$={() => { if (editModalState.value) editModalState.value = { ...editModalState.value, depositType: "PERCENTAGE" }; }}
+                      class={["flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editModalState.value.depositType === "PERCENTAGE" ? "bg-emerald-600 text-white" : "bg-white text-slate-500 border border-slate-200"]}
                     >% %</button>
                     <button
                       type="button"
-                      onClick$={() => editingPitch.depositType = "FIXED"}
-                      class={["flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editingPitch.depositType === "FIXED" ? "bg-emerald-600 text-white" : "bg-white text-slate-500 border border-slate-200"]}
+                      onClick$={() => { if (editModalState.value) editModalState.value = { ...editModalState.value, depositType: "FIXED" }; }}
+                      class={["flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all", editModalState.value.depositType === "FIXED" ? "bg-emerald-600 text-white" : "bg-white text-slate-500 border border-slate-200"]}
                     >$ Fijo</button>
                   </div>
-                  <input type="hidden" name="depositType" value={editingPitch.depositType} />
+                  <input type="hidden" name="depositType" value={editModalState.value.depositType} />
                   <div class="relative">
                     <span class="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 font-black text-sm">
-                      {editingPitch.depositType === "PERCENTAGE" ? "%" : "$"}
+                      {editModalState.value.depositType === "PERCENTAGE" ? "%" : "$"}
                     </span>
                     <input
                       type="number"
                       name="depositAmount"
-                      value={editingPitch.depositAmount}
+                      value={editModalState.value.depositAmount}
                       min="0"
-                      max={editingPitch.depositType === "PERCENTAGE" ? 100 : undefined}
-                      step={editingPitch.depositType === "PERCENTAGE" ? 1 : 100}
-                      placeholder={editingPitch.depositType === "PERCENTAGE" ? "50" : "5000"}
+                      max={editModalState.value.depositType === "PERCENTAGE" ? 100 : undefined}
+                      step={editModalState.value.depositType === "PERCENTAGE" ? 1 : 100}
+                      placeholder={editModalState.value.depositType === "PERCENTAGE" ? "50" : "5000"}
                       class="w-full pl-8 pr-3 py-2.5 bg-white border border-emerald-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-emerald-900"
                     />
                   </div>
@@ -652,7 +648,7 @@ export default component$(() => {
               </div>
 
               {/* Precios Dinámicos (solo en edición) */}
-              {editingPitch.id && selectedPitchForPricing.value && (
+              {editModalState.value.id && selectedPitchForPricing.value && (
                 <div class="border-t border-slate-100 pt-4 flex items-center justify-between">
                   <div>
                     <div class="text-xs font-black text-slate-400 uppercase tracking-widest">Precios Dinámicos</div>
@@ -674,7 +670,7 @@ export default component$(() => {
                 <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Aclaraciones</label>
                 <textarea
                   name="notes"
-                  value={editingPitch.notes}
+                  value={editModalState.value.notes}
                   placeholder="Ej: Tiene vestuario propio, apta para lluvia..."
                   rows={2}
                   class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all font-medium resize-none"
@@ -682,10 +678,10 @@ export default component$(() => {
               </div>
 
               {/* Botones */}
-              <div class="pt-4 flex gap-3 sticky bottom-0 bg-white border-t border-slate-50 mt-4 -mx-2 px-2 z-20">
+              <div class="pt-4 flex gap-3 border-t border-slate-100 mt-4">
                 <Button
                   type="button"
-                  onClick$={() => { isFormModalOpen.value = false; }}
+                  onClick$={() => { editModalState.value = null; }}
                   look="outline"
                   class="flex-1 rounded-2xl py-4 font-bold border-slate-200"
                 >
@@ -700,14 +696,16 @@ export default component$(() => {
                   {(createPitchAction.isRunning || updatePitchAction.isRunning || isCompressing.value) ? (
                     <LoadingSpinner class="w-5 h-5" />
                   ) : (
-                    editingPitch.id ? "Guardar" : "Crear"
+                    editModalState.value.id ? "Guardar" : "Crear"
                   )}
                 </Button>
               </div>
             </Form>
+            </div>
           </div>
-        </Modal.Panel>
-      </Modal.Root>
+        </div>
+      </div>
+      )}
       <Modal.Root bind:show={isSelectionModalOpen}>
         <Modal.Panel class="bg-white p-8 rounded-[2rem] border shadow-2xl max-w-md">
           <Modal.Title class="text-2xl font-black text-slate-800 mb-6 tracking-tight">Seleccionar cancha a borrar</Modal.Title>

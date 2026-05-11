@@ -2,36 +2,36 @@ import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { cashMovements, cashRegisters } from "~/db/schema";
-import { and, gte, lte, eq } from "drizzle-orm";
+import { and, gte, lte } from "drizzle-orm";
 
 const CATEGORIES = [
-  { id: "BOOKING",       name: "Reservas",        icon: "⚽" },
-  { id: "SCHOOL",        name: "Escuelita",        icon: "🏫" },
-  { id: "GROUP_PAYMENT", name: "Cuentas Ctes.",    icon: "🤝" },
-  { id: "MAINTENANCE",   name: "Mantenimiento",    icon: "🔧" },
-  { id: "SALARY",        name: "Sueldos",          icon: "💼" },
-  { id: "SERVICES",      name: "Servicios",        icon: "💡" },
-  { id: "OTHER",         name: "Otros",            icon: "📌" },
+  { id: "BOOKING", name: "Reservas", icon: "⚽" },
+  { id: "SCHOOL", name: "Escuelita", icon: "🏫" },
+  { id: "GROUP_PAYMENT", name: "Cuentas Ctes.", icon: "🤝" },
+  { id: "MAINTENANCE", name: "Mantenimiento", icon: "🔧" },
+  { id: "SALARY", name: "Sueldos", icon: "💼" },
+  { id: "SERVICES", name: "Servicios", icon: "💡" },
+  { id: "OTHER", name: "Otros", icon: "📌" },
 ];
 
 const METHOD_META: Record<string, string> = {
-  CASH:         "Efectivo",
-  TRANSFER:     "Transferencia",
-  CARD:         "Tarjeta",
+  CASH: "Efectivo",
+  TRANSFER: "Transferencia",
+  CARD: "Tarjeta",
   MERCADO_PAGO: "Mercado Pago",
 };
 
 export const useBalancesData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const monthStr = requestEvent.url.searchParams.get("month");
-  const yearStr  = requestEvent.url.searchParams.get("year");
+  const yearStr = requestEvent.url.searchParams.get("year");
 
-  const today        = new Date();
+  const today = new Date();
   const selectedMonth = monthStr ? parseInt(monthStr) : today.getMonth() + 1;
-  const selectedYear  = yearStr  ? parseInt(yearStr)  : today.getFullYear();
+  const selectedYear = yearStr ? parseInt(yearStr) : today.getFullYear();
 
-  const startDate = new Date(selectedYear, selectedMonth - 1, 1,  0,  0,  0);
-  const endDate   = new Date(selectedYear, selectedMonth,     0, 23, 59, 59);
+  const startDate = new Date(selectedYear, selectedMonth - 1, 1, 0, 0, 0);
+  const endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
 
   const movements = await db.query.cashMovements.findMany({
     where: and(gte(cashMovements.createdAt, startDate), lte(cashMovements.createdAt, endDate)),
@@ -43,7 +43,7 @@ export const useBalancesData = routeLoader$(async (requestEvent) => {
   });
 
   const balancesByCategory: Record<string, { incomes: number; expenses: number }> = {};
-  const balancesByMethod:   Record<string, { incomes: number; expenses: number }> = {};
+  const balancesByMethod: Record<string, { incomes: number; expenses: number }> = {};
   let totalIncomes = 0, totalExpenses = 0;
 
   for (const m of movements) {
@@ -61,7 +61,7 @@ export const useBalancesData = routeLoader$(async (requestEvent) => {
   }
 
   const prevMonthDate = new Date(selectedYear, selectedMonth - 2, 1);
-  const nextMonthDate = new Date(selectedYear, selectedMonth,     1);
+  const nextMonthDate = new Date(selectedYear, selectedMonth, 1);
 
   return {
     selectedMonth, selectedYear,
@@ -78,7 +78,7 @@ export const useBalancesData = routeLoader$(async (requestEvent) => {
 export default component$(() => {
   const data = useBalancesData();
   const {
-    selectedMonth, selectedYear, monthName,
+    selectedYear, monthName,
     prevMonth, prevYear, nextMonth, nextYear,
     balancesByCategory, balancesByMethod,
     totalIncomes, totalExpenses, netBalance, turnsCount,
@@ -107,15 +107,15 @@ export default component$(() => {
             <div class="flex items-center gap-2 print:hidden">
               <Link href={`?month=${prevMonth}&year=${prevYear}`}
                 class="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6" /></svg>
               </Link>
               <Link href={`?month=${nextMonth}&year=${nextYear}`}
                 class="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6" /></svg>
               </Link>
               <button onClick$={() => window.print()}
                 class="ml-2 px-4 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition-colors flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect width="12" height="8" x="6" y="14" /></svg>
                 Exportar PDF
               </button>
             </div>
@@ -194,7 +194,7 @@ export default component$(() => {
                 {Object.entries(balancesByMethod).map(([method, vals]) => (
                   <div key={method} class="p-4 bg-slate-50 border border-slate-100 rounded-xl print:border-black print:bg-transparent">
                     <div class="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">{METHOD_META[method] || method}</div>
-                    {vals.incomes  > 0 && <div class="text-sm font-bold text-emerald-600">+${vals.incomes.toLocaleString("es-AR",  { minimumFractionDigits: 2 })}</div>}
+                    {vals.incomes > 0 && <div class="text-sm font-bold text-emerald-600">+${vals.incomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>}
                     {vals.expenses > 0 && <div class="text-sm font-bold text-red-600">-${vals.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>}
                   </div>
                 ))}

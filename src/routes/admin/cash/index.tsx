@@ -71,7 +71,9 @@ export const useToggleRegisterAction = routeAction$(
       // Parse billCount from JSON string
       let billCount: Record<string, number> | null = null;
       if (data.billCountJson) {
-        try { billCount = JSON.parse(data.billCountJson as string); } catch {}
+        try { billCount = JSON.parse(data.billCountJson as string); } catch {
+          // Ignorar error de parseo si el JSON es inválido
+        }
       }
       await db.update(cashRegisters).set({
         status: "CLOSED",
