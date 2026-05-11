@@ -11,7 +11,7 @@ const Close = HeadlessModal.Close;
 
 export const panelVariants = cva(
   [
-    "fixed bg-background p-6 text-foreground transition-all backdrop:brightness-50 backdrop:backdrop-blur-xs",
+    "fixed z-50 bg-background p-6 text-foreground transition-all backdrop:brightness-50 backdrop:backdrop-blur-xs",
     "data-closing:animate-out data-closing:duration-300 data-open:animate-in data-open:duration-300",
     "data-closing:backdrop:animate-out data-closing:backdrop:duration-300 data-closing:backdrop:fade-out data-open:backdrop:animate-in data-open:backdrop:duration-300 data-open:backdrop:fade-in",
   ],

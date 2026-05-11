@@ -1,4 +1,5 @@
 import { component$, $, useSignal, useComputed$, useVisibleTask$, type PropFunction } from "@builder.io/qwik";
+import { cn } from "@qwik-ui/utils";
 
 type Pitch = { id: string; name: string; type: string };
 
@@ -24,6 +25,7 @@ type Props = {
   endHour?: number;
   slotMinutes?: number;
   onBookingClick$?: PropFunction<(id: string) => void>;
+  onEmptySlotDragEnd$?: PropFunction<(pitchId: string, time: string, durationMin: number) => void>;
 };
 
 const ALL_STATUSES = [
@@ -34,10 +36,10 @@ const ALL_STATUSES = [
 ] as const;
 
 const STATUS_CARD: Record<string, string> = {
-  PENDING_APPROVAL: "bg-amber-100 border-amber-300 text-amber-900",
-  CONFIRMED:        "bg-emerald-100 border-emerald-300 text-emerald-900",
-  CANCELLED:        "bg-red-100 border-red-300 text-red-900",
-  COMPLETED:        "bg-slate-100 border-slate-300 text-slate-700",
+  PENDING_APPROVAL: "bg-amber-50 border-amber-200 text-amber-900",
+  CONFIRMED:        "bg-emerald-50 border-emerald-200 text-emerald-900",
+  CANCELLED:        "bg-red-50 border-red-200 text-red-900",
+  COMPLETED:        "bg-slate-50 border-slate-200 text-slate-700",
 };
 const STATUS_BAR: Record<string, string> = {
   PENDING_APPROVAL: "bg-amber-400",
@@ -52,16 +54,19 @@ const STATUS_LABEL: Record<string, string> = {
   COMPLETED:        "Completado",
 };
 
-const SLOT_MIN_WIDTH_PX = 150; // ~25% wider than the previous 120px
+const SLOT_MIN_WIDTH_PX = 150; 
 const PITCH_COL_WIDTH_PX = 148;
 
 export const BookingTimelineView = component$<Props>(
-  ({ pitches, bookings, startHour = 7, endHour = 23, slotMinutes = 60, onBookingClick$ }) => {
+  ({ pitches, bookings, startHour = 7, endHour = 23, slotMinutes = 60, onBookingClick$, onEmptySlotDragEnd$ }) => {
 
-    // Filters: set of active statuses (all active by default)
     const activeStatuses = useSignal<Set<string>>(new Set(ALL_STATUSES.map(s => s.key)));
     const currentTimePx = useSignal<number | null>(null);
     const scrollRef = useSignal<HTMLElement>();
+
+    // Dragging state
+    const dragStart = useSignal<{ pitchId: string; timeMin: number; slot: string } | null>(null);
+    const dragEnd = useSignal<{ timeMin: number } | null>(null);
 
     // Build time slots
     const slots: string[] = [];
@@ -69,7 +74,7 @@ export const BookingTimelineView = component$<Props>(
       slots.push(`${Math.floor(h).toString().padStart(2, "0")}:${((h % 1) * 60).toString().padStart(2, "0")}`);
     }
 
-    // Current time position
+    // Current time position & Auto-scroll
     useVisibleTask$(({ cleanup }) => {
       const compute = () => {
         const now = new Date();
@@ -78,9 +83,21 @@ export const BookingTimelineView = component$<Props>(
           currentTimePx.value = null;
           return;
         }
-        currentTimePx.value = (h - startHour) * SLOT_MIN_WIDTH_PX;
+        currentTimePx.value = ((h - startHour) * 60 / slotMinutes) * SLOT_MIN_WIDTH_PX;
       };
       compute();
+      
+      // Scroll to middle on initial load
+      if (scrollRef.value && currentTimePx.value !== null) {
+        setTimeout(() => {
+          const containerWidth = scrollRef.value?.clientWidth || 0;
+          scrollRef.value?.scrollTo({
+            left: (currentTimePx.value || 0) + PITCH_COL_WIDTH_PX - containerWidth / 2,
+            behavior: 'smooth'
+          });
+        }, 100);
+      }
+
       const id = setInterval(compute, 60_000);
       cleanup(() => clearInterval(id));
     });
@@ -103,31 +120,29 @@ export const BookingTimelineView = component$<Props>(
       bookings.filter(b => activeStatuses.value.has(b.booking.status))
     );
 
-    const getSlotBookings = (pitchId: string, slot: string) => {
-      const [hh, mm] = slot.split(":").map(Number);
-      const slotStart = hh * 60 + mm;
-      const slotEnd = slotStart + slotMinutes;
-      return visibleBookings.value.filter(b => {
-        if (b.booking.pitchId !== pitchId) return false;
-        const s = new Date(b.booking.startTime);
-        const e = new Date(b.booking.endTime);
-        const bStart = s.getHours() * 60 + s.getMinutes();
-        const bEnd   = e.getHours() * 60 + e.getMinutes();
-        return bStart < slotEnd && bEnd > slotStart;
-      });
-    };
-
     const fmt = (d: Date) =>
       new Date(d).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
 
     return (
-      <div class="flex flex-col h-full overflow-hidden">
+      <div 
+        class="flex flex-col h-full overflow-hidden"
+        onMouseUp$={() => {
+          if (dragStart.value && dragEnd.value && onEmptySlotDragEnd$) {
+            const startMin = Math.min(dragStart.value.timeMin, dragEnd.value.timeMin);
+            const endMin = Math.max(dragStart.value.timeMin, dragEnd.value.timeMin) + slotMinutes;
+            const duration = endMin - startMin;
+            const startSlot = `${Math.floor(startMin / 60).toString().padStart(2, "0")}:${(startMin % 60).toString().padStart(2, "0")}`;
+            onEmptySlotDragEnd$(dragStart.value.pitchId, startSlot, duration);
+          }
+          dragStart.value = null;
+          dragEnd.value = null;
+        }}
+      >
 
         {/* ── Status filter chips ── */}
         <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0 flex-wrap">
           <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Filtrar:</span>
 
-          {/* "Todos" shortcut */}
           <button
             onClick$={() => { activeStatuses.value = new Set(ALL_STATUSES.map(s => s.key)); }}
             class={[
@@ -178,10 +193,9 @@ export const BookingTimelineView = component$<Props>(
               </div>
             )}
 
-            <table class="border-collapse w-full">
+            <table class="border-collapse w-full select-none">
               <thead class="sticky top-0 z-20">
                 <tr>
-                  {/* Corner */}
                   <th
                     class="sticky left-0 z-30 bg-slate-100 border-b-2 border-r-2 border-slate-200 px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-left"
                     style={`min-width: ${PITCH_COL_WIDTH_PX}px; width: ${PITCH_COL_WIDTH_PX}px`}
@@ -201,67 +215,108 @@ export const BookingTimelineView = component$<Props>(
               </thead>
 
               <tbody>
-                {pitches.map((pitch, idx) => (
-                  <tr key={pitch.id} class={idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"}>
-                    {/* Pitch label */}
-                    <td
-                      class="sticky left-0 z-10 bg-inherit border-b border-r-2 border-slate-200 px-4 py-3 align-middle"
-                      style={`min-width: ${PITCH_COL_WIDTH_PX}px; width: ${PITCH_COL_WIDTH_PX}px`}
-                    >
-                      <div class="font-black text-slate-800 text-sm leading-tight">{pitch.name}</div>
-                      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{pitch.type}</div>
-                    </td>
+                {pitches.map((pitch, idx) => {
+                  const pitchBookings = visibleBookings.value.filter(b => b.booking.pitchId === pitch.id);
+                  return (
+                    <tr key={pitch.id} class={idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"}>
+                      <td
+                        class="sticky left-0 z-10 bg-inherit border-b border-r-2 border-slate-200 px-4 py-3 align-middle"
+                        style={`min-width: ${PITCH_COL_WIDTH_PX}px; width: ${PITCH_COL_WIDTH_PX}px`}
+                      >
+                        <div class="font-black text-slate-800 text-sm leading-tight">{pitch.name}</div>
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{pitch.type}</div>
+                      </td>
 
-                    {slots.map(slot => {
-                      const cells = getSlotBookings(pitch.id, slot);
-                      return (
-                        <td
-                          key={slot}
-                          class="border-b border-r border-slate-100 p-1 align-top relative"
-                          style={`min-width: ${SLOT_MIN_WIDTH_PX}px; width: ${SLOT_MIN_WIDTH_PX}px; height: 80px`}
-                        >
-                          <div class="absolute inset-y-0 left-1/2 w-px border-l border-dashed pointer-events-none" style="border-color: rgba(148,163,184,0.2);"></div>
-                          {cells.length === 0 ? (
-                            <div class="h-full w-full rounded-lg hover:bg-slate-100/60 transition-colors relative z-10" />
-                          ) : (
-                            <div class="flex flex-col gap-1 h-full relative z-10">
-                              {cells.map(({ booking, user, guest }) => {
-                                const name = guest?.name || user?.name || "—";
-                                const phone = guest?.phone || user?.phone || "";
-                                return (
-                                  <div
-                                    key={booking.id}
-                                    onClick$={() => onBookingClick$ && onBookingClick$(booking.id)}
-                                    class={[
-                                      "flex-1 rounded-lg border px-2 py-1.5 cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all overflow-hidden flex flex-col gap-0.5",
-                                      STATUS_CARD[booking.status],
-                                    ]}
-                                    title={`${name} · ${fmt(booking.startTime)} - ${fmt(booking.endTime)}`}
-                                  >
-                                    <div class={["h-1 w-full rounded-full mb-1 shrink-0", STATUS_BAR[booking.status]]} />
-                                    <div class="font-black text-[11px] leading-tight truncate">{name}</div>
-                                    <div class="text-[10px] font-semibold opacity-70 truncate">
-                                      {fmt(booking.startTime)} — {fmt(booking.endTime)}
-                                    </div>
-                                    <div class="mt-auto flex items-center justify-between gap-1">
-                                      <span class="text-[9px] font-black uppercase opacity-60 truncate">
-                                        {STATUS_LABEL[booking.status]}
-                                      </span>
-                                      <span class="text-[10px] font-black shrink-0">${booking.totalPrice}</span>
-                                    </div>
-                                    {phone && (
-                                      <div class="text-[9px] opacity-50 truncate">{phone}</div>
-                                    )}
+                      <td colSpan={slots.length} class="p-0 border-b border-slate-200 relative align-top">
+                        <div class="flex h-[110px] relative">
+                          {/* Background Grid Cells */}
+                          {slots.map(slot => {
+                            const timeMin = Number(slot.split(":")[0]) * 60 + Number(slot.split(":")[1]);
+                            const isDragging = dragStart.value?.pitchId === pitch.id &&
+                                               timeMin >= Math.min(dragStart.value.timeMin, dragEnd.value?.timeMin ?? dragStart.value.timeMin) &&
+                                               timeMin <= Math.max(dragStart.value.timeMin, dragEnd.value?.timeMin ?? dragStart.value.timeMin);
+
+                            return (
+                              <div
+                                key={slot}
+                                class="border-r border-slate-100 relative h-full shrink-0"
+                                style={`min-width: ${SLOT_MIN_WIDTH_PX}px; width: ${SLOT_MIN_WIDTH_PX}px`}
+                              >
+                                {slotMinutes > 30 && <div class="absolute inset-y-0 left-1/2 w-px border-l border-dashed pointer-events-none opacity-20" />}
+                                <div
+                                  class={cn("h-full w-full transition-colors cursor-pointer", isDragging ? "bg-emerald-100/80" : "hover:bg-slate-200/40")}
+                                  onMouseDown$={() => {
+                                    dragStart.value = { pitchId: pitch.id, timeMin, slot };
+                                    dragEnd.value = { timeMin };
+                                  }}
+                                  onMouseOver$={() => {
+                                    if (dragStart.value?.pitchId === pitch.id) {
+                                      dragEnd.value = { timeMin };
+                                    }
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+
+                          {/* Bookings Overlay Layer */}
+                          {pitchBookings.map(({ booking, user, guest }) => {
+                            const s = new Date(booking.startTime);
+                            const e = new Date(booking.endTime);
+                            
+                            const bStart = s.getHours() * 60 + s.getMinutes();
+                            const bEnd = e.getHours() * 60 + e.getMinutes();
+                            
+                            const timelineStart = startHour * 60;
+                            const left = ((bStart - timelineStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+                            const width = ((bEnd - bStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+
+                            const name = guest?.name || user?.name || "—";
+                            const phone = guest?.phone || user?.phone || "";
+
+                            return (
+                              <div
+                                key={booking.id}
+                                onClick$={() => onBookingClick$ && onBookingClick$(booking.id)}
+                                style={{
+                                  left: `${left}px`,
+                                  width: `${width}px`,
+                                  top: '8px',
+                                  height: 'calc(100% - 16px)'
+                                }}
+                                class={[
+                                  "absolute z-20 rounded-xl border px-3 py-2 cursor-pointer hover:scale-[1.01] hover:shadow-lg transition-all overflow-hidden flex flex-col justify-between group",
+                                  STATUS_CARD[booking.status] || "bg-white border-slate-200"
+                                ]}
+                              >
+                                <div class={["absolute top-0 left-0 right-0 h-1", STATUS_BAR[booking.status]]} />
+                                
+                                <div class="flex flex-col gap-0.5">
+                                  <div class="flex items-center justify-between gap-2">
+                                    <span class="font-black text-xs truncate">{name}</span>
+                                    <span class="text-[8px] font-black opacity-50 uppercase tracking-tighter shrink-0">
+                                      {STATUS_LABEL[booking.status]}
+                                    </span>
                                   </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                                  <div class="text-[10px] font-bold opacity-60 flex items-center gap-1">
+                                    {fmt(booking.startTime)} — {fmt(booking.endTime)}
+                                  </div>
+                                </div>
+
+                                <div class="flex items-end justify-between mt-auto pt-1 gap-2">
+                                  <div class="text-[9px] font-bold opacity-40 truncate flex-1">{phone}</div>
+                                  <div class="text-[11px] font-black text-right shrink-0">
+                                    ${booking.totalPrice.toLocaleString('es-AR')}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

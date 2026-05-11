@@ -280,7 +280,6 @@ export default component$(() => {
       // Cerrar modal y resetear si fue exitoso
       if (updatePitchAction.value?.success || createPitchAction.value?.success) {
         isFormModalOpen.value = false;
-        resetForm();
       }
     } catch (error) {
       console.error('Error al comprimir/subir imagen:', error);
@@ -502,7 +501,7 @@ export default component$(() => {
             </Modal.Title>
             <button
               type="button"
-              onClick$={() => { isFormModalOpen.value = false; resetForm(); }}
+              onClick$={() => { isFormModalOpen.value = false; }}
               class="text-slate-400 hover:text-slate-700 transition-colors p-1"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -686,7 +685,7 @@ export default component$(() => {
               <div class="pt-4 flex gap-3 sticky bottom-0 bg-white border-t border-slate-50 mt-4 -mx-2 px-2 z-20">
                 <Button
                   type="button"
-                  onClick$={() => { isFormModalOpen.value = false; resetForm(); }}
+                  onClick$={() => { isFormModalOpen.value = false; }}
                   look="outline"
                   class="flex-1 rounded-2xl py-4 font-bold border-slate-200"
                 >

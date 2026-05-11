@@ -59,8 +59,13 @@ export const bookings = sqliteTable("bookings", {
     .default("PENDING"),
   preferenceId: text("preference_id"),
   paymentId: text("payment_id"),
-  paymentMethod: text("payment_method", { enum: ["CASH", "TRANSFER", "MERCADO_PAGO"] }).default("CASH"),
-  extras: text("extras", { mode: "json" }),
+  paymentMethod: text("payment_method", {
+    enum: ["CASH", "TRANSFER", "MERCADO_PAGO", "OTHER"],
+  })
+    .notNull()
+    .default("CASH"),
+  notes: text("notes"),
+  extras: text("extras", { mode: "json" }), // array of extra service names
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(strftime('%s', 'now'))`),

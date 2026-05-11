@@ -1,8 +1,8 @@
-import { component$, useSignal, useVisibleTask$, useTask$, $, useComputed$ } from "@builder.io/qwik";
+import { component$, useSignal, useVisibleTask$, useTask$, $, useComputed$, Fragment } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, Link, useNavigate, Form, server$ } from "@builder.io/qwik-city";
 import { Button, Modal, Alert } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, lt } from "drizzle-orm";
 import { getDB } from "~/db";
 import { bookings, pitches, users, guestRequests } from "~/db/schema";
 import { BookingSlot } from "~/components/admin/booking-slot";
@@ -34,6 +34,8 @@ const getEndOfMonth = (d: Date) => {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
 };
 
+const getBAFormatDate = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(d);
+
 export const useUpdateBookingStatusAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
@@ -41,7 +43,7 @@ export const useUpdateBookingStatusAction = routeAction$(
       .update(bookings)
       .set({ status: data.status as any })
       .where(eq(bookings.id, data.bookingId));
-    
+
     return { success: true };
   },
   zod$({
@@ -53,45 +55,88 @@ export const useUpdateBookingStatusAction = routeAction$(
 export const useCreateAdminBookingAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const bookingId = crypto.randomUUID();
 
-    // Parse date and times
-    const startDateTime = new Date(`${data.date}T${data.startTime}:00`);
-    const endDateTime = new Date(`${data.date}T${data.endTime}:00`);
+    // Parse start date
+    const startDate = new Date(`${data.date}T12:00:00`);
 
-    // Insert booking
-    await db.insert(bookings).values({
-      id: bookingId,
-      pitchId: data.pitchId,
-      startTime: startDateTime,
-      endTime: endDateTime,
-      status: "CONFIRMED", // Admin bookings are confirmed by default
-      totalPrice: Number(data.price),
-      paidAmount: Number(data.paidAmount) || 0,
-      paymentStatus: (Number(data.paidAmount) || 0) >= Number(data.price) ? "PAID" : (Number(data.paidAmount) || 0) > 0 ? "PARTIAL" : "PENDING",
-      paymentMethod: data.paymentMethod as any,
-    });
+    // Parse end date if recurring
+    let endDate = startDate;
+    if (data.isSubscription && data.endDate) {
+      endDate = new Date(`${data.endDate}T12:00:00`);
 
-    // Insert guest request for the contact info
-    await db.insert(guestRequests).values({
-      id: crypto.randomUUID(),
-      bookingId,
-      name: data.customerName,
-      phone: data.customerPhone,
-    });
+      const maxDate = new Date(startDate);
+      maxDate.setFullYear(maxDate.getFullYear() + 1);
 
-    return { success: true, bookingId };
+      if (endDate > maxDate) {
+        endDate = maxDate; // Limit to 1 year max
+      }
+
+      if (endDate < startDate) {
+        return { success: false, failed: true, message: "La fecha de fin debe ser posterior a la de inicio" };
+      }
+    }
+
+    // Generate all dates (weekly)
+    const datesToBook: string[] = [];
+    const current = new Date(startDate);
+    while (current <= endDate) {
+      datesToBook.push(current.toISOString().split("T")[0]);
+      current.setDate(current.getDate() + 7);
+    }
+
+    const firstBookingId = crypto.randomUUID();
+
+    for (let i = 0; i < datesToBook.length; i++) {
+      const d = datesToBook[i];
+      const startDateTime = new Date(`${d}T${data.startTime}:00`);
+      const endDateTime = new Date(`${d}T${data.endTime}:00`);
+      const isFirst = i === 0;
+      const bookingId = isFirst ? firstBookingId : crypto.randomUUID();
+
+      await db.insert(bookings).values({
+        id: bookingId,
+        userId: data.userId || null,
+        pitchId: data.pitchId,
+        startTime: startDateTime,
+        endTime: endDateTime,
+        status: "CONFIRMED",
+        totalPrice: Number(data.price),
+        paidAmount: isFirst ? (Number(data.paidAmount) || 0) : 0,
+        paymentStatus: isFirst ? ((Number(data.paidAmount) || 0) >= Number(data.price) ? "PAID" : (Number(data.paidAmount) || 0) > 0 ? "PARTIAL" : "PENDING") : "PENDING",
+        paymentMethod: data.paymentMethod as any,
+        isSubscription: data.isSubscription,
+        notes: data.notes || null,
+        extras: data.extras ? JSON.parse(data.extras) : null,
+      });
+
+      // Only create guest request if no userId was provided
+      if (!data.userId) {
+        await db.insert(guestRequests).values({
+          id: crypto.randomUUID(),
+          bookingId: bookingId,
+          name: data.customerName || "Invitado",
+          phone: data.customerPhone || "",
+        });
+      }
+    }
+
+    return { success: true, bookingId: firstBookingId };
   },
   zod$({
     pitchId: z.string(),
     date: z.string(),
     startTime: z.string(),
     endTime: z.string(),
-    customerName: z.string().min(1, "Nombre requerido"),
-    customerPhone: z.string().min(1, "Teléfono requerido"),
+    userId: z.string().optional(),
+    customerName: z.string().optional(),
+    customerPhone: z.string().optional(),
     price: z.string(),
     paidAmount: z.string().optional(),
     paymentMethod: z.enum(["CASH", "TRANSFER", "MERCADO_PAGO"]).default("CASH"),
+    notes: z.string().optional(),
+    extras: z.string().optional(),
+    isSubscription: z.coerce.boolean().optional(),
+    endDate: z.string().optional(),
   })
 );
 
@@ -101,12 +146,23 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
   const viewStr = requestEvent.url.searchParams.get("view") || "day"; // "day", "week", "month"
 
   if (!dateStr) {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const dd = String(today.getDate()).padStart(2, "0");
-    throw requestEvent.redirect(302, `?date=${yyyy}-${mm}-${dd}&view=${viewStr}`);
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+    throw requestEvent.redirect(302, `?date=${todayStr}&view=${viewStr}`);
   }
+
+  // Auto-complete past bookings
+  const now = new Date();
+  await db.update(bookings)
+    .set({ status: "COMPLETED" })
+    .where(
+      and(
+        eq(bookings.status, "CONFIRMED"),
+        lt(bookings.endTime, now)
+      )
+    );
+
+  const settings = await db.query.siteSettings.findFirst();
+  const extraServices = (settings?.extraServices || []) as { name: string; price: number; icon: string }[];
 
   let selectedDate = new Date();
   const [year, month, day] = dateStr.split("-").map(Number);
@@ -196,10 +252,18 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     bookings: dailyBookings,
     startDateStr: startDate.toISOString(),
     endDateStr: endDate.toISOString(),
+    extraServices,
+    settings: settings ? {
+      ...settings,
+      extraServices: (settings.extraServices || []) as any[],
+      operatingHours: (settings.operatingHours || []) as any[],
+      services: (settings.services || []) as string[],
+      galleryImages: (settings.galleryImages || []) as string[],
+    } : null,
   };
 });
 
-export const getAdminDailyBookings = server$(async function(pitchId: string, dateStr: string) {
+export const getAdminDailyBookings = server$(async function (pitchId: string, dateStr: string) {
   const db = getDB(this);
   if (!pitchId || !dateStr) return [];
   const startOfDay = new Date(`${dateStr}T00:00:00`);
@@ -217,6 +281,25 @@ export const getAdminDailyBookings = server$(async function(pitchId: string, dat
   return daily.map(b => ({ startTime: b.startTime.toISOString(), endTime: b.endTime.toISOString() }));
 });
 
+export const searchUsersServer = server$(async function (query: string) {
+  if (!query || query.length < 2) return [];
+  const db = getDB(this as any);
+  const { ilike, or } = await import("drizzle-orm");
+  const pattern = `%${query}%`;
+
+  const results = await db.query.users.findMany({
+    where: or(
+      ilike(users.name, pattern),
+      ilike(users.email, pattern),
+      ilike(users.phone, pattern)
+    ),
+    columns: { id: true, name: true, phone: true, email: true },
+    limit: 5,
+  });
+
+  return results;
+});
+
 export default component$(() => {
   const calendarData = useCalendarData();
   const updateStatusAction = useUpdateBookingStatusAction();
@@ -226,8 +309,22 @@ export default component$(() => {
   // Layout mode: 'timeline' (pitches×time) | 'list' (table) | 'grid' (time-grid per pitch)
   const layoutMode = useSignal<'timeline' | 'list' | 'grid'>('timeline');
 
-  const CALENDAR_START_HOUR = 0;
-  const CALENDAR_END_HOUR = 24;
+  const clubSettings = calendarData.value.settings;
+  const selectedDateBA = new Date(calendarData.value.selectedDateStr + "T12:00:00");
+  const dayOfWeek = selectedDateBA.getDay();
+  
+  const operatingHours = (() => {
+    try {
+      if (typeof clubSettings?.operatingHours === 'string') return JSON.parse(clubSettings.operatingHours);
+      if (Array.isArray(clubSettings?.operatingHours)) return clubSettings.operatingHours;
+      return [];
+    } catch { return []; }
+  })();
+
+  const todaySchedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+
+  const CALENDAR_START_HOUR = todaySchedule?.openTime ? parseInt(todaySchedule.openTime.split(":")[0], 10) : 8;
+  const CALENDAR_END_HOUR = todaySchedule?.closeTime ? parseInt(todaySchedule.closeTime.split(":")[0], 10) : 23;
   const PIXELS_PER_HOUR = 140;
 
   const hours = Array.from(
@@ -251,35 +348,52 @@ export default component$(() => {
   const adminFormDate = useSignal("");
   const adminFormTime = useSignal("");
   const adminFormDuration = useSignal("60");
+  const adminIsSubscription = useSignal(false);
+  const adminEndDate = useSignal("");
+  const adminNotes = useSignal("");
   const adminOccupiedSlots = useSignal<{ startTime: string; endTime: string }[]>([]);
   const adminIsChecking = useSignal(false);
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  const tomorrowStr = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })();
+  // Search user state
+  const adminSearchTerm = useSignal("");
+  const adminSearchResults = useSignal<any[]>([]);
+  const adminSelectedUserId = useSignal("");
+  const adminSelectedUserName = useSignal("");
+  const adminSelectedUserPhone = useSignal("");
+  const adminIsSearching = useSignal(false);
+
+  // Pricing & Extras
+  const adminDiscountAmount = useSignal<number | "">(0);
+  const adminDiscountType = useSignal<"FIXED" | "PERCENTAGE">("FIXED");
+  const adminSelectedExtras = useSignal<string[]>([]);
+
+  useTask$(({ track }) => {
+    const term = track(() => adminSearchTerm.value);
+    if (term.length >= 2) {
+      adminIsSearching.value = true;
+      searchUsersServer(term).then(res => {
+        adminSearchResults.value = res;
+        adminIsSearching.value = false;
+      });
+    } else {
+      adminSearchResults.value = [];
+    }
+  });
+
+  const incrementDuration = $(() => {
+    const current = parseInt(adminFormDuration.value, 10);
+    if (current < 360) adminFormDuration.value = String(current + 30);
+  });
+  const decrementDuration = $(() => {
+    const current = parseInt(adminFormDuration.value, 10);
+    if (current > 30) adminFormDuration.value = String(current - 30);
+  });
 
   const adminTimeOptions: string[] = [];
   for (let h = 8; h <= 23; h++) {
     adminTimeOptions.push(`${String(h).padStart(2, "0")}:00`);
     adminTimeOptions.push(`${String(h).padStart(2, "0")}:30`);
   }
-
-  const adminIsSlotDisabled = $((time: string) => {
-    if (!adminFormDate.value) return true;
-    const isToday = adminFormDate.value === todayStr;
-    if (isToday) {
-      const [h, m] = time.split(":").map(Number);
-      const slotTime = new Date(); slotTime.setHours(h, m, 0, 0);
-      if (slotTime <= new Date()) return true;
-    }
-    const start = new Date(`${adminFormDate.value}T${time}:00`).getTime();
-    const dur = parseInt(adminFormDuration.value, 10);
-    const end = start + dur * 60000;
-    return adminOccupiedSlots.value.some(slot => {
-      const s = new Date(slot.startTime).getTime();
-      const e = new Date(slot.endTime).getTime();
-      return start < e && end > s;
-    });
-  });
 
   const adminEndTime = useComputed$(() => {
     if (!adminFormTime.value) return "";
@@ -297,19 +411,24 @@ export default component$(() => {
     (b) => b.booking.id === selectedBookingId.value
   );
 
+  const selectedDateStr = calendarData.value.selectedDateStr;
+  const calendarView = calendarData.value.view;
+  const startDateStr = calendarData.value.startDateStr;
+  const endDateStr = calendarData.value.endDateStr;
+
   useVisibleTask$(({ cleanup }) => {
     const updateTimeIndicator = () => {
       const now = new Date();
-      const selected = new Date(calendarData.value.selectedDateStr + "T00:00:00");
-      
+      const selected = new Date(selectedDateStr + "T00:00:00");
+
       const isToday = now.toDateString() === selected.toDateString();
-      
+
       let shouldShow = false;
-      if (calendarData.value.view === "day" && isToday) shouldShow = true;
-      if (calendarData.value.view === "week") {
-         const start = new Date(calendarData.value.startDateStr);
-         const end = new Date(calendarData.value.endDateStr);
-         if (now >= start && now <= end) shouldShow = true;
+      if (calendarView === "day" && isToday) shouldShow = true;
+      if (calendarView === "week") {
+        const start = new Date(startDateStr);
+        const end = new Date(endDateStr);
+        if (now >= start && now <= end) shouldShow = true;
       }
 
       showCurrentTimeLine.value = shouldShow;
@@ -321,7 +440,7 @@ export default component$(() => {
     };
 
     updateTimeIndicator();
-    
+
     // Auto scroll to current time on initial load
     if (scrollContainerRef.value && showCurrentTimeLine.value) {
       setTimeout(() => {
@@ -373,9 +492,12 @@ export default component$(() => {
   });
 
 
+  const calendarViewComputed = useComputed$(() => calendarData.value.view);
+  const selectedDateStrComputed = useComputed$(() => calendarData.value.selectedDateStr);
+
   // Force grid layout for week/month views as timeline/list are day-only
   useTask$(({ track }) => {
-    const view = track(() => calendarData.value.view);
+    const view = track(() => calendarViewComputed.value);
     if (view !== "day" && layoutMode.value !== "grid") {
       layoutMode.value = "grid";
     }
@@ -385,7 +507,7 @@ export default component$(() => {
   const getWeekName = (startStr: string, endStr: string) => {
     const s = new Date(startStr);
     const e = new Date(endStr);
-    return `${s.getDate()} de ${s.toLocaleDateString('es-ES', {month: 'short'})} - ${e.getDate()} de ${e.toLocaleDateString('es-ES', {month: 'short'})}`;
+    return `${s.getDate()} de ${s.toLocaleDateString('es-ES', { month: 'short' })} - ${e.getDate()} de ${e.toLocaleDateString('es-ES', { month: 'short' })}`;
   };
 
   const getMonthName = (dateStr: string) => {
@@ -393,7 +515,7 @@ export default component$(() => {
   };
 
   const handleViewChange = $((newView: string) => {
-    nav(`?date=${calendarData.value.selectedDateStr}&view=${newView}`);
+    nav(`?date=${selectedDateStrComputed.value}&view=${newView}`);
   });
 
   // Generate days for Week View
@@ -416,13 +538,13 @@ export default component$(() => {
       current.setDate(current.getDate() - 1);
     }
     const startRender = new Date(current);
-    
+
     const endMonth = new Date(calendarData.value.endDateStr);
     // Pad end of month to Sunday
     while (endMonth.getDay() !== 0) { // 0 is Sunday
       endMonth.setDate(endMonth.getDate() + 1);
     }
-    
+
     const renderCursor = new Date(startRender);
     while (renderCursor <= endMonth) {
       monthDays.push(new Date(renderCursor));
@@ -470,8 +592,10 @@ export default component$(() => {
                 {getMonthName(calendarData.value.selectedDateStr)}
               </div>
             )}
-            {calendarData.value.selectedDateStr === new Date().toISOString().split("T")[0] && (
-              <div class="text-[10px] font-black text-emerald-600 uppercase tracking-widest mt-0.5">Hoy</div>
+            {calendarData.value.selectedDateStr === getBAFormatDate(new Date()) && (
+              <div class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-black uppercase tracking-wider">
+                Hoy
+              </div>
             )}
           </div>
 
@@ -490,13 +614,13 @@ export default component$(() => {
             onClick$={() => isCreateModalOpen.value = true}
             class="px-4 py-1.5 text-xs font-black text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-colors flex items-center gap-2"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
             Nueva Reserva
           </button>
 
-          {calendarData.value.selectedDateStr !== new Date().toISOString().split("T")[0] && (
+          {calendarData.value.selectedDateStr !== getBAFormatDate(new Date()) && (
             <Link
-              href={`?date=${new Date().toISOString().split("T")[0]}&view=${calendarData.value.view}`}
+              href={`?date=${getBAFormatDate(new Date())}&view=${calendarData.value.view}`}
               class="px-3 py-1.5 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
             >
               Ir a Hoy
@@ -509,34 +633,34 @@ export default component$(() => {
               onClick$={() => layoutMode.value = 'timeline'}
               disabled={calendarData.value.view !== 'day'}
               class={cn(
-                "w-8 h-8 flex items-center justify-center rounded-md transition-all", 
+                "w-8 h-8 flex items-center justify-center rounded-md transition-all",
                 layoutMode.value === 'timeline' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700",
                 calendarData.value.view !== 'day' && "opacity-30 cursor-not-allowed"
               )}
               title="Vista cronograma"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="4" width="18" height="4" rx="1"/>
-                <rect x="3" y="10" width="11" height="4" rx="1"/>
-                <rect x="3" y="16" width="15" height="4" rx="1"/>
+                <rect x="3" y="4" width="18" height="4" rx="1" />
+                <rect x="3" y="10" width="11" height="4" rx="1" />
+                <rect x="3" y="16" width="15" height="4" rx="1" />
               </svg>
             </button>
             <button
               onClick$={() => layoutMode.value = 'list'}
               disabled={calendarData.value.view !== 'day'}
               class={cn(
-                "w-8 h-8 flex items-center justify-center rounded-md transition-all", 
+                "w-8 h-8 flex items-center justify-center rounded-md transition-all",
                 layoutMode.value === 'list' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700",
                 calendarData.value.view !== 'day' && "opacity-30 cursor-not-allowed"
               )}
               title="Vista lista"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
-                <line x1="8" y1="18" x2="21" y2="18"/>
-                <circle cx="3" cy="6" r="1.5" fill="currentColor" stroke="none"/>
-                <circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-                <circle cx="3" cy="18" r="1.5" fill="currentColor" stroke="none"/>
+                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <circle cx="3" cy="6" r="1.5" fill="currentColor" stroke="none" />
+                <circle cx="3" cy="12" r="1.5" fill="currentColor" stroke="none" />
+                <circle cx="3" cy="18" r="1.5" fill="currentColor" stroke="none" />
               </svg>
             </button>
             <button
@@ -545,8 +669,8 @@ export default component$(() => {
               title="Vista grilla"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
               </svg>
             </button>
           </div>
@@ -588,239 +712,333 @@ export default component$(() => {
       ) : layoutMode.value === 'timeline' ? (
         <main class="flex-1 overflow-auto p-6">
           <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
-            <BookingTimelineView
-              pitches={calendarData.value.pitches}
-              bookings={calendarData.value.bookings as any}
-              onBookingClick$={handleBookingClick}
-            />
+            {(() => {
+              return (
+                <BookingTimelineView
+                  pitches={calendarData.value.pitches}
+                  bookings={calendarData.value.bookings as any}
+                  slotMinutes={30}
+                  startHour={CALENDAR_START_HOUR}
+                  endHour={CALENDAR_END_HOUR}
+                  onBookingClick$={(id) => {
+                    selectedBookingId.value = id;
+                    isModalOpen.value = true;
+                  }}
+              onEmptySlotDragEnd$={(pitchId, time, duration) => {
+                adminFormPitchId.value = pitchId;
+                adminFormDate.value = getBAFormatDate(new Date(calendarData.value.selectedDateStr + 'T12:00:00'));
+                adminFormTime.value = time;
+                adminFormDuration.value = String(duration);
+                adminIsSubscription.value = false;
+                adminEndDate.value = "";
+                adminNotes.value = "";
+                adminDiscountAmount.value = "";
+                adminDiscountType.value = "FIXED";
+                adminSelectedExtras.value = [];
+                isCreateModalOpen.value = true;
+              }}
+                />
+              );
+            })()}
           </div>
         </main>
       ) : (
-      <main class="flex-1 overflow-auto p-6 relative">
-        <div class={cn(
+        <main class="flex-1 overflow-auto p-6 relative">
+          <div class={cn(
             "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full",
             calendarData.value.view !== "month" ? "min-w-[900px]" : "min-w-[700px]"
           )}
-        >
-          {/* ===================== DAY VIEW ===================== */}
-          {calendarData.value.view === "day" && (
-            <>
-              {/* Pitches Header Row */}
-              <div class="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-30">
-                <div class="w-16 shrink-0 border-r border-slate-200 flex items-center justify-center bg-slate-100">
-                  <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora</span>
-                </div>
-                {calendarData.value.pitches.map((pitch) => {
-                  const pitchBookingCount = calendarData.value.bookings.filter(b => b.booking.pitchId === pitch.id).length;
-                  return (
-                    <div
-                      key={pitch.id}
-                      class="flex-1 text-center py-3 border-r border-slate-200 last:border-0"
-                    >
-                      <div class="font-black text-slate-800 text-sm">{pitch.name}</div>
-                      <div class="flex items-center justify-center gap-2 mt-0.5">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{pitch.type}</span>
-                        {pitchBookingCount > 0 && (
-                          <span class="text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-                            {pitchBookingCount} res.
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Calendar Grid Body */}
-              <div
-                ref={scrollContainerRef}
-                class="flex relative bg-slate-50/30 overflow-y-auto flex-1"
-              >
-                {/* Time Column */}
-                <div class="w-16 shrink-0 border-r border-slate-200 relative bg-white z-20">
-                  {hours.map((hour) => (
-                    <div
-                      key={hour}
-                      class="absolute w-full text-right pr-2 text-[11px] font-bold text-slate-300 -mt-2"
-                      style={{
-                        top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px`,
-                      }}
-                    >
-                      {String(hour).padStart(2, "0")}:00
-                    </div>
-                  ))}
-                </div>
-
-                {/* Main Grid and Columns */}
-                <div class="flex flex-1 relative">
-                  {/* Current Time Indicator */}
-                  {showCurrentTimeLine.value && (
-                    <div 
-                      class="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
-                      style={{ top: `${currentTimePosition.value}px` }}
-                    >
-                      <div class="w-2 h-2 rounded-full bg-red-500 -ml-1"></div>
-                      <div class="flex-1 border-t-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
-                    </div>
-                  )}
-
-                  {/* Horizontal Grid Lines */}
-                  {hours.map((hour) => (
-                    <div
-                      key={`line-${hour}`}
-                      class="absolute w-full border-t border-slate-200 pointer-events-none"
-                      style={{
-                        top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px`,
-                      }}
-                    ></div>
-                  ))}
-                    <div
-                      key={`line-half-${hour}`}
-                      class="absolute w-full border-t border-dashed pointer-events-none"
-                      style={{
-                        top: `${(hour - CALENDAR_START_HOUR + 0.5) * PIXELS_PER_HOUR}px`,
-                        borderColor: 'rgba(148,163,184,0.2)',
-                      }}
-                    ></div>
-
-
-                  {/* Pitch Columns */}
+          >
+            {/* ===================== DAY VIEW ===================== */}
+            {calendarData.value.view === "day" && (
+              <>
+                {/* Pitches Header Row */}
+                <div class="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-30">
+                  <div class="w-16 shrink-0 border-r border-slate-200 flex items-center justify-center bg-slate-100">
+                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora</span>
+                  </div>
                   {calendarData.value.pitches.map((pitch) => {
-                    const pitchBookings = calendarData.value.bookings.filter(
-                      (b) => b.booking.pitchId === pitch.id
-                    );
+                    const pitchBookingCount = calendarData.value.bookings.filter(b => b.booking.pitchId === pitch.id).length;
                     return (
                       <div
                         key={pitch.id}
-                        class="flex-1 border-r border-slate-200 last:border-0 relative hover:bg-slate-50/80 transition-colors"
+                        class="flex-1 text-center py-3 border-r border-slate-200 last:border-0"
                       >
-                        {pitchBookings.map(({ booking, user, guest }) => {
-                          const customerName = guest?.name || user?.name || "Desconocido";
-                          const customerPhone = guest?.phone || user?.phone || "";
-                          return (
-                            <BookingSlot
-                              key={booking.id}
-                              id={booking.id}
-                              startTime={booking.startTime}
-                              endTime={booking.endTime}
-                              status={booking.status}
-                              customerName={customerName}
-                              customerPhone={customerPhone}
-                              calendarStartHour={CALENDAR_START_HOUR}
-                              pixelsPerHour={PIXELS_PER_HOUR}
-                              onClick$={handleBookingClick}
-                            />
-                          );
-                        })}
+                        <div class="font-black text-slate-800 text-sm">{pitch.name}</div>
+                        <div class="flex items-center justify-center gap-2 mt-0.5">
+                          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{pitch.type}</span>
+                          {pitchBookingCount > 0 && (
+                            <span class="text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+                              {pitchBookingCount} res.
+                            </span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-              </div>
-            </>
-          )}
 
-          {/* ===================== WEEK VIEW ===================== */}
-          {calendarData.value.view === "week" && (
-            <>
-              {/* Days Header Row */}
-              <div class="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-30">
-                <div class="w-20 shrink-0 border-r border-slate-200 flex items-center justify-center bg-slate-100">
-                  <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora</span>
-                </div>
-                {weekDays.map((day, idx) => {
-                  const isToday = new Date().toDateString() === day.toDateString();
-                  return (
-                    <div
-                      key={idx}
-                      class={cn(
-                        "flex-1 text-center py-4 border-r border-slate-200 last:border-0",
-                        isToday ? "bg-emerald-50/50" : ""
-                      )}
-                    >
-                      <div class={cn("font-black uppercase tracking-tight", isToday ? "text-emerald-700" : "text-slate-800")}>
-                        {day.toLocaleDateString('es-ES', { weekday: 'short' })}
+                {/* Calendar Grid Body */}
+                <div
+                  ref={scrollContainerRef}
+                  class="flex relative bg-slate-50/30 overflow-y-auto flex-1"
+                >
+                  {/* Time Column */}
+                  <div class="w-16 shrink-0 border-r border-slate-200 relative bg-white z-20">
+                    {hours.map((hour) => (
+                      <div
+                        key={hour}
+                        class="absolute w-full text-right pr-2 text-[11px] font-bold text-slate-300 -mt-2"
+                        style={{
+                          top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px`,
+                        }}
+                      >
+                        {String(hour).padStart(2, "0")}:00
                       </div>
-                      <div class={cn("text-[20px] font-black mt-1", isToday ? "text-emerald-600" : "text-slate-400")}>
-                        {day.getDate()}
+                    ))}
+                  </div>
+
+                  {/* Main Grid and Columns */}
+                  <div class="flex flex-1 relative">
+                    {/* Current Time Indicator */}
+                    {showCurrentTimeLine.value && (
+                      <div
+                        class="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+                        style={{ top: `${currentTimePosition.value}px` }}
+                      >
+                        <div class="w-2 h-2 rounded-full bg-red-500 -ml-1"></div>
+                        <div class="flex-1 border-t-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    )}
 
-              {/* Calendar Grid Body */}
-              <div
-                ref={scrollContainerRef}
-                class="flex relative bg-slate-50/30 overflow-y-auto"
-                style={{ height: `${hours.length * PIXELS_PER_HOUR}px` }}
-              >
-                {/* Time Column */}
-                <div class="w-20 shrink-0 border-r border-slate-200 relative bg-slate-50/80 backdrop-blur-sm z-20">
-                  {hours.map((hour) => (
-                    <div
-                      key={hour}
-                      class="absolute w-full text-right pr-3 text-xs font-bold text-slate-400 -mt-2"
-                      style={{
-                        top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px`,
-                      }}
-                    >
-                      {String(hour).padStart(2, "0")}:00
-                    </div>
-                  ))}
+                    {/* Horizontal Grid Lines */}
+                    {hours.map((hour) => (
+                      <Fragment key={`grid-${hour}`}>
+                        <div
+                          class="absolute w-full border-t border-slate-200 pointer-events-none"
+                          style={{
+                            top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px`,
+                          }}
+                        ></div>
+                        <div
+                          class="absolute w-full border-t border-dashed pointer-events-none"
+                          style={{
+                            top: `${(hour - CALENDAR_START_HOUR + 0.5) * PIXELS_PER_HOUR}px`,
+                            borderColor: 'rgba(148,163,184,0.2)',
+                          }}
+                        ></div>
+                      </Fragment>
+                    ))}
+
+
+                    {/* Pitch Columns */}
+                    {calendarData.value.pitches.map((pitch) => {
+                      const pitchBookings = calendarData.value.bookings.filter(
+                        (b) => b.booking.pitchId === pitch.id
+                      );
+                      return (
+                        <div
+                          key={pitch.id}
+                          class="flex-1 border-r border-slate-200 last:border-0 relative hover:bg-slate-50/80 transition-colors"
+                        >
+                          {pitchBookings.map(({ booking, user, guest }) => {
+                            const customerName = guest?.name || user?.name || "Desconocido";
+                            const customerPhone = guest?.phone || user?.phone || "";
+                            return (
+                              <BookingSlot
+                                key={booking.id}
+                                id={booking.id}
+                                startTime={booking.startTime}
+                                endTime={booking.endTime}
+                                status={booking.status}
+                                customerName={customerName}
+                                customerPhone={customerPhone}
+                                calendarStartHour={CALENDAR_START_HOUR}
+                                pixelsPerHour={PIXELS_PER_HOUR}
+                                onClick$={handleBookingClick}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
+              </>
+            )}
 
-                {/* Main Grid and Columns */}
-                <div class="flex flex-1 relative">
-                  {showCurrentTimeLine.value && (
-                    <div 
-                      class="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
-                      style={{ top: `${currentTimePosition.value}px` }}
-                    >
-                      <div class="w-2 h-2 rounded-full bg-red-500 -ml-1"></div>
-                      <div class="flex-1 border-t-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
-                    </div>
-                  )}
-
-                  {hours.map((hour) => (
-                    <div key={`line-${hour}`} class="absolute w-full border-t border-slate-200 pointer-events-none" style={{ top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px` }}></div>
-                  ))}
-                  {hours.map((hour) => (
-                    <div key={`line-half-${hour}`} class="absolute w-full border-t border-dashed pointer-events-none" style={{ top: `${(hour - CALENDAR_START_HOUR + 0.5) * PIXELS_PER_HOUR}px`, borderColor: 'rgba(148,163,184,0.2)' }}></div>
-                  ))}
-
-                  {/* Day Columns */}
+            {/* ===================== WEEK VIEW ===================== */}
+            {calendarData.value.view === "week" && (
+              <>
+                {/* Days Header Row */}
+                <div class="flex border-b border-slate-200 bg-slate-50 sticky top-0 z-30">
+                  <div class="w-20 shrink-0 border-r border-slate-200 flex items-center justify-center bg-slate-100">
+                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora</span>
+                  </div>
                   {weekDays.map((day, idx) => {
+                    const isToday = new Date().toDateString() === day.toDateString();
+                    return (
+                      <div
+                        key={idx}
+                        class={cn(
+                          "flex-1 text-center py-4 border-r border-slate-200 last:border-0",
+                          isToday ? "bg-emerald-50/50" : ""
+                        )}
+                      >
+                        <div class={cn("font-black uppercase tracking-tight", isToday ? "text-emerald-700" : "text-slate-800")}>
+                          {day.toLocaleDateString('es-ES', { weekday: 'short' })}
+                        </div>
+                        <div class={cn("text-[20px] font-black mt-1", isToday ? "text-emerald-600" : "text-slate-400")}>
+                          {day.getDate()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Calendar Grid Body */}
+                <div
+                  ref={scrollContainerRef}
+                  class="flex relative bg-slate-50/30 overflow-y-auto"
+                  style={{ height: `${hours.length * PIXELS_PER_HOUR}px` }}
+                >
+                  {/* Time Column */}
+                  <div class="w-20 shrink-0 border-r border-slate-200 relative bg-slate-50/80 backdrop-blur-sm z-20">
+                    {hours.map((hour) => (
+                      <div
+                        key={hour}
+                        class="absolute w-full text-right pr-3 text-xs font-bold text-slate-400 -mt-2"
+                        style={{
+                          top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px`,
+                        }}
+                      >
+                        {String(hour).padStart(2, "0")}:00
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Main Grid and Columns */}
+                  <div class="flex flex-1 relative">
+                    {showCurrentTimeLine.value && (
+                      <div
+                        class="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+                        style={{ top: `${currentTimePosition.value}px` }}
+                      >
+                        <div class="w-2 h-2 rounded-full bg-red-500 -ml-1"></div>
+                        <div class="flex-1 border-t-2 border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"></div>
+                      </div>
+                    )}
+
+                    {hours.map((hour) => (
+                      <div key={`line-${hour}`} class="absolute w-full border-t border-slate-200 pointer-events-none" style={{ top: `${(hour - CALENDAR_START_HOUR) * PIXELS_PER_HOUR}px` }}></div>
+                    ))}
+                    {hours.map((hour) => (
+                      <div key={`line-half-${hour}`} class="absolute w-full border-t border-dashed pointer-events-none" style={{ top: `${(hour - CALENDAR_START_HOUR + 0.5) * PIXELS_PER_HOUR}px`, borderColor: 'rgba(148,163,184,0.2)' }}></div>
+                    ))}
+
+                    {/* Day Columns */}
+                    {weekDays.map((day, idx) => {
+                      const dayBookings = calendarData.value.bookings.filter((b) => {
+                        const bDate = new Date(b.booking.startTime);
+                        return bDate.toDateString() === day.toDateString();
+                      });
+
+                      const isToday = new Date().toDateString() === day.toDateString();
+
+                      return (
+                        <div
+                          key={idx}
+                          class={cn("flex-1 border-r border-slate-200 last:border-0 relative hover:bg-slate-50/80 transition-colors", isToday ? "bg-emerald-50/10" : "")}
+                        >
+                          {dayBookings.map(({ booking, user, guest }) => {
+                            const customerName = guest?.name || user?.name || "Desconocido";
+                            const customerPhone = guest?.phone || user?.phone || "";
+                            const pitchName = calendarData.value.pitches.find(p => p.id === booking.pitchId)?.name || "Cancha";
+                            return (
+                              <BookingSlot
+                                key={booking.id}
+                                id={booking.id}
+                                startTime={booking.startTime}
+                                endTime={booking.endTime}
+                                status={booking.status}
+                                customerName={customerName}
+                                customerPhone={customerPhone}
+                                pitchName={pitchName}
+                                calendarStartHour={CALENDAR_START_HOUR}
+                                pixelsPerHour={PIXELS_PER_HOUR}
+                                onClick$={handleBookingClick}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ===================== MONTH VIEW ===================== */}
+            {calendarData.value.view === "month" && (
+              <div class="flex flex-col h-full overflow-hidden">
+                {/* Days Header */}
+                <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50 shrink-0">
+                  {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => (
+                    <div key={d} class="py-3 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 last:border-0">
+                      {d}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Month Grid */}
+                <div class="flex-1 grid grid-cols-7 grid-rows-5 bg-slate-200 gap-[1px]">
+                  {monthDays.map((day, idx) => {
+                    const isCurrentMonth = day.getMonth() === new Date(calendarData.value.startDateStr).getMonth();
+                    const isToday = new Date().toDateString() === day.toDateString();
+
                     const dayBookings = calendarData.value.bookings.filter((b) => {
                       const bDate = new Date(b.booking.startTime);
                       return bDate.toDateString() === day.toDateString();
                     });
 
-                    const isToday = new Date().toDateString() === day.toDateString();
-
                     return (
                       <div
                         key={idx}
-                        class={cn("flex-1 border-r border-slate-200 last:border-0 relative hover:bg-slate-50/80 transition-colors", isToday ? "bg-emerald-50/10" : "")}
+                        class={cn(
+                          "bg-white p-2 overflow-y-auto overflow-x-hidden flex flex-col gap-1",
+                          !isCurrentMonth ? "bg-slate-50 opacity-50" : "",
+                          isToday ? "bg-emerald-50/30" : ""
+                        )}
                       >
+                        <div class={cn(
+                          "text-xs font-black self-end w-6 h-6 flex items-center justify-center rounded-full mb-1",
+                          isToday ? "bg-emerald-500 text-white shadow-md" : "text-slate-400"
+                        )}>
+                          {day.getDate()}
+                        </div>
+
                         {dayBookings.map(({ booking, user, guest }) => {
                           const customerName = guest?.name || user?.name || "Desconocido";
-                          const customerPhone = guest?.phone || user?.phone || "";
                           const pitchName = calendarData.value.pitches.find(p => p.id === booking.pitchId)?.name || "Cancha";
+                          const time = new Date(booking.startTime).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
+
+                          const statusColors = {
+                            PENDING_APPROVAL: "bg-amber-100 text-amber-800 border-l-2 border-amber-400",
+                            CONFIRMED: "bg-emerald-100 text-emerald-800 border-l-2 border-emerald-400",
+                            CANCELLED: "bg-red-100 text-red-800 border-l-2 border-red-400",
+                            COMPLETED: "bg-slate-100 text-slate-800 border-l-2 border-slate-400",
+                          };
+
                           return (
-                            <BookingSlot
+                            <div
                               key={booking.id}
-                              id={booking.id}
-                              startTime={booking.startTime}
-                              endTime={booking.endTime}
-                              status={booking.status}
-                              customerName={customerName}
-                              customerPhone={customerPhone}
-                              pitchName={pitchName}
-                              calendarStartHour={CALENDAR_START_HOUR}
-                              pixelsPerHour={PIXELS_PER_HOUR}
-                              onClick$={handleBookingClick}
-                            />
+                              onClick$={() => handleBookingClick(booking.id)}
+                              class={cn("text-[9px] p-1 rounded-sm leading-tight truncate shadow-sm cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all", statusColors[booking.status])}
+                              title={`${time} - ${customerName} (${pitchName})`}
+                            >
+                              <span class="font-bold opacity-70 mr-1">{time}</span>
+                              <span class="font-black">{customerName}</span>
+                            </div>
                           );
                         })}
                       </div>
@@ -828,81 +1046,10 @@ export default component$(() => {
                   })}
                 </div>
               </div>
-            </>
-          )}
+            )}
 
-          {/* ===================== MONTH VIEW ===================== */}
-          {calendarData.value.view === "month" && (
-            <div class="flex flex-col h-full overflow-hidden">
-              {/* Days Header */}
-              <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50 shrink-0">
-                {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => (
-                  <div key={d} class="py-3 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 last:border-0">
-                    {d}
-                  </div>
-                ))}
-              </div>
-              
-              {/* Month Grid */}
-              <div class="flex-1 grid grid-cols-7 grid-rows-5 bg-slate-200 gap-[1px]">
-                {monthDays.map((day, idx) => {
-                  const isCurrentMonth = day.getMonth() === new Date(calendarData.value.startDateStr).getMonth();
-                  const isToday = new Date().toDateString() === day.toDateString();
-                  
-                  const dayBookings = calendarData.value.bookings.filter((b) => {
-                    const bDate = new Date(b.booking.startTime);
-                    return bDate.toDateString() === day.toDateString();
-                  });
-
-                  return (
-                    <div 
-                      key={idx} 
-                      class={cn(
-                        "bg-white p-2 overflow-y-auto overflow-x-hidden flex flex-col gap-1",
-                        !isCurrentMonth ? "bg-slate-50 opacity-50" : "",
-                        isToday ? "bg-emerald-50/30" : ""
-                      )}
-                    >
-                      <div class={cn(
-                        "text-xs font-black self-end w-6 h-6 flex items-center justify-center rounded-full mb-1",
-                        isToday ? "bg-emerald-500 text-white shadow-md" : "text-slate-400"
-                      )}>
-                        {day.getDate()}
-                      </div>
-                      
-                      {dayBookings.map(({ booking, user, guest }) => {
-                        const customerName = guest?.name || user?.name || "Desconocido";
-                        const pitchName = calendarData.value.pitches.find(p => p.id === booking.pitchId)?.name || "Cancha";
-                        const time = new Date(booking.startTime).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
-                        
-                        const statusColors = {
-                          PENDING_APPROVAL: "bg-amber-100 text-amber-800 border-l-2 border-amber-400",
-                          CONFIRMED: "bg-emerald-100 text-emerald-800 border-l-2 border-emerald-400",
-                          CANCELLED: "bg-red-100 text-red-800 border-l-2 border-red-400",
-                          COMPLETED: "bg-slate-100 text-slate-800 border-l-2 border-slate-400",
-                        };
-
-                        return (
-                          <div 
-                            key={booking.id}
-                            onClick$={() => handleBookingClick(booking.id)}
-                            class={cn("text-[9px] p-1 rounded-sm leading-tight truncate shadow-sm cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all", statusColors[booking.status])}
-                            title={`${time} - ${customerName} (${pitchName})`}
-                          >
-                            <span class="font-bold opacity-70 mr-1">{time}</span>
-                            <span class="font-black">{customerName}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-        </div>
-      </main>
+          </div>
+        </main>
       )}
 
       {/* Booking Details Modal */}
@@ -945,7 +1092,7 @@ export default component$(() => {
                     {new Date(selectedBookingDetails.booking.startTime).toLocaleDateString("es-AR")}
                   </div>
                   <div class="text-sm font-semibold text-emerald-600">
-                    {new Date(selectedBookingDetails.booking.startTime).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })} - 
+                    {new Date(selectedBookingDetails.booking.startTime).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })} -
                     {new Date(selectedBookingDetails.booking.endTime).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}
                   </div>
                 </div>
@@ -954,13 +1101,13 @@ export default component$(() => {
                   <div class={cn(
                     "font-bold text-sm px-2 py-1 rounded",
                     selectedBookingDetails.booking.status === "PENDING_APPROVAL" ? "bg-amber-100 text-amber-800" :
-                    selectedBookingDetails.booking.status === "CONFIRMED" ? "bg-emerald-100 text-emerald-800" :
-                    selectedBookingDetails.booking.status === "COMPLETED" ? "bg-slate-200 text-slate-800" :
-                    "bg-red-100 text-red-800"
+                      selectedBookingDetails.booking.status === "CONFIRMED" ? "bg-emerald-100 text-emerald-800" :
+                        selectedBookingDetails.booking.status === "COMPLETED" ? "bg-slate-200 text-slate-800" :
+                          "bg-red-100 text-red-800"
                   )}>
                     {selectedBookingDetails.booking.status === "PENDING_APPROVAL" ? "Por confirmar" :
-                     selectedBookingDetails.booking.status === "CONFIRMED" ? "Confirmado" :
-                     selectedBookingDetails.booking.status === "COMPLETED" ? "Completado" : "Cancelado"}
+                      selectedBookingDetails.booking.status === "CONFIRMED" ? "Confirmado" :
+                        selectedBookingDetails.booking.status === "COMPLETED" ? "Completado" : "Cancelado"}
                   </div>
                 </div>
               </div>
@@ -1037,176 +1184,322 @@ export default component$(() => {
 
       {/* Create Admin Booking Modal */}
       <Modal.Root bind:show={isCreateModalOpen}>
-        <Modal.Panel class="bg-white border border-slate-200 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-          <div class="flex justify-between items-center mb-6 border-b border-slate-100 pb-4 px-6 pt-6 sticky top-0 bg-white z-10">
-            <Modal.Title class="text-xl font-black tracking-tight text-slate-800">Nueva Reserva Manual</Modal.Title>
-            <Modal.Close class="text-slate-400 hover:text-slate-800 transition-colors p-1">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-            </Modal.Close>
+        <Modal.Panel position="right" class="fixed right-0 top-0 inset-y-0 p-0 w-[500px] max-w-[90vw] overflow-hidden bg-white shadow-2xl">
+          <div class="flex flex-col h-[100dvh] w-full">
+            {(() => {
+              const pitch = calendarData.value.pitches.find(p => p.id === adminFormPitchId.value);
+              const dateStr = adminFormDate.value;
+              const durHrs = Math.floor(parseInt(adminFormDuration.value) / 60);
+              const durMins = parseInt(adminFormDuration.value) % 60;
+              const nowBAStr = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'America/Argentina/Buenos_Aires',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+              }).format(new Date()).replace(', ', 'T');
+              const formDateStr = `${dateStr}T${adminFormTime.value}`;
+              const isPast = dateStr && adminFormTime.value ? formDateStr < nowBAStr : false;
+
+              const basePrice = pitch ? pitch.pricePerHour * (parseInt(adminFormDuration.value) / 60) : 0;
+              const extrasCost = adminSelectedExtras.value.reduce((acc, name) => {
+                const extra = calendarData.value.extraServices.find((e: any) => e.name === name);
+                return acc + (extra ? extra.price : 0);
+              }, 0);
+              const discount = adminDiscountType.value === "FIXED"
+                ? (Number(adminDiscountAmount.value) || 0)
+                : basePrice * ((Number(adminDiscountAmount.value) || 0) / 100);
+              const finalPrice = Math.max(0, basePrice - discount) + extrasCost;
+
+              return (
+                <>
+                  <div class="bg-slate-50 border-b border-slate-200 px-8 pt-8 pb-6 flex flex-col gap-3 shrink-0 relative">
+                    {isPast && (
+                      <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                        Horario Pasado
+                      </div>
+                    )}
+                    <div class="flex justify-between items-start">
+                      <Modal.Title class="text-[28px] font-black text-slate-800 tracking-tighter leading-none">
+                        Nueva Reserva
+                      </Modal.Title>
+                      <Modal.Close class="text-slate-400 hover:text-slate-800 transition-colors p-1.5 -mr-1.5 rounded-full hover:bg-slate-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </Modal.Close>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3 text-[14px] text-slate-600 font-semibold tracking-tight mt-2">
+                      <select
+                        class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 hover:bg-slate-50 transition-colors"
+                        value={adminFormPitchId.value}
+                        onChange$={(_, el) => adminFormPitchId.value = el.value}
+                      >
+                        <option value="">Seleccionar cancha</option>
+                        {calendarData.value.pitches.map(p => <option key={p.id} value={p.id}>{`${p.name} ${p.type}`}</option>)}
+                      </select>
+
+                      <input
+                        type="date"
+                        value={adminFormDate.value}
+                        onChange$={(_, el) => adminFormDate.value = el.value}
+                        class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 hover:bg-slate-50 transition-colors"
+                      />
+
+                      <select
+                        class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500 hover:bg-slate-50 transition-colors font-mono"
+                        value={adminFormTime.value}
+                        onChange$={(_, el) => adminFormTime.value = el.value}
+                      >
+                        <option value="">--:-- hs</option>
+                        {adminTimeOptions.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="flex-1 overflow-y-auto px-8 py-8">
+                    <Form action={createBookingAction} id="create-booking-form" class="space-y-8 pb-10" onSubmitCompleted$={() => { if (createBookingAction.value?.success) isCreateModalOpen.value = false; }}>
+                      <input type="hidden" name="date" value={adminFormDate.value} />
+                      <input type="hidden" name="startTime" value={adminFormTime.value} />
+                      <input type="hidden" name="endTime" value={adminEndTime.value} />
+                      <input type="hidden" name="pitchId" value={adminFormPitchId.value} />
+                      <input type="hidden" name="isSubscription" value={adminIsSubscription.value ? "true" : "false"} />
+
+                      {/* Fila: Tipo de Turno / Precio / Fin */}
+                      <div class="grid grid-cols-2 gap-8">
+                        {/* Tipo de Turno */}
+                        <div class="flex flex-col gap-2">
+                          <div class="flex bg-slate-100 p-1 rounded-full border border-slate-200 shadow-inner">
+                            <button
+                              type="button"
+                              onClick$={() => adminIsSubscription.value = false}
+                              class={cn("flex-1 py-1.5 text-sm font-bold rounded-full transition-all text-center", !adminIsSubscription.value ? "bg-emerald-800 text-white shadow-md" : "text-slate-500 hover:text-slate-700")}
+                            >
+                              Turno único
+                            </button>
+                            <button
+                              type="button"
+                              onClick$={() => adminIsSubscription.value = true}
+                              class={cn("flex-1 py-1.5 text-sm font-bold rounded-full transition-all text-center", adminIsSubscription.value ? "bg-emerald-800 text-white shadow-md" : "text-slate-500 hover:text-slate-700")}
+                            >
+                              Turno fijo
+                            </button>
+                          </div>
+
+                          {/* Duración */}
+                          <div class="mt-4 flex flex-col items-center">
+                            <label class="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">Duración</label>
+                            <div class="flex items-center gap-4">
+                              <button type="button" onClick$={decrementDuration} class="w-10 h-10 rounded-xl border-2 border-emerald-600 text-emerald-700 flex items-center justify-center hover:bg-emerald-50 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /></svg>
+                              </button>
+                              <div class="flex gap-1 items-baseline">
+                                <div class="flex flex-col items-center">
+                                  <span class="text-2xl font-black text-slate-800">{String(durHrs).padStart(2, '0')}</span>
+                                  <span class="text-[10px] text-slate-400 font-bold uppercase">Hs</span>
+                                </div>
+                                <span class="text-2xl font-black text-slate-300 -mt-1">:</span>
+                                <div class="flex flex-col items-center">
+                                  <span class="text-2xl font-black text-slate-800">{String(durMins).padStart(2, '0')}</span>
+                                  <span class="text-[10px] text-slate-400 font-bold uppercase">Min</span>
+                                </div>
+                              </div>
+                              <button type="button" onClick$={incrementDuration} class="w-10 h-10 rounded-xl border-2 border-emerald-600 text-emerald-700 flex items-center justify-center hover:bg-emerald-50 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Lado derecho: Precio y Fin */}
+                        <div class="flex flex-col gap-6">
+                          <div>
+                            <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Precio Total</label>
+                            <div class="flex flex-col gap-2">
+                              <div class="flex items-center justify-between text-sm text-slate-500 font-medium px-1">
+                                <span>Precio Base:</span>
+                                <span>${basePrice.toLocaleString('es-AR')}</span>
+                              </div>
+
+                              <div class="flex items-center gap-2">
+                                <select
+                                  value={adminDiscountType.value}
+                                  onChange$={(_, el) => adminDiscountType.value = el.value as any}
+                                  class="w-1/3 px-2 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none text-xs font-bold text-slate-600"
+                                >
+                                  <option value="FIXED">Desc. ($)</option>
+                                  <option value="PERCENTAGE">Desc. (%)</option>
+                                </select>
+                                <input
+                                  type="number"
+                                  value={adminDiscountAmount.value}
+                                  onInput$={(_, el) => adminDiscountAmount.value = el.value ? Number(el.value) : ""}
+                                  min="0"
+                                  placeholder="0"
+                                  class="w-2/3 px-4 py-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-emerald-500 text-sm font-bold text-slate-800"
+                                />
+                              </div>
+
+                              {calendarData.value.extraServices.length > 0 && (
+                                <div class="mt-2 space-y-2">
+                                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Extras</label>
+                                  <div class="flex flex-wrap gap-2">
+                                    {calendarData.value.extraServices.map((extra: any) => {
+                                      const isSelected = adminSelectedExtras.value.includes(extra.name);
+                                      return (
+                                        <button
+                                          key={extra.name}
+                                          type="button"
+                                          onClick$={() => {
+                                            if (isSelected) {
+                                              adminSelectedExtras.value = adminSelectedExtras.value.filter(e => e !== extra.name);
+                                            } else {
+                                              adminSelectedExtras.value = [...adminSelectedExtras.value, extra.name];
+                                            }
+                                          }}
+                                          class={cn(
+                                            "px-3 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5",
+                                            isSelected ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                                          )}
+                                        >
+                                          <span class="text-sm">{extra.icon}</span>
+                                          <span>{extra.name} (+${extra.price})</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div class="pt-2 mt-1 border-t border-slate-200 flex items-center justify-between">
+                                <span class="text-sm font-black text-slate-800">Total a Pagar:</span>
+                                <span class="text-xl font-black text-emerald-600">${finalPrice.toLocaleString('es-AR')}</span>
+                              </div>
+                              <input type="hidden" name="price" value={finalPrice} />
+                              <input type="hidden" name="extras" value={JSON.stringify(adminSelectedExtras.value)} />
+                            </div>
+                          </div>
+
+                          {adminIsSubscription.value && (
+                            <div class="animate-in fade-in slide-in-from-top-2 duration-300">
+                              <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha de finalización</label>
+                              <input type="date" name="endDate" value={adminEndDate.value} onInput$={(_, el) => adminEndDate.value = el.value} class="w-full px-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-semibold text-slate-700" />
+                              {!adminEndDate.value && <p class="text-[10px] text-slate-400 mt-1 font-medium">Sin definir - Se renovará automáticamente.</p>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <hr class="border-slate-100" />
+
+                      {/* Organizador */}
+                      <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                          <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
+                            Organizador <span class="text-xs font-semibold text-slate-400 font-sans">(obligatorio)</span>
+                          </h3>
+                          {adminSelectedUserId.value && (
+                            <button type="button" onClick$={() => { adminSelectedUserId.value = ""; adminSearchTerm.value = ""; adminSelectedUserName.value = ""; adminSelectedUserPhone.value = ""; }} class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase">
+                              Cambiar Cliente
+                            </button>
+                          )}
+                        </div>
+
+                        <input type="hidden" name="userId" value={adminSelectedUserId.value} />
+
+                        <div class="grid grid-cols-2 gap-4">
+                          <div class="col-span-2 relative">
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Buscar Cliente Registrado (Opcional)</label>
+                            <div class="relative">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                              <input
+                                type="text"
+                                value={adminSearchTerm.value}
+                                onInput$={(_, el) => adminSearchTerm.value = el.value}
+                                placeholder="Buscar por nombre, teléfono o email..."
+                                class="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-medium"
+                              />
+                              {adminIsSearching.value && (
+                                <div class="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full border-2 border-slate-300 border-t-emerald-500 animate-spin"></div>
+                              )}
+                            </div>
+
+                            {adminSearchResults.value.length > 0 && !adminSelectedUserId.value && (
+                              <div class="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                                {adminSearchResults.value.map(user => (
+                                  <button
+                                    key={user.id}
+                                    type="button"
+                                    onClick$={() => {
+                                      adminSelectedUserId.value = user.id;
+                                      adminSelectedUserName.value = user.name;
+                                      adminSelectedUserPhone.value = user.phone || "";
+                                      adminSearchTerm.value = "";
+                                      adminSearchResults.value = [];
+                                    }}
+                                    class="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 flex flex-col"
+                                  >
+                                    <span class="text-sm font-bold text-slate-800">{user.name}</span>
+                                    <span class="text-xs text-slate-500">{user.phone || user.email}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre</label>
+                            <input
+                              type="text"
+                              name="customerName"
+                              required={!adminSelectedUserId.value}
+                              value={adminSelectedUserName.value}
+                              onInput$={(_, el) => adminSelectedUserName.value = el.value}
+                              readOnly={!!adminSelectedUserId.value}
+                              placeholder="Ej: Juan Pérez"
+                              class={["w-full px-4 py-2.5 border rounded-xl focus:outline-none text-sm font-medium", adminSelectedUserId.value ? "bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed" : "bg-white border-slate-200 focus:border-emerald-500"]}
+                            />
+                          </div>
+                          <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Teléfono</label>
+                            <input
+                              type="tel"
+                              name="customerPhone"
+                              required={!adminSelectedUserId.value}
+                              value={adminSelectedUserPhone.value}
+                              onInput$={(_, el) => adminSelectedUserPhone.value = el.value}
+                              readOnly={!!adminSelectedUserId.value}
+                              placeholder="Ej: 1123456789"
+                              class={["w-full px-4 py-2.5 border rounded-xl focus:outline-none text-sm font-medium", adminSelectedUserId.value ? "bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed" : "bg-white border-slate-200 focus:border-emerald-500"]}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <hr class="border-slate-100" />
+
+                      {/* Notas */}
+                      <div class="space-y-4">
+                        <h3 class="text-sm font-black text-slate-800">Notas</h3>
+                        <textarea name="notes" placeholder="Sólo será visible por el complejo" rows={3} class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-emerald-500 text-sm resize-none"></textarea>
+                      </div>
+
+                      {createBookingAction.value?.failed && (
+                        <div class="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-bold mt-4">
+                          {createBookingAction.value.message || "Error al crear la reserva. Verificá los campos."}
+                        </div>
+                      )}
+                    </Form>
+                  </div>
+
+                  {/* Footer Flotante */}
+                  <div class="bg-white border-t border-slate-100 p-6 shrink-0 flex justify-end gap-3 z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+                    <Button type="button" onClick$={() => isCreateModalOpen.value = false} look="outline" class="font-bold rounded-xl px-6 border-slate-200 text-slate-600">Cancelar</Button>
+                    <Button type="button" onClick$={() => document.getElementById('create-booking-form')?.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))} look="primary" disabled={createBookingAction.isRunning || !adminFormTime.value || !adminFormDate.value || !adminFormPitchId.value} class="font-bold rounded-xl px-8 bg-emerald-800 text-white hover:bg-emerald-900 disabled:opacity-50">
+                      {createBookingAction.isRunning ? "Guardando..." : "Crear Reserva"}
+                    </Button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
-
-          <Form action={createBookingAction} class="px-6 pb-6 space-y-5">
-            {/* Hidden computed fields */}
-            <input type="hidden" name="date" value={adminFormDate.value} />
-            <input type="hidden" name="startTime" value={adminFormTime.value} />
-            <input type="hidden" name="endTime" value={adminEndTime.value} />
-
-            {/* Cancha */}
-            <div>
-              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cancha</label>
-              <select
-                name="pitchId" required
-                class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-semibold text-slate-700"
-                onChange$={(_, el) => { adminFormPitchId.value = el.value; }}
-              >
-                <option value="">Seleccioná una cancha</option>
-                {calendarData.value.pitches.map(p => (
-                  <option key={p.id} value={p.id}>{`${p.name} (${p.type})`}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Fecha */}
-            <div>
-              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Fecha</label>
-              <div class="flex gap-2 mb-2">
-                <button
-                  type="button"
-                  onClick$={() => adminFormDate.value = todayStr}
-                  class={["flex-1 py-2 text-sm font-bold rounded-xl border transition-all", adminFormDate.value === todayStr ? "bg-emerald-500 text-white border-emerald-500" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400"]}
-                >Hoy</button>
-                <button
-                  type="button"
-                  onClick$={() => adminFormDate.value = tomorrowStr}
-                  class={["flex-1 py-2 text-sm font-bold rounded-xl border transition-all", adminFormDate.value === tomorrowStr ? "bg-emerald-500 text-white border-emerald-500" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-emerald-400"]}
-                >Mañana</button>
-                <input
-                  type="date"
-                  value={adminFormDate.value}
-                  onInput$={(_, el) => adminFormDate.value = el.value}
-                  class="flex-1 px-3 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Duración */}
-            <div>
-              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Duración</label>
-              <div class="flex gap-2">
-                {["60", "90", "120"].map(d => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick$={() => { adminFormDuration.value = d; adminFormTime.value = ""; }}
-                    class={["flex-1 py-2 text-sm font-bold rounded-xl border transition-all", adminFormDuration.value === d ? "bg-slate-800 text-white border-slate-800" : "bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-400"]}
-                  >{d === "60" ? "1 hora" : d === "90" ? "1:30 hs" : "2 horas"}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Horario */}
-            <div>
-              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex justify-between">
-                <span>Horario de Inicio</span>
-                {adminIsChecking.value && <span class="text-emerald-500 animate-pulse">Cargando...</span>}
-                {adminFormTime.value && adminEndTime.value && <span class="text-emerald-600 font-black">{adminFormTime.value} → {adminEndTime.value}</span>}
-              </label>
-              {!adminFormDate.value || !adminFormPitchId.value ? (
-                <div class="text-sm text-slate-400 p-4 bg-slate-50 rounded-xl border border-slate-100 text-center">
-                  Seleccioná cancha y fecha primero.
-                </div>
-              ) : (
-                <div class="grid grid-cols-4 gap-1.5">
-                  {adminTimeOptions.map((time) => {
-                    const disabled = adminIsChecking.value;
-                    const selected = adminFormTime.value === time;
-                    // Check overlap synchronously from cached slots
-                    const start = new Date(`${adminFormDate.value}T${time}:00`).getTime();
-                    const dur = parseInt(adminFormDuration.value, 10);
-                    const end = start + dur * 60000;
-                    const isToday2 = adminFormDate.value === todayStr;
-                    let occupied = false;
-                    if (isToday2) {
-                      const [hh, mm] = time.split(":").map(Number);
-                      const sl = new Date(); sl.setHours(hh, mm, 0, 0);
-                      if (sl <= new Date()) occupied = true;
-                    }
-                    if (!occupied) {
-                      occupied = adminOccupiedSlots.value.some(slot => {
-                        const s = new Date(slot.startTime).getTime();
-                        const e = new Date(slot.endTime).getTime();
-                        return start < e && end > s;
-                      });
-                    }
-                    return (
-                      <button
-                        key={time}
-                        type="button"
-                        disabled={disabled || occupied}
-                        onClick$={() => adminFormTime.value = time}
-                        class={[
-                          "py-1.5 text-xs font-bold rounded-lg border transition-all text-center",
-                          occupied
-                            ? "opacity-30 bg-slate-100 border-slate-100 cursor-not-allowed text-slate-400 line-through"
-                            : selected
-                              ? "bg-emerald-500 border-emerald-400 text-white shadow-sm shadow-emerald-500/20"
-                              : "bg-white border-slate-200 text-slate-700 hover:border-emerald-400 hover:bg-emerald-50"
-                        ]}
-                      >{time}</button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Cliente */}
-            <div class="border-t border-slate-100 pt-4 grid grid-cols-2 gap-4">
-              <div class="col-span-2">
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Nombre del Cliente</label>
-                <input type="text" name="customerName" required placeholder="Ej: Juan Pérez" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm" />
-              </div>
-              <div class="col-span-2">
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Teléfono</label>
-                <input type="tel" name="customerPhone" required placeholder="Ej: 1123456789" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm" />
-              </div>
-            </div>
-
-            {/* Pago */}
-            <div class="border-t border-slate-100 pt-4 grid grid-cols-2 gap-4">
-              <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Precio Total ($)</label>
-                <input type="number" name="price" required min="0" placeholder="0" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm" />
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Seña Pagada ($)</label>
-                <input type="number" name="paidAmount" min="0" defaultValue="0" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm" />
-              </div>
-              <div class="col-span-2">
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Método de Pago</label>
-                <select name="paymentMethod" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 text-sm font-semibold text-slate-700">
-                  <option value="CASH">Efectivo</option>
-                  <option value="TRANSFER">Transferencia</option>
-                  <option value="MERCADO_PAGO">Mercado Pago</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="pt-2">
-              <Button
-                look="primary"
-                type="submit"
-                disabled={createBookingAction.isRunning || !adminFormTime.value || !adminFormDate.value || !adminFormPitchId.value}
-                class="w-full py-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {createBookingAction.isRunning ? "Guardando..." : "Crear Reserva"}
-              </Button>
-            </div>
-            {createBookingAction.value?.failed && (
-              <div class="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-bold">
-                Error al crear la reserva. Verificá los campos e intentá de nuevo.
-              </div>
-            )}
-          </Form>
         </Modal.Panel>
       </Modal.Root>
 
