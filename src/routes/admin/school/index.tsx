@@ -1,8 +1,8 @@
 import { component$, useSignal, useComputed$, $ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, Form, z, zod$, Link, useLocation, useNavigate } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { students, siteSettings } from "~/db/schema";
-import { desc, eq, count } from "drizzle-orm";
+import { students, siteSettings, studentSubscriptions, studentPayments, cashRegisters, cashMovements } from "~/db/schema";
+import { desc, eq, count, and } from "drizzle-orm";
 import { Button, Modal } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { LuTrash2, LuRefreshCw, LuChevronLeft, LuChevronRight } from "@qwikest/icons/lucide";
@@ -22,6 +22,12 @@ export const useStudentsData = routeLoader$(async (event) => {
     orderBy: [desc(students.createdAt)],
     limit,
     offset,
+    with: {
+      subscriptions: {
+        orderBy: [desc(studentSubscriptions.createdAt)],
+        limit: 1,
+      }
+    }
   });
 
   const settings = await db.query.siteSettings.findFirst({
@@ -91,6 +97,7 @@ export const useCreateCategoryAction = routeAction$(
       id: crypto.randomUUID(),
       name: data.name,
       teacher: data.teacher,
+      monthlyFee: data.monthlyFee || 0,
     });
 
     await db.update(siteSettings).set({ schoolCategories: categories }).where(eq(siteSettings.id, 1));
@@ -99,6 +106,7 @@ export const useCreateCategoryAction = routeAction$(
   zod$({
     name: z.string().min(1),
     teacher: z.string().min(1),
+    monthlyFee: z.coerce.number().min(0),
   })
 );
 
@@ -112,7 +120,12 @@ export const useUpdateCategoryAction = routeAction$(
     const categories = (settings?.schoolCategories as any[]) || [];
     const idx = categories.findIndex((c: any) => c.id === data.id);
     if (idx !== -1) {
-      categories[idx] = { ...categories[idx], name: data.name, teacher: data.teacher };
+      categories[idx] = { 
+        ...categories[idx], 
+        name: data.name, 
+        teacher: data.teacher,
+        monthlyFee: data.monthlyFee || 0
+      };
       await db.update(siteSettings).set({ schoolCategories: categories }).where(eq(siteSettings.id, 1));
     }
     return { success: true };
@@ -121,6 +134,7 @@ export const useUpdateCategoryAction = routeAction$(
     id: z.string(),
     name: z.string().min(1),
     teacher: z.string().min(1),
+    monthlyFee: z.coerce.number().min(0),
   })
 );
 
@@ -145,15 +159,73 @@ export const useCreateStudentAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
+    // 1. Get Category Fee from settings
+    const settings = await db.query.siteSettings.findFirst({
+      where: eq(siteSettings.id, 1),
+    });
+    const categories = (settings?.schoolCategories as any[]) || [];
+    const category = categories.find(c => c.name === data.category);
+    const fee = category?.monthlyFee || 0;
+
+    // 2. Check for open cash register
+    const openRegister = await db.query.cashRegisters.findFirst({
+      where: eq(cashRegisters.status, "OPEN"),
+    });
+
+    if (!openRegister) {
+      return { success: false, message: "Debe abrir la caja antes de inscribir un alumno (requiere cobro de primera cuota)." };
+    }
+
+    const studentId = crypto.randomUUID();
+    const now = new Date();
+
+    // 3. Insert Student
     await db.insert(students).values({
-      id: crypto.randomUUID(),
+      id: studentId,
       name: data.name,
       guardianName: data.guardianName,
       guardianPhone: data.guardianPhone,
       guardianEmail: data.guardianEmail,
       category: data.category,
-      monthlyFee: data.monthlyFee || 0,
+      monthlyFee: fee,
       birthDate: data.birthDate ? new Date(data.birthDate) : null,
+    });
+
+    // 4. Create first subscription (Paid)
+    const subscriptionId = crypto.randomUUID();
+    const nextDueDate = new Date();
+    nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+
+    await db.insert(studentSubscriptions).values({
+      id: subscriptionId,
+      studentId,
+      month: now.getMonth() + 1,
+      year: now.getFullYear(),
+      price: fee,
+      status: "PAID",
+      dueDate: nextDueDate,
+    });
+
+    // 5. Create payment record
+    const paymentId = crypto.randomUUID();
+    await db.insert(studentPayments).values({
+      id: paymentId,
+      subscriptionId,
+      amount: fee,
+      paymentMethod: "CASH",
+      paymentDate: now,
+    });
+
+    // 6. Register in Cash Movement
+    await db.insert(cashMovements).values({
+      id: crypto.randomUUID(),
+      registerId: openRegister.id,
+      type: "INCOME",
+      category: "SCHOOL",
+      amount: fee,
+      description: `Inscripción y 1ra cuota: ${data.name} (${data.category})`,
+      paymentMethod: "CASH",
+      referenceId: studentId, // Using studentId as reference for school movements
     });
 
     return { success: true };
@@ -163,20 +235,74 @@ export const useCreateStudentAction = routeAction$(
     guardianName: z.string().optional(),
     guardianPhone: z.string().optional(),
     guardianEmail: z.string().email().optional().or(z.literal("")),
-    category: z.string().optional(),
-    monthlyFee: z.coerce.number().optional(),
+    category: z.string().min(1),
     birthDate: z.string().optional(),
+  })
+);
+
+export const usePayFeeAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const now = new Date();
+
+    // 1. Get student and open register
+    const student = await db.query.students.findFirst({
+      where: eq(students.id, data.studentId),
+    });
+    if (!student) return { success: false, message: "Alumno no encontrado." };
+
+    const openRegister = await db.query.cashRegisters.findFirst({
+      where: eq(cashRegisters.status, "OPEN"),
+    });
+    if (!openRegister) return { success: false, message: "Debe abrir la caja para registrar el pago." };
+
+    // 2. Create new subscription
+    const subscriptionId = crypto.randomUUID();
+    const nextDueDate = new Date();
+    nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+
+    await db.insert(studentSubscriptions).values({
+      id: subscriptionId,
+      studentId: student.id,
+      month: now.getMonth() + 1,
+      year: now.getFullYear(),
+      price: student.monthlyFee,
+      status: "PAID",
+      dueDate: nextDueDate,
+    });
+
+    // 3. Create payment record
+    await db.insert(studentPayments).values({
+      id: crypto.randomUUID(),
+      subscriptionId,
+      amount: student.monthlyFee,
+      paymentMethod: "CASH",
+      paymentDate: now,
+    });
+
+    // 4. Register in Cash
+    await db.insert(cashMovements).values({
+      id: crypto.randomUUID(),
+      registerId: openRegister.id,
+      type: "INCOME",
+      category: "SCHOOL",
+      amount: student.monthlyFee,
+      description: `Pago de cuota: ${student.name} (${student.category})`,
+      paymentMethod: "CASH",
+      referenceId: student.id,
+    });
+
+    return { success: true };
+  },
+  zod$({
+    studentId: z.string(),
   })
 );
 
 export const useDeleteStudentAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-
-    // First delete dependent records (manual cascade for safety)
-    // In a real app we might want to check for payments first or use real DB cascade
     await db.delete(students).where(eq(students.id, data.id));
-
     return { success: true };
   },
   zod$({
@@ -187,6 +313,7 @@ export const useDeleteStudentAction = routeAction$(
 export default component$(() => {
   const studentsData = useStudentsData();
   const createStudentAction = useCreateStudentAction();
+  const payFeeAction = usePayFeeAction();
   const deleteStudentAction = useDeleteStudentAction();
   const seedStudentsAction = useSeedStudentsAction();
 
@@ -207,6 +334,7 @@ export default component$(() => {
   const editingCategoryId = useSignal<string | null>(null);
   const categoryFormName = useSignal("");
   const categoryFormTeacher = useSignal("");
+  const categoryFormFee = useSignal(0);
 
   const isStudentModalOpen = useSignal(false);
 
@@ -263,7 +391,7 @@ export default component$(() => {
                     </button>
                   )}
                 </h2>
-                <Button look="primary" onClick$={() => { editingCategoryId.value = null; categoryFormName.value = ""; categoryFormTeacher.value = ""; isCategoryModalOpen.value = true; }} class="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold py-2 px-4 text-[11px] uppercase tracking-wider shadow-sm">
+                <Button look="primary" onClick$={() => { editingCategoryId.value = null; categoryFormName.value = ""; categoryFormTeacher.value = ""; categoryFormFee.value = 0; isCategoryModalOpen.value = true; }} class="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold py-2 px-4 text-[11px] uppercase tracking-wider shadow-sm">
                   + Nueva
                 </Button>
               </div>
@@ -288,6 +416,7 @@ export default component$(() => {
                       >
                         <div class="font-black text-sm text-slate-800">{cat.name}</div>
                         <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 max-w-[80%] truncate">Prof: {cat.teacher}</div>
+                        <div class="text-[10px] text-emerald-600 font-black mt-1 uppercase tracking-tighter">${cat.monthlyFee?.toLocaleString("es-AR")} / mes</div>
                       </button>
                       <div class="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
@@ -295,6 +424,7 @@ export default component$(() => {
                             editingCategoryId.value = cat.id;
                             categoryFormName.value = cat.name;
                             categoryFormTeacher.value = cat.teacher;
+                            categoryFormFee.value = cat.monthlyFee || 0;
                             isCategoryModalOpen.value = true;
                           }}
                           class="p-1.5 bg-white text-slate-400 hover:text-emerald-600 rounded-md border border-slate-200 shadow-sm transition-colors"
@@ -354,12 +484,15 @@ export default component$(() => {
                             <div class="font-black text-slate-800">${s.monthlyFee?.toLocaleString("es-AR")}</div>
                           </td>
                           <td class="p-4 text-center">
-                            {/* Mock state for now: Paid if last digit of ID is even */}
-                            {parseInt(s.id.slice(-1), 16) % 2 === 0 ? (
-                              <span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Pagado</span>
-                            ) : (
-                              <span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Pendiente</span>
-                            )}
+                            {(() => {
+                              const lastSub = s.subscriptions?.[0];
+                              const isPaid = lastSub?.status === "PAID" && new Date(lastSub.dueDate) > new Date();
+                              return isPaid ? (
+                                <span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Pagado</span>
+                              ) : (
+                                <span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Vencido</span>
+                              );
+                            })()}
                           </td>
                           <td class="p-4 text-center">
                             <div class="text-xs font-bold text-slate-500">{new Date(s.createdAt).toLocaleDateString("es-AR")}</div>
@@ -370,9 +503,26 @@ export default component$(() => {
                           </td>
                           <td class="p-4 text-center">
                             <div class="flex items-center justify-center gap-2">
-                              <Link href={`/admin/school/${s.id}/`} class="text-emerald-600 hover:text-emerald-700 font-bold text-xs uppercase tracking-wider bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors">
-                                Gestión
-                              </Link>
+                              {(() => {
+                                const lastSub = s.subscriptions?.[0];
+                                const isPaid = lastSub?.status === "PAID" && new Date(lastSub.dueDate) > new Date();
+                                if (!isPaid) {
+                                  return (
+                                    <button
+                                      onClick$={() => payFeeAction.submit({ studentId: s.id })}
+                                      disabled={payFeeAction.isRunning}
+                                      class="text-amber-600 hover:text-white hover:bg-amber-500 font-bold text-[10px] uppercase tracking-widest border border-amber-200 px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
+                                    >
+                                      {payFeeAction.isRunning ? "..." : "Cobrar Cuota"}
+                                    </button>
+                                  );
+                                }
+                                return (
+                                  <Link href={`/admin/school/${s.id}/`} class="text-emerald-600 hover:text-emerald-700 font-bold text-xs uppercase tracking-wider bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors">
+                                    Ficha
+                                  </Link>
+                                );
+                              })()}
                               <button
                                 type="button"
                                 class="p-2 text-slate-400 hover:text-red-600 transition-colors bg-slate-50 hover:bg-red-50 rounded-lg border border-slate-200"
@@ -466,6 +616,10 @@ export default component$(() => {
                 <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Profesor a Cargo *</label>
                 <input type="text" name="teacher" bind:value={categoryFormTeacher} required placeholder="Ej: Juan Pérez" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cuota Mensual ($) *</label>
+                <input type="number" name="monthlyFee" bind:value={categoryFormFee} required placeholder="0.00" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-600" />
+              </div>
               <div class="flex justify-end gap-3 pt-4 mt-6 border-t border-slate-100">
                 <Button type="button" onClick$={() => isCategoryModalOpen.value = false} look="ghost" class="font-bold text-slate-500 hover:bg-slate-100 rounded-xl px-4 py-2">
                   Cancelar
@@ -490,6 +644,12 @@ export default component$(() => {
               </button>
             </div>
 
+            {createStudentAction.value?.message && !createStudentAction.value.success && (
+              <div class="mb-4 p-4 bg-red-50 border border-red-100 text-red-600 text-xs font-bold rounded-xl animate-shake">
+                ⚠️ {createStudentAction.value.message}
+              </div>
+            )}
+
             <Form action={createStudentAction} class="space-y-4" onSubmitCompleted$={() => { if (createStudentAction.value?.success) isStudentModalOpen.value = false; }}>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="col-span-full">
@@ -502,16 +662,12 @@ export default component$(() => {
                 </div>
                 <div>
                   <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Categoría</label>
-                  <select name="category" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm">
-                    <option value="">Seleccionar categoría (opcional)</option>
+                  <select name="category" required class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-bold">
+                    <option value="">Seleccionar categoría *</option>
                     {studentsData.value.categories.map((c: any) => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
+                      <option key={c.id} value={c.name}>{c.name} (${c.monthlyFee?.toLocaleString()})</option>
                     ))}
                   </select>
-                </div>
-                <div class="col-span-full">
-                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cuota Mensual ($) *</label>
-                  <input type="number" name="monthlyFee" required defaultValue="15000" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                 </div>
               </div>
 

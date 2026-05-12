@@ -350,3 +350,14 @@ export const pitchSubscriptionsRelations = relations(pitchSubscriptions, ({ one 
     references: [groups.id],
   }),
 }));
+
+export const studentsRelations = relations(students, ({ many }) => ({
+  subscriptions: many(studentSubscriptions),
+}));
+
+export const studentSubscriptionsRelations = relations(studentSubscriptions, ({ one }) => ({
+  student: one(students, {
+    fields: [studentSubscriptions.studentId],
+    references: [students.id],
+  }),
+}));

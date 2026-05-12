@@ -1,8 +1,8 @@
 import { component$, useSignal, useComputed$, useTask$ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, Form, z, zod$ } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { cashRegisters, cashMovements } from "~/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { cashRegisters, cashMovements, bookings, students } from "~/db/schema";
+import { eq, desc, inArray } from "drizzle-orm";
 import { Button, Modal } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 
@@ -49,6 +49,50 @@ export const useCashData = routeLoader$(async (requestEvent) => {
 
     totalCount = allMovements.length;
     paginatedMovements = allMovements.slice(offset, offset + limit);
+
+    // Fetch related bookings for the current page
+    const bookingIds = paginatedMovements
+      .filter((m) => m.category === "BOOKING" && m.referenceId)
+      .map((m) => m.referenceId);
+
+    if (bookingIds.length > 0) {
+      const relatedBookings = await db.query.bookings.findMany({
+        where: inArray(bookings.id, bookingIds),
+        with: {
+          pitch: true,
+          user: true,
+          guestRequest: true,
+        },
+      });
+
+      // Attach booking info to movements
+      paginatedMovements = paginatedMovements.map((m) => {
+        if (m.category === "BOOKING" && m.referenceId) {
+          const booking = relatedBookings.find((b) => b.id === m.referenceId);
+          return { ...m, booking };
+        }
+        return m;
+      });
+    }
+
+    // Fetch related students for SCHOOL category
+    const studentIds = paginatedMovements
+      .filter((m) => m.category === "SCHOOL" && m.referenceId)
+      .map((m) => m.referenceId);
+
+    if (studentIds.length > 0) {
+      const relatedStudents = await db.query.students.findMany({
+        where: inArray(students.id, studentIds),
+      });
+
+      paginatedMovements = paginatedMovements.map((m) => {
+        if (m.category === "SCHOOL" && m.referenceId) {
+          const student = relatedStudents.find((s) => s.id === m.referenceId);
+          return { ...m, student };
+        }
+        return m;
+      });
+    }
   }
 
   const totalIncomes = allMovements.filter(m => m.type === "INCOME").reduce((a, m) => a + m.amount, 0);
@@ -151,6 +195,8 @@ export default component$(() => {
   const isOpen = cashData.value.latestRegister?.status === "OPEN";
   const showCloseModal = useSignal(false);
   const isMovementModalOpen = useSignal(false);
+  const selectedMovement = useSignal<any>(null);
+  const isDetailModalOpen = useSignal(false);
 
   // Arqueo de billetes
   const bills = useSignal<Record<number, number>>(
@@ -393,7 +439,8 @@ export default component$(() => {
                       <th class="p-4">Categoría</th>
                       <th class="p-4">Descripción</th>
                       <th class="p-4">Método</th>
-                      <th class="p-4 pr-6 text-right">Monto</th>
+                      <th class="p-4 text-right">Monto</th>
+                      <th class="p-4 pr-6 text-center">Info</th>
                     </tr>
                   </thead>
                   <tbody class="text-sm text-slate-700">
@@ -426,8 +473,24 @@ export default component$(() => {
                                 <span class="text-xs text-slate-500 font-bold uppercase tracking-widest">{METHOD_META[m.paymentMethod] || m.paymentMethod}</span>
                               </div>
                             </td>
-                            <td class={`p-4 pr-6 text-right font-black text-base ${m.type === "INCOME" ? "text-emerald-600" : "text-red-600"}`}>
+                            <td class={`p-4 text-right font-black text-base ${m.type === "INCOME" ? "text-emerald-600" : "text-red-600"}`}>
                               {m.type === "INCOME" ? "+" : "-"}${m.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                            </td>
+                            <td class="p-4 pr-6 text-center">
+                              {(m.category === "BOOKING" && m.booking) || (m.category === "SCHOOL" && m.student) ? (
+                                <button
+                                  onClick$={() => {
+                                    selectedMovement.value = m;
+                                    isDetailModalOpen.value = true;
+                                  }}
+                                  class="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all active:scale-90"
+                                  title="Ver detalle"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                </button>
+                              ) : (
+                                <span class="text-slate-200">—</span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -473,6 +536,169 @@ export default component$(() => {
           </div>
         )}
       </div>
+
+      {/* Detail Modal */}
+      <Modal.Root bind:show={isDetailModalOpen}>
+        <Modal.Panel class="max-w-md p-0 rounded-3xl overflow-hidden shadow-2xl border-none">
+          {selectedMovement.value && (
+            <div class="flex flex-col">
+              <div class="bg-emerald-600 p-8 text-white relative">
+                <button
+                  onClick$={() => (isDetailModalOpen.value = false)}
+                  class="absolute top-6 right-6 text-white/60 hover:text-white transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+                <div class="text-[10px] font-black uppercase tracking-widest text-emerald-200 mb-2">Detalle de Operación</div>
+                <h2 class="text-2xl font-black tracking-tighter uppercase mb-1">
+                  {CATEGORY_META[selectedMovement.value.category]?.label || "Movimiento"}
+                </h2>
+                <div class="flex items-center gap-2 text-emerald-100 text-xs font-bold">
+                  <span>{new Date(selectedMovement.value.createdAt).toLocaleDateString("es-AR")}</span>
+                  <span>•</span>
+                  <span>{new Date(selectedMovement.value.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
+                </div>
+              </div>
+
+              <div class="p-8 bg-white space-y-8">
+                {/* Movement Info */}
+                <div class="flex justify-between items-end pb-6 border-b border-slate-100">
+                  <div>
+                    <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Monto Registrado</div>
+                    <div class={`text-3xl font-black ${selectedMovement.value.type === "INCOME" ? "text-emerald-600" : "text-red-600"}`}>
+                      {selectedMovement.value.type === "INCOME" ? "+" : "-"}${selectedMovement.value.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Método</div>
+                    <div class="text-sm font-black text-slate-700 uppercase tracking-tight">{METHOD_META[selectedMovement.value.paymentMethod]}</div>
+                  </div>
+                </div>
+
+                {/* Booking Info if available */}
+                {selectedMovement.value.booking && (
+                  <div class="space-y-6">
+                    <div class="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-4">
+                      <div class="flex items-center gap-3">
+                        <div class="p-2 bg-white rounded-xl text-emerald-600 shadow-sm border border-slate-100">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l-3-3Z"/></svg>
+                        </div>
+                        <div>
+                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancha / Turno</div>
+                          <div class="text-sm font-black text-slate-800">{selectedMovement.value.booking.pitch?.name}</div>
+                        </div>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-4 pt-2">
+                        <div>
+                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Fecha</div>
+                          <div class="text-xs font-bold text-slate-600">
+                            {new Date(selectedMovement.value.booking.startTime).toLocaleDateString("es-AR", { weekday: 'long', day: 'numeric', month: 'long' })}
+                          </div>
+                        </div>
+                        <div>
+                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Horario</div>
+                          <div class="text-xs font-bold text-slate-600">
+                            {new Date(selectedMovement.value.booking.startTime).toLocaleTimeString("es-AR", { hour: '2-digit', minute: '2-digit' })} - {new Date(selectedMovement.value.booking.endTime).toLocaleTimeString("es-AR", { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="space-y-4">
+                      <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                        <div>
+                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</div>
+                          <div class="text-sm font-bold text-slate-800">
+                            {selectedMovement.value.booking.user?.name || selectedMovement.value.booking.guestRequest?.name || "Cliente Final"}
+                          </div>
+                          <div class="text-[10px] text-slate-500 font-medium">
+                            {selectedMovement.value.booking.user?.email || selectedMovement.value.booking.guestRequest?.phone || "Sin contacto"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedMovement.value.booking.extras && selectedMovement.value.booking.extras.length > 0 && (
+                        <div class="pt-2">
+                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Servicios Extra</div>
+                          <div class="flex flex-wrap gap-2">
+                            {selectedMovement.value.booking.extras.map((extra: string) => (
+                              <span key={extra} class="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-tight border border-blue-100">
+                                {extra}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* School Info if available */}
+                {selectedMovement.value.category === "SCHOOL" && selectedMovement.value.student && (
+                  <div class="space-y-6">
+                    <div class="bg-blue-50 rounded-2xl p-6 border border-blue-100">
+                      <div class="flex items-center gap-4 mb-4">
+                        <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                        </div>
+                        <div>
+                          <div class="text-[10px] font-black text-blue-400 uppercase tracking-widest">Alumno / Escuelita</div>
+                          <div class="text-base font-black text-blue-900 leading-tight">{selectedMovement.value.student.name}</div>
+                        </div>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-4">
+                        <div>
+                          <div class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Categoría</div>
+                          <div class="px-3 py-1 bg-white rounded-lg border border-blue-100 text-xs font-black text-blue-600 inline-block">
+                            {selectedMovement.value.student.category}
+                          </div>
+                        </div>
+                        <div>
+                          <div class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Tutor</div>
+                          <div class="text-xs font-bold text-blue-800">{selectedMovement.value.student.guardianName || "-"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Info button for other school payments that don't have student attached yet */}
+                {selectedMovement.value.category === "SCHOOL" && !selectedMovement.value.student && (
+                  <div class="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
+                    <p class="text-xs font-bold text-slate-400 leading-relaxed">
+                      Pago de escuelita registrado manualmente. 
+                      No tiene un alumno vinculado automáticamente.
+                    </p>
+                  </div>
+                )}
+
+                {!selectedMovement.value.booking && selectedMovement.value.category !== "SCHOOL" && (
+                  <div class="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
+                    <p class="text-xs font-bold text-slate-400 leading-relaxed">
+                      Este es un movimiento manual registrado directamente en caja. 
+                      No tiene una operación vinculada automáticamente.
+                    </p>
+                  </div>
+                )}
+
+                <div class="pt-4">
+                  <button
+                    onClick$={() => (isDetailModalOpen.value = false)}
+                    class="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10"
+                  >
+                    Cerrar Detalle
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </Modal.Panel>
+      </Modal.Root>
 
       {/* New Movement Modal */}
       <Modal.Root bind:show={isMovementModalOpen}>
