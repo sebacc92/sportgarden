@@ -391,6 +391,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
         totalPrice: bookings.totalPrice,
         paidAmount: bookings.paidAmount,
         paymentStatus: bookings.paymentStatus,
+        isSubscription: bookings.isSubscription,
       },
       user: {
         id: users.id,

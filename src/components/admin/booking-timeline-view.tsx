@@ -13,6 +13,7 @@ type BookingEntry = {
     totalPrice: number;
     paidAmount: number;
     paymentStatus: string;
+    isSubscription: boolean;
   };
   user: { id: string; name: string; phone: string | null } | null;
   guest: { id: string; name: string; phone: string } | null;
@@ -29,32 +30,26 @@ type Props = {
 };
 
 const ALL_STATUSES = [
-  { key: "CONFIRMED",        label: "Confirmado",   dot: "bg-emerald-500", chip: "bg-emerald-100 text-emerald-800 border-emerald-300",  active: "bg-emerald-500 text-white border-emerald-600" },
-  { key: "PENDING_APPROVAL", label: "Pendiente",    dot: "bg-amber-400",   chip: "bg-amber-100 text-amber-800 border-amber-300",         active: "bg-amber-400 text-white border-amber-500" },
-  { key: "CANCELLED",        label: "Cancelado",    dot: "bg-red-400",     chip: "bg-red-100 text-red-800 border-red-300",               active: "bg-red-500 text-white border-red-600" },
-  { key: "COMPLETED",        label: "Completado",   dot: "bg-slate-400",   chip: "bg-slate-100 text-slate-700 border-slate-300",         active: "bg-slate-600 text-white border-slate-700" },
+  { key: "CONFIRMED", label: "Confirmado", dot: "bg-emerald-500", chip: "bg-emerald-100 text-emerald-800 border-emerald-300", active: "bg-emerald-500 text-white border-emerald-600" },
+  { key: "PENDING_APPROVAL", label: "Pendiente", dot: "bg-amber-400", chip: "bg-amber-100 text-amber-800 border-amber-300", active: "bg-amber-400 text-white border-amber-500" },
+  { key: "CANCELLED", label: "Cancelado", dot: "bg-red-400", chip: "bg-red-100 text-red-800 border-red-300", active: "bg-red-500 text-white border-red-600" },
+  { key: "COMPLETED", label: "Completado", dot: "bg-slate-400", chip: "bg-slate-100 text-slate-700 border-slate-300", active: "bg-slate-600 text-white border-slate-700" },
 ] as const;
 
 const STATUS_CARD: Record<string, string> = {
   PENDING_APPROVAL: "bg-amber-50 border-amber-200 text-amber-900",
-  CONFIRMED:        "bg-emerald-50 border-emerald-200 text-emerald-900",
-  CANCELLED:        "bg-red-50 border-red-200 text-red-900",
-  COMPLETED:        "bg-slate-50 border-slate-200 text-slate-700",
-};
-const STATUS_BAR: Record<string, string> = {
-  PENDING_APPROVAL: "bg-amber-400",
-  CONFIRMED:        "bg-emerald-500",
-  CANCELLED:        "bg-red-400",
-  COMPLETED:        "bg-slate-400",
+  CONFIRMED: "bg-emerald-50 border-emerald-200 text-emerald-900",
+  CANCELLED: "bg-red-50 border-red-200 text-red-900",
+  COMPLETED: "bg-slate-50 border-slate-200 text-slate-700",
 };
 const STATUS_LABEL: Record<string, string> = {
   PENDING_APPROVAL: "Pendiente",
-  CONFIRMED:        "Confirmado",
-  CANCELLED:        "Cancelado",
-  COMPLETED:        "Completado",
+  CONFIRMED: "Confirmado",
+  CANCELLED: "Cancelado",
+  COMPLETED: "Completado",
 };
 
-const SLOT_MIN_WIDTH_PX = 110; 
+const SLOT_MIN_WIDTH_PX = 110;
 const PITCH_COL_WIDTH_PX = 148;
 
 export const BookingTimelineView = component$<Props>(
@@ -86,7 +81,7 @@ export const BookingTimelineView = component$<Props>(
         currentTimePx.value = ((h - startHour) * 60 / slotMinutes) * SLOT_MIN_WIDTH_PX;
       };
       compute();
-      
+
       // Scroll to middle on initial load
       if (scrollRef.value && currentTimePx.value !== null) {
         setTimeout(() => {
@@ -124,7 +119,7 @@ export const BookingTimelineView = component$<Props>(
       new Date(d).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
 
     return (
-      <div 
+      <div
         class="flex flex-col h-full overflow-hidden"
         onMouseUp$={() => {
           if (dragStart.value && dragEnd.value && onEmptySlotDragEnd$) {
@@ -236,8 +231,8 @@ export const BookingTimelineView = component$<Props>(
                           {slots.map(slot => {
                             const timeMin = Number(slot.split(":")[0]) * 60 + Number(slot.split(":")[1]);
                             const isDragging = dragStart.value?.pitchId === pitch.id &&
-                                               timeMin >= Math.min(dragStart.value.timeMin, dragEnd.value?.timeMin ?? dragStart.value.timeMin) &&
-                                               timeMin <= Math.max(dragStart.value.timeMin, dragEnd.value?.timeMin ?? dragStart.value.timeMin);
+                              timeMin >= Math.min(dragStart.value.timeMin, dragEnd.value?.timeMin ?? dragStart.value.timeMin) &&
+                              timeMin <= Math.max(dragStart.value.timeMin, dragEnd.value?.timeMin ?? dragStart.value.timeMin);
 
                             return (
                               <div
@@ -266,72 +261,70 @@ export const BookingTimelineView = component$<Props>(
                             );
                           })}
 
-                            {/* Bookings Overlay Layer */}
-                            {pitchBookings.map(({ booking, user, guest }) => {
-                              const s = new Date(booking.startTime);
-                              const e = new Date(booking.endTime);
-                              
-                              const bStart = s.getHours() * 60 + s.getMinutes();
-                              const bEnd = e.getHours() * 60 + e.getMinutes();
-                              
-                              const timelineStart = startHour * 60;
-                              const left = ((bStart - timelineStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
-                              const width = ((bEnd - bStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+                          {/* Bookings Overlay Layer */}
+                          {pitchBookings.map(({ booking, user, guest }) => {
+                            const s = new Date(booking.startTime);
+                            const e = new Date(booking.endTime);
 
-                              const name = guest?.name || user?.name || "—";
-                              const phone = guest?.phone || user?.phone || "";
-                              
-                              // @ts-ignore
-                              const isSubscription = booking.isSubscription;
+                            const bStart = s.getHours() * 60 + s.getMinutes();
+                            const bEnd = e.getHours() * 60 + e.getMinutes();
 
-                              return (
-                                <div
-                                  key={booking.id}
-                                  onClick$={() => onBookingClick$ && onBookingClick$(booking.id)}
-                                  style={{
-                                    left: `${left}px`,
-                                    width: `${width}px`,
-                                    top: '8px',
-                                    height: 'calc(100% - 16px)'
-                                  }}
-                                  class={[
-                                    "absolute z-20 rounded-xl border-l-4 px-3 py-2 cursor-pointer transition-all overflow-hidden flex flex-col justify-between group shadow-sm hover:z-30 hover:scale-[1.02] hover:shadow-xl",
-                                    STATUS_CARD[booking.status] || "bg-white border-slate-200"
-                                  ]}
-                                >
-                                  <div class="flex flex-col gap-0.5">
-                                    <div class="flex items-start justify-between gap-2">
-                                      <span class="font-black text-[13px] text-slate-800 leading-tight truncate">{name}</span>
-                                      {isSubscription && (
-                                        <div class="shrink-0 text-slate-500" title="Turno Fijo">
-                                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3M15.5 7.5 14 6" /><path d="M21 7V2h-5" /></svg>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                      {fmt(booking.startTime)} — {fmt(booking.endTime)}
-                                    </div>
+                            const timelineStart = startHour * 60;
+                            const left = ((bStart - timelineStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+                            const width = ((bEnd - bStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+
+                            const name = guest?.name || user?.name || "—";
+
+                            const isSubscription = booking.isSubscription;
+
+                            return (
+                              <div
+                                key={booking.id}
+                                onClick$={() => onBookingClick$ && onBookingClick$(booking.id)}
+                                style={{
+                                  left: `${left}px`,
+                                  width: `${width}px`,
+                                  top: '8px',
+                                  height: 'calc(100% - 16px)'
+                                }}
+                                class={[
+                                  "absolute z-20 rounded-xl border-l-4 px-3 py-2 cursor-pointer transition-all overflow-hidden flex flex-col justify-between group shadow-sm hover:z-30 hover:scale-[1.02] hover:shadow-xl",
+                                  STATUS_CARD[booking.status] || "bg-white border-slate-200"
+                                ]}
+                              >
+                                <div class="flex flex-col gap-0.5">
+                                  <div class="flex items-start justify-between gap-2">
+                                    <span class="font-black text-[13px] text-slate-800 leading-tight truncate">{name}</span>
+                                    {isSubscription && (
+                                      <div class="shrink-0 text-slate-500" title="Turno Fijo">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3M15.5 7.5 14 6" /><path d="M21 7V2h-5" /></svg>
+                                      </div>
+                                    )}
                                   </div>
-
-                                  <div class="flex items-end justify-between mt-auto pt-1 gap-2">
-                                    <div class="text-[9px] font-black opacity-40 uppercase tracking-widest px-1.5 py-0.5 bg-black/5 rounded">
-                                      {STATUS_LABEL[booking.status]}
-                                    </div>
-                                    <div class="text-xs font-black text-right shrink-0 text-slate-800">
-                                      ${booking.totalPrice.toLocaleString('es-AR')}
-                                    </div>
+                                  <div class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                                    {fmt(booking.startTime)} — {fmt(booking.endTime)}
                                   </div>
                                 </div>
-                              );
-                            })}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+
+                                <div class="flex items-end justify-between mt-auto pt-1 gap-2">
+                                  <div class="text-[9px] font-black opacity-40 uppercase tracking-widest px-1.5 py-0.5 bg-black/5 rounded">
+                                    {STATUS_LABEL[booking.status]}
+                                  </div>
+                                  <div class="text-xs font-black text-right shrink-0 text-slate-800">
+                                    ${booking.totalPrice.toLocaleString('es-AR')}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

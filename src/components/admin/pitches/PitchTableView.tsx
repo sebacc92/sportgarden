@@ -20,6 +20,7 @@ export const PitchTableView = component$((props: PitchTableViewProps) => {
             <tr class="bg-slate-50 text-sm font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
               <th class="px-6 py-5">Foto</th>
               <th class="px-6 py-5">Cancha</th>
+              <th class="px-6 py-5">Superficie</th>
               <th class="px-6 py-5">Tipo</th>
               <th class="px-6 py-5">Precio x Hora</th>
               <th class="px-6 py-5">Seña</th>
@@ -47,7 +48,14 @@ export const PitchTableView = component$((props: PitchTableViewProps) => {
                     {pitch.notes && <div class="text-xs text-slate-400 font-medium mt-1 max-w-[250px]">{pitch.notes}</div>}
                   </td>
                   <td class="px-6 py-6">
-                    <span class="bg-slate-800 text-white px-3 py-1 rounded-lg text-sm font-black tracking-wider">{pitch.type}</span>
+                    <span class="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-200">
+                      {pitch.surface || "Sintético"}
+                    </span>
+                  </td>
+                  <td class="px-6 py-6">
+                    <span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-emerald-200">
+                      {pitch.type}
+                    </span>
                   </td>
                   <td class="px-6 py-6 font-black text-2xl text-slate-800 tracking-tighter">${pitch.pricePerHour}</td>
                   <td class="px-6 py-6 text-xl font-black text-slate-600 tracking-tight">
@@ -55,12 +63,12 @@ export const PitchTableView = component$((props: PitchTableViewProps) => {
                   </td>
                   <td class="px-6 py-6">
                     <div class="flex flex-wrap gap-2">
-                      {pitch.isCovered && <span class="bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-widest border border-blue-100">Cubierta</span>}
-                      {pitch.isLit && <span class="bg-amber-50 text-amber-600 px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-widest border border-amber-100">Luz</span>}
+                      {pitch.isCovered && <span class="bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-blue-100">Cubierta</span>}
+                      {pitch.isLit && <span class="bg-amber-50 text-amber-600 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-amber-100">Luz</span>}
                     </div>
                   </td>
                   <td class="px-6 py-6">
-                    <span class={["px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-[0.1em] border-2", pitch.isActive ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100"]}>
+                    <span class={["px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] border-2", pitch.isActive ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100"]}>
                       {pitch.isActive ? "Activa" : "Inactiva"}
                     </span>
                   </td>

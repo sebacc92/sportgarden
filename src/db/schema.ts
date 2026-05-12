@@ -32,6 +32,8 @@ export const pitches = sqliteTable("pitches", {
   notes: text("notes"), // Free text for admin notes/clarifications
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   imageUrl: text("image_url"),
+  sport: text("sport").notNull().default("Fútbol"),
+  surface: text("surface").notNull().default("Sintético"),
 });
 
 // --- Bookings (Reservas) ---

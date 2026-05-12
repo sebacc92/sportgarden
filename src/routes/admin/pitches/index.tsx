@@ -61,6 +61,8 @@ export const useCreatePitchAction = routeAction$(
       notes: data.notes || null,
       isActive: true,
       imageUrl: uploadedImageUrl,
+      sport: data.sport || "Fútbol",
+      surface: data.surface || "Sintético",
     });
     return { success: true };
   },
@@ -75,6 +77,8 @@ export const useCreatePitchAction = routeAction$(
     notes: z.string().optional(),
     imageUrl: z.string().optional(),
     image: z.any().optional(),
+    sport: z.string().optional().default("Fútbol"),
+    surface: z.string().optional().default("Sintético"),
   })
 );
 
@@ -105,6 +109,8 @@ export const useUpdatePitchAction = routeAction$(
         depositAmount: Number(data.depositAmount) || 0,
         notes: data.notes || null,
         imageUrl: uploadedImageUrl,
+        sport: data.sport || "Fútbol",
+        surface: data.surface || "Sintético",
       })
       .where(eq(pitches.id, data.id));
 
@@ -122,6 +128,8 @@ export const useUpdatePitchAction = routeAction$(
     notes: z.string().optional(),
     imageUrl: z.string().optional(),
     image: z.any().optional(),
+    sport: z.string().optional().default("Fútbol"),
+    surface: z.string().optional().default("Sintético"),
   })
 );
 
@@ -228,6 +236,8 @@ export default component$(() => {
     id: string | null;
     name: string;
     type: string;
+    sport: string;
+    surface: string;
     pricePerHour: number;
     depositType: string;
     depositAmount: number;
@@ -299,15 +309,12 @@ export default component$(() => {
   });
 
   const openEditModal = $((pitch: any) => {
-    selectedPitchForPricing.value = {
-      id: pitch.id,
-      name: pitch.name,
-      rules: pitch.pricingRules || []
-    };
     editModalState.value = {
       id: pitch.id,
       name: pitch.name,
       type: pitch.type,
+      sport: pitch.sport || "Fútbol",
+      surface: pitch.surface || "Sintético",
       pricePerHour: pitch.pricePerHour,
       depositType: pitch.depositType || "PERCENTAGE",
       depositAmount: pitch.depositAmount || 0,
@@ -317,6 +324,26 @@ export default component$(() => {
       imageUrl: pitch.imageUrl,
       previewUrl: null,
     };
+    selectedPitchForPricing.value = { id: pitch.id, name: pitch.name, rules: pitch.pricingRules || [] };
+  });
+
+  const handleAddNew = $(() => {
+    editModalState.value = {
+      id: null,
+      name: "",
+      type: "F5",
+      sport: "Fútbol",
+      surface: "Sintético",
+      pricePerHour: 0,
+      depositType: "PERCENTAGE",
+      depositAmount: 0,
+      isCovered: false,
+      isLit: false,
+      notes: "",
+      imageUrl: null,
+      previewUrl: null,
+    };
+    selectedPitchForPricing.value = null;
   });
 
   const selectForDeletion = $((pitch: any) => {

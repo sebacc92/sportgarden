@@ -43,12 +43,13 @@ export const PitchCard = component$((props: PitchCardProps) => {
               )}
             </h3>
             <div class="flex flex-wrap gap-1.5">
-              <span class="bg-slate-800 text-white px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest">{pitch.type}</span>
+              <span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-200">{pitch.surface || "Sintético"}</span>
+              <span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-widest border border-emerald-200">{pitch.type}</span>
               {pitch.isCovered && (
                 <span class="text-blue-600 font-black bg-blue-50 px-2 py-0.5 rounded-lg text-[10px] uppercase tracking-widest border border-blue-100">Cubierta</span>
               )}
               {pitch.isLit && (
-                <span class="text-amber-600 font-black bg-amber-50 px-2 py-0.5 rounded-lg text-[10px] uppercase tracking-widest border border-amber-100">Iluminada</span>
+                <span class="text-amber-600 font-black bg-amber-50 px-2 py-0.5 rounded-lg text-[10px] uppercase tracking-widest border border-amber-100">Luz</span>
               )}
               {!pitch.isActive && (
                 <span class="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] uppercase font-black rounded-lg tracking-widest border border-red-200">Inactiva</span>
