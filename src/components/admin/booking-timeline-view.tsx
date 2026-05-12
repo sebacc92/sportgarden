@@ -54,7 +54,7 @@ const STATUS_LABEL: Record<string, string> = {
   COMPLETED:        "Completado",
 };
 
-const SLOT_MIN_WIDTH_PX = 150; 
+const SLOT_MIN_WIDTH_PX = 110; 
 const PITCH_COL_WIDTH_PX = 148;
 
 export const BookingTimelineView = component$<Props>(
@@ -194,10 +194,10 @@ export const BookingTimelineView = component$<Props>(
             )}
 
             <table class="border-collapse w-full select-none">
-              <thead class="sticky top-0 z-20">
+              <thead class="sticky top-0 z-50">
                 <tr>
                   <th
-                    class="sticky left-0 z-40 bg-slate-100 border-b-2 border-r-2 border-slate-200 px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-left"
+                    class="sticky left-0 z-60 bg-slate-100 border-b-2 border-r-2 border-slate-200 px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-left"
                     style={`min-width: ${PITCH_COL_WIDTH_PX}px; width: ${PITCH_COL_WIDTH_PX}px`}
                   >
                     Cancha
@@ -205,7 +205,7 @@ export const BookingTimelineView = component$<Props>(
                   {slots.map(slot => (
                     <th
                       key={slot}
-                      class="bg-slate-50 border-b-2 border-r border-slate-200 py-3 text-[11px] font-black text-slate-500 text-center whitespace-nowrap"
+                      class="bg-slate-50 border-b-2 border-r border-slate-200 py-3 text-sm font-black text-slate-500 text-center whitespace-nowrap"
                       style={`min-width: ${SLOT_MIN_WIDTH_PX}px; width: ${SLOT_MIN_WIDTH_PX}px`}
                     >
                       {slot}
@@ -220,14 +220,17 @@ export const BookingTimelineView = component$<Props>(
                   return (
                     <tr key={pitch.id} class={idx % 2 === 0 ? "bg-white" : "bg-slate-50/70"}>
                       <td
-                        class="sticky left-0 z-40 bg-inherit border-b border-r-2 border-slate-200 px-4 py-3 align-middle shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]"
+                        class={cn(
+                          "sticky left-0 z-40 border-b border-r-2 border-slate-200 px-4 py-3 align-middle shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]",
+                          idx % 2 === 0 ? "bg-white" : "bg-slate-50"
+                        )}
                         style={`min-width: ${PITCH_COL_WIDTH_PX}px; width: ${PITCH_COL_WIDTH_PX}px`}
                       >
                         <div class="font-black text-slate-800 text-sm leading-tight">{pitch.name}</div>
                         <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{pitch.type}</div>
                       </td>
 
-                      <td colSpan={slots.length} class="p-0 border-b border-slate-200 relative align-top">
+                      <td colSpan={slots.length} class="p-0 border-b border-slate-200 relative align-top z-10">
                         <div class="flex h-[110px] relative">
                           {/* Background Grid Cells */}
                           {slots.map(slot => {
