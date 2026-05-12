@@ -199,7 +199,7 @@ export default component$(() => {
       {/* Sidebar */}
       <aside
         class={[
-          "bg-slate-950 text-slate-300 flex flex-col shrink-0 shadow-xl z-50 transition-all duration-300 relative",
+          "bg-slate-950 text-slate-300 flex flex-col shrink-0 shadow-xl z-50 transition-all duration-300 relative print:hidden",
           isCollapsed.value ? "w-20" : "w-64"
         ]}
       >
@@ -347,7 +347,7 @@ export default component$(() => {
           
           if (openedYMD !== todayYMD && openedDate < today) {
             return (
-              <div class="bg-amber-500 text-white px-8 py-3 flex items-center justify-between gap-4 shrink-0 shadow-lg z-20">
+              <div class="bg-amber-500 text-white px-8 py-3 flex items-center justify-between gap-4 shrink-0 shadow-lg z-20 print:hidden">
                 <div class="flex items-center gap-4">
                   <div class="bg-white/20 p-2 rounded-xl">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>

@@ -2,7 +2,7 @@ import { component$, useSignal, useComputed$, $ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, Form, z, zod$, Link, useLocation, useNavigate } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { students, siteSettings, studentSubscriptions, studentPayments, cashRegisters, cashMovements } from "~/db/schema";
-import { desc, eq, count, and } from "drizzle-orm";
+import { desc, eq, count } from "drizzle-orm";
 import { Button, Modal } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { LuTrash2, LuRefreshCw, LuChevronLeft, LuChevronRight } from "@qwikest/icons/lucide";
@@ -485,8 +485,8 @@ export default component$(() => {
                           </td>
                           <td class="p-4 text-center">
                             {(() => {
-                              const lastSub = s.subscriptions?.[0];
-                              const isPaid = lastSub?.status === "PAID" && new Date(lastSub.dueDate) > new Date();
+                               const lastSub = s.subscriptions?.[0];
+                              const isPaid = lastSub?.status === "PAID" && lastSub.dueDate && new Date(lastSub.dueDate) > new Date();
                               return isPaid ? (
                                 <span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Pagado</span>
                               ) : (
@@ -505,7 +505,7 @@ export default component$(() => {
                             <div class="flex items-center justify-center gap-2">
                               {(() => {
                                 const lastSub = s.subscriptions?.[0];
-                                const isPaid = lastSub?.status === "PAID" && new Date(lastSub.dueDate) > new Date();
+                                const isPaid = lastSub?.status === "PAID" && lastSub.dueDate && new Date(lastSub.dueDate) > new Date();
                                 if (!isPaid) {
                                   return (
                                     <button
@@ -664,9 +664,9 @@ export default component$(() => {
                   <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Categoría</label>
                   <select name="category" required class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-bold">
                     <option value="">Seleccionar categoría *</option>
-                    {studentsData.value.categories.map((c: any) => (
-                      <option key={c.id} value={c.name}>{c.name} (${c.monthlyFee?.toLocaleString()})</option>
-                    ))}
+                      {studentsData.value.categories.map((c: any) => (
+                        <option key={c.id} value={c.name}>{`${c.name} ($${c.monthlyFee?.toLocaleString()})`}</option>
+                      ))}
                   </select>
                 </div>
               </div>

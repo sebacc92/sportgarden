@@ -220,8 +220,25 @@ export default component$(() => {
   });
 
   return (
-    <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans">
+    <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans print:bg-white print:p-0">
+      <style>{`
+        @media print {
+          @page { margin: 1cm; }
+          body { background: white !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          .shadow-sm, .shadow-md, .shadow-xl { box-shadow: none !important; }
+          .rounded-2xl, .rounded-3xl { border-radius: 4px !important; }
+          .border { border-color: #e2e8f0 !important; }
+        }
+      `}</style>
+      
       <div class="max-w-6xl mx-auto space-y-5">
+        
+        {/* Print-only Header */}
+        <div class="hidden print:block mb-6 border-b border-slate-900 pb-4">
+          <h1 class="text-xl font-black">SportGarden - Reporte de Caja</h1>
+          <p class="text-xs text-slate-500 font-bold uppercase">{new Date().toLocaleString("es-AR")}</p>
+        </div>
 
         {/* Nav */}
         <div class="flex gap-1 border-b border-slate-200 pb-4 print:hidden">
@@ -231,7 +248,7 @@ export default component$(() => {
         </div>
 
         {/* Header */}
-        <div class="flex flex-wrap justify-between items-start gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="flex flex-wrap justify-between items-start gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 print:shadow-none print:border-slate-300">
           <div>
             <h1 class="text-2xl font-black tracking-tight text-slate-800">Caja Actual</h1>
             {isOpen ? (
@@ -343,7 +360,7 @@ export default component$(() => {
           <div class="space-y-6">
 
             {/* Stats Overview */}
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:grid-cols-2">
               <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
                 <div class="flex items-center gap-3 mb-3">
                   <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
@@ -418,13 +435,13 @@ export default component$(() => {
               <div class="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center print:bg-white print:p-0 print:pb-3">
                 <div class="flex items-center gap-3">
                   <h2 class="text-lg font-black text-slate-800">Movimientos del Turno</h2>
-                  <div class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-md text-[10px] font-black uppercase tracking-widest">
+                  <div class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-md text-[10px] font-black uppercase tracking-widest print:hidden">
                     {cashData.value.pagination.totalCount} registros
                   </div>
                 </div>
                 <button
                   onClick$={() => (isMovementModalOpen.value = true)}
-                  class="flex items-center gap-2 text-xs font-black text-emerald-600 hover:text-emerald-700 transition-colors uppercase tracking-widest"
+                  class="flex items-center gap-2 text-xs font-black text-emerald-600 hover:text-emerald-700 transition-colors uppercase tracking-widest print:hidden"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                   Agregar Movimiento
@@ -440,7 +457,7 @@ export default component$(() => {
                       <th class="p-4">Descripción</th>
                       <th class="p-4">Método</th>
                       <th class="p-4 text-right">Monto</th>
-                      <th class="p-4 pr-6 text-center">Info</th>
+                      <th class="p-4 pr-6 text-center print:hidden">Info</th>
                     </tr>
                   </thead>
                   <tbody class="text-sm text-slate-700">
@@ -476,7 +493,7 @@ export default component$(() => {
                             <td class={`p-4 text-right font-black text-base ${m.type === "INCOME" ? "text-emerald-600" : "text-red-600"}`}>
                               {m.type === "INCOME" ? "+" : "-"}${m.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                             </td>
-                            <td class="p-4 pr-6 text-center">
+                            <td class="p-4 pr-6 text-center print:hidden">
                               {(m.category === "BOOKING" && m.booking) || (m.category === "SCHOOL" && m.student) ? (
                                 <button
                                   onClick$={() => {
@@ -502,7 +519,7 @@ export default component$(() => {
 
               {/* Pagination Footer */}
               {cashData.value.pagination.totalPages > 1 && (
-                <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+                <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between print:hidden">
                   <div class="text-xs font-bold text-slate-400 uppercase tracking-widest">
                     Página {cashData.value.pagination.currentPage} de {cashData.value.pagination.totalPages}
                   </div>
