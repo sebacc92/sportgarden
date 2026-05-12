@@ -44,7 +44,7 @@ export const useLoginAction = routeAction$(
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, user.id));
 
-    throw requestEvent.redirect(302, '/admin');
+    throw requestEvent.redirect(302, '/admin/calendar/');
   },
   zod$({
     username: z.string().min(1, 'Ingresa un usuario'),

@@ -106,6 +106,7 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
                       <option value="CASH">Efectivo</option>
                       <option value="TRANSFER">Transferencia</option>
                       <option value="MERCADO_PAGO">Mercado Pago</option>
+                      <option value="CURRENT_ACCOUNT">Cuenta Corriente</option>
                     </select>
                   </div>
                   {addPaymentAction.value?.failed && (

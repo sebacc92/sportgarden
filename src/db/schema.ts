@@ -60,7 +60,7 @@ export const bookings = sqliteTable("bookings", {
   preferenceId: text("preference_id"),
   paymentId: text("payment_id"),
   paymentMethod: text("payment_method", {
-    enum: ["CASH", "TRANSFER", "MERCADO_PAGO", "OTHER"],
+    enum: ["CASH", "TRANSFER", "MERCADO_PAGO", "CURRENT_ACCOUNT", "OTHER"],
   })
     .notNull()
     .default("CASH"),

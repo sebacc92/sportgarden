@@ -18,7 +18,7 @@ interface CreateBookingModalProps {
   adminNotes: Signal<string>;
   adminOccupiedSlots: Signal<{ startTime: string; endTime: string }[]>;
   adminIsChecking: Signal<boolean>;
-  adminSubDays: any; // Record<number, { active: boolean, startTime: string, duration: string }>
+  adminSubSchedules: { slots: { id: string, dayOfWeek: number, startTime: string, duration: string, pitchId: string }[] };
   adminSearchTerm: Signal<string>;
   adminSearchResults: Signal<any[]>;
   adminSelectedUserId: Signal<string>;
@@ -48,7 +48,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
     adminNotes,
     adminOccupiedSlots,
     adminIsChecking,
-    adminSubDays,
+    adminSubSchedules,
     adminSearchTerm,
     adminSearchResults,
     adminSelectedUserId,
@@ -65,33 +65,31 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
   } = props;
 
   const subscriptionSchedulesJSON = useComputed$(() => {
-    const schedules: { dayOfWeek: number, startTime: string, endTime: string, price: number }[] = [];
-    const pitch = calendarData.pitches.find((p: any) => p.id === adminFormPitchId.value);
-    const basePrice = pitch ? pitch.pricePerHour : 0;
+    const schedules: { dayOfWeek: number, startTime: string, endTime: string, price: number, pitchId: string }[] = [];
+    
+    for (const slot of adminSubSchedules.slots) {
+      const pitch = calendarData.pitches.find((p: any) => p.id === slot.pitchId) || calendarData.pitches.find((p: any) => p.id === adminFormPitchId.value);
+      const basePrice = pitch ? pitch.pricePerHour : 0;
+      
+      const sTime = slot.startTime || "18:00";
+      const duration = parseInt(slot.duration, 10);
 
-    for (let i = 0; i <= 6; i++) {
-      if (adminSubDays[i].active) {
-        const d = adminSubDays[i];
-        const sTime = d.startTime || adminFormTime.value || "18:00";
-        const duration = parseInt(d.duration, 10);
+      const [startHour, startMin] = sTime.split(":").map(Number);
+      const totalStartMins = startHour * 60 + startMin;
+      const totalEndMins = totalStartMins + duration;
+      const endHour = Math.floor(totalEndMins / 60);
+      const endMin = totalEndMins % 60;
+      const eTime = `${String(endHour % 24).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
 
-        const startHour = parseInt(sTime.split(":")[0], 10);
-        const startMin = parseInt(sTime.split(":")[1], 10);
-        const totalStartMins = startHour * 60 + startMin;
-        const totalEndMins = totalStartMins + duration;
-        const endHour = Math.floor(totalEndMins / 60);
-        const endMin = totalEndMins % 60;
-        const eTime = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
+      const schedulePrice = (basePrice / 60) * duration;
 
-        const schedulePrice = (basePrice / 60) * duration;
-
-        schedules.push({
-          dayOfWeek: i,
-          startTime: sTime,
-          endTime: eTime,
-          price: schedulePrice
-        });
-      }
+      schedules.push({
+        dayOfWeek: slot.dayOfWeek,
+        startTime: sTime,
+        endTime: eTime,
+        price: schedulePrice,
+        pitchId: slot.pitchId
+      });
     }
     return JSON.stringify(schedules);
   });
@@ -161,7 +159,14 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
             const formDateStr = `${dateStr}T${adminFormTime.value}`;
             const isPast = dateStr && adminFormTime.value ? formDateStr < nowBAStr : false;
 
-            const basePrice = pitch ? pitch.pricePerHour * (parseInt(adminFormDuration.value) / 60) : 0;
+            let basePrice = 0;
+            if (adminIsSubscription.value) {
+              const schedules = JSON.parse(subscriptionSchedulesJSON.value);
+              basePrice = schedules.reduce((acc: number, s: any) => acc + s.price, 0);
+            } else {
+              basePrice = pitch ? pitch.pricePerHour * (parseInt(adminFormDuration.value) / 60) : 0;
+            }
+
             const extrasCost = adminSelectedExtras.value.reduce((acc, name) => {
               const extra = calendarData.extraServices.find((e: any) => e.name === name);
               return acc + (extra ? extra.price : 0);
@@ -353,44 +358,61 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                         Detalles del Turno
                       </h3>
 
-                      <div class="grid grid-cols-2 gap-4">
-                        <div>
-                          <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cancha</label>
-                          <select
-                            name="pitchId"
-                            class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium"
-                            value={adminFormPitchId.value}
-                            onChange$={(_, el) => adminFormPitchId.value = el.value}
-                            required
-                          >
-                            <option value="">Seleccionar cancha</option>
-                            {calendarData.pitches.map((p: any) => <option key={p.id} value={p.id}>{`${p.name} ${p.type}`}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <div class="flex items-center justify-between mb-1">
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">Fecha</label>
-                            <button
-                              type="button"
-                              onClick$={() => {
-                                const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
-                                adminFormDate.value = today;
-                              }}
-                              class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors"
-                            >
-                              HOY
-                            </button>
-                          </div>
-                          <input
-                            type="date"
-                            name="date"
-                            value={adminFormDate.value}
-                            onChange$={(_, el) => adminFormDate.value = el.value}
-                            required
-                            class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium"
-                          />
+                      <div class="pt-2">
+                        <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Tipo de Turno</label>
+                        <div class="flex gap-4">
+                          <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 transition-colors">
+                            <input type="radio" name="isSubscriptionDisplay" checked={!adminIsSubscription.value} onChange$={() => adminIsSubscription.value = false} class="w-4 h-4 accent-blue-600 cursor-pointer" />
+                            <span class="text-sm font-bold text-slate-700">Turno Eventual</span>
+                          </label>
+                          <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 transition-colors">
+                            <input type="radio" name="isSubscriptionDisplay" checked={adminIsSubscription.value} onChange$={() => adminIsSubscription.value = true} class="w-4 h-4 accent-blue-600 cursor-pointer" />
+                            <span class="text-sm font-bold text-slate-700">Turno Fijo</span>
+                          </label>
+                          <input type="hidden" name="isSubscription" value={adminIsSubscription.value ? "true" : "false"} />
                         </div>
                       </div>
+
+                      {!adminIsSubscription.value && (
+                        <div class="grid grid-cols-2 gap-4">
+                          <div>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cancha</label>
+                            <select
+                              name="pitchId"
+                              class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium"
+                              value={adminFormPitchId.value}
+                              onChange$={(_, el) => adminFormPitchId.value = el.value}
+                              required={!adminIsSubscription.value}
+                            >
+                              <option value="">Seleccionar cancha</option>
+                              {calendarData.pitches.map((p: any) => <option key={p.id} value={p.id}>{`${p.name} ${p.type}`}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <div class="flex items-center justify-between mb-1">
+                              <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">Fecha</label>
+                              <button
+                                type="button"
+                                onClick$={() => {
+                                  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+                                  adminFormDate.value = today;
+                                }}
+                                class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors"
+                              >
+                                HOY
+                              </button>
+                            </div>
+                            <input
+                              type="date"
+                              name="date"
+                              value={adminFormDate.value}
+                              onChange$={(_, el) => adminFormDate.value = el.value}
+                              required={!adminIsSubscription.value}
+                              class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium"
+                            />
+                          </div>
+                        </div>
+                      )}
 
                       {!adminIsSubscription.value ? (
                         <div class="grid grid-cols-2 gap-4">
@@ -401,7 +423,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                               class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium font-mono"
                               value={adminFormTime.value}
                               onChange$={(_, el) => adminFormTime.value = el.value}
-                              required
+                              required={!adminIsSubscription.value}
                             >
                               <option value="">--:-- hs</option>
                               {adminTimeOptions.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
@@ -423,6 +445,10 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                               <option value="180">3 horas</option>
                               <option value="210">3.5 horas</option>
                               <option value="240">4 horas</option>
+                              <option value="270">4.5 horas</option>
+                              <option value="300">5 horas</option>
+                              <option value="330">5.5 horas</option>
+                              <option value="360">6 horas</option>
                             </select>
                           </div>
                         </div>
@@ -433,70 +459,144 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                         </>
                       )}
 
-                      <div class="pt-2">
-                        <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Tipo de Turno</label>
-                        <div class="flex gap-4">
-                          <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 transition-colors">
-                            <input type="radio" name="isSubscriptionDisplay" checked={!adminIsSubscription.value} onChange$={() => adminIsSubscription.value = false} class="w-4 h-4 accent-blue-600 cursor-pointer" />
-                            <span class="text-sm font-bold text-slate-700">Turno Eventual</span>
-                          </label>
-                          <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 transition-colors">
-                            <input type="radio" name="isSubscriptionDisplay" checked={adminIsSubscription.value} onChange$={() => adminIsSubscription.value = true} class="w-4 h-4 accent-blue-600 cursor-pointer" />
-                            <span class="text-sm font-bold text-slate-700">Turno Fijo</span>
-                          </label>
-                          <input type="hidden" name="isSubscription" value={adminIsSubscription.value ? "true" : "false"} />
-                        </div>
-                      </div>
+                      {adminIsSubscription.value && (
+                        <input type="hidden" name="pitchId" value={adminSubSchedules.slots[0]?.pitchId || ""} />
+                      )}
 
                       {adminIsSubscription.value && (
                         <div class="animate-in fade-in slide-in-from-top-2 duration-300 mt-2 bg-blue-50/50 p-4 rounded-xl border border-blue-100 space-y-4">
                           <div>
-                            <label class="block text-[11px] font-bold text-blue-700 uppercase tracking-wider mb-2">Días y Horarios</label>
+                            <div class="flex items-center justify-between mb-3">
+                              <label class="block text-[11px] font-bold text-blue-700 uppercase tracking-wider">Configuración de Horarios Fijos</label>
+                              <button
+                                type="button"
+                                onClick$={() => {
+                                  adminSubSchedules.slots = [
+                                    ...adminSubSchedules.slots,
+                                    { id: crypto.randomUUID(), dayOfWeek: 1, startTime: "18:00", duration: "60", pitchId: adminFormPitchId.value || calendarData.pitches[0]?.id }
+                                  ];
+                                }}
+                                class="text-[10px] font-black bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-all uppercase tracking-widest shadow-sm flex items-center gap-1.5"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                Agregar Turno
+                              </button>
+                            </div>
+                            
                             <input type="hidden" name="subscriptionSchedules" value={subscriptionSchedulesJSON.value} />
-                            <div class="space-y-2">
-                              {[{ id: 1, label: 'Lunes' }, { id: 2, label: 'Martes' }, { id: 3, label: 'Miércoles' }, { id: 4, label: 'Jueves' }, { id: 5, label: 'Viernes' }, { id: 6, label: 'Sábado' }, { id: 0, label: 'Domingo' }].map(day => (
-                                <div key={day.id} class="flex items-center gap-3 p-3 bg-white border border-blue-200 rounded-xl">
-                                  <label class="flex items-center gap-2 cursor-pointer min-w-[100px]">
-                                    <input type="checkbox" checked={adminSubDays[day.id].active} onChange$={(_, el) => adminSubDays[day.id].active = el.checked} class="w-4 h-4 accent-blue-600 rounded" />
-                                    <span class="text-sm font-bold text-slate-700">{day.label}</span>
-                                  </label>
+                            
+                            <div class="space-y-3">
+                              {adminSubSchedules.slots.length === 0 && (
+                                <div class="text-center py-10 border-2 border-dashed border-blue-200 rounded-2xl bg-white/50">
+                                  <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-500">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                  </div>
+                                  <p class="text-xs font-black text-blue-800 uppercase tracking-widest">Sin horarios definidos</p>
+                                  <p class="text-[10px] text-blue-400 mt-1 font-medium italic">Perfecto para escuelas con múltiples horarios y canchas.</p>
+                                </div>
+                              )}
+                              
+                              {adminSubSchedules.slots.map((slot) => (
+                                <div key={slot.id} class="bg-white p-4 rounded-2xl border border-blue-200 shadow-sm space-y-3 relative group/slot animate-in zoom-in-95 duration-200">
+                                  <button
+                                    type="button"
+                                    onClick$={() => {
+                                      adminSubSchedules.slots = adminSubSchedules.slots.filter(s => s.id !== slot.id);
+                                    }}
+                                    class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-colors z-10"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                  </button>
 
-                                  {adminSubDays[day.id].active && (
-                                    <div class="flex-1 flex gap-2 animate-in fade-in slide-in-from-left-2">
+                                  <div class="grid grid-cols-12 gap-3">
+                                    <div class="col-span-4">
+                                      <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Día</label>
                                       <select
-                                        class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-xs font-medium font-mono"
-                                        value={adminSubDays[day.id].startTime || adminFormTime.value || "18:00"}
-                                        onChange$={(_, el) => adminSubDays[day.id].startTime = el.value}
+                                        class="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-xs font-bold text-slate-700"
+                                        value={slot.dayOfWeek}
+                                        onChange$={(_, el) => slot.dayOfWeek = parseInt(el.value, 10)}
                                       >
-                                        <option value="">--:-- hs</option>
+                                        {[{ id: 1, label: 'Lunes' }, { id: 2, label: 'Martes' }, { id: 3, label: 'Miércoles' }, { id: 4, label: 'Jueves' }, { id: 5, label: 'Viernes' }, { id: 6, label: 'Sábado' }, { id: 0, label: 'Domingo' }].map(day => (
+                                          <option key={day.id} value={day.id}>{day.label}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div class="col-span-8">
+                                      <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cancha</label>
+                                      <select
+                                        class="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-xs font-bold text-slate-700"
+                                        value={slot.pitchId}
+                                        onChange$={(_, el) => slot.pitchId = el.value}
+                                      >
+                                        {calendarData.pitches.map((p: any) => (
+                                          <option key={p.id} value={p.id}>{`${p.name} (${p.type})`}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div class="col-span-6">
+                                      <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Inicio</label>
+                                      <select
+                                        class="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-xs font-mono font-black text-slate-700"
+                                        value={slot.startTime}
+                                        onChange$={(_, el) => slot.startTime = el.value}
+                                      >
                                         {adminTimeOptions.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
                                       </select>
+                                    </div>
+                                    <div class="col-span-6">
+                                      <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Duración</label>
                                       <select
-                                        class="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-xs font-medium font-mono"
-                                        value={adminSubDays[day.id].duration}
-                                        onChange$={(_, el) => adminSubDays[day.id].duration = el.value}
+                                        class="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 text-xs font-bold text-slate-700"
+                                        value={slot.duration}
+                                        onChange$={(_, el) => slot.duration = el.value}
                                       >
                                         <option value="30">30 min</option>
                                         <option value="60">1 hora</option>
-                                        <option value="90">1.5 horas</option>
-                                        <option value="120">2 horas</option>
-                                        <option value="150">2.5 horas</option>
-                                        <option value="180">3 horas</option>
-                                        <option value="210">3.5 horas</option>
-                                        <option value="240">4 horas</option>
+                                        <option value="90">1.5 h</option>
+                                        <option value="120">2 h</option>
+                                        <option value="150">2.5 h</option>
+                                        <option value="180">3 h</option>
+                                        <option value="210">3.5 h</option>
+                                        <option value="240">4 h</option>
+                                        <option value="270">4.5 h</option>
+                                        <option value="300">5 h</option>
+                                        <option value="330">5.5 h</option>
+                                        <option value="360">6 h</option>
                                       </select>
                                     </div>
-                                  )}
+                                  </div>
                                 </div>
                               ))}
                             </div>
                           </div>
 
-                          <div>
-                            <label class="block text-[11px] font-bold text-blue-700 uppercase tracking-wider mb-1">Repetir hasta (Fecha final)</label>
-                            <input type="date" name="endDate" value={adminEndDate.value} onInput$={(_, el) => adminEndDate.value = el.value} class="w-full px-3 py-2.5 border border-blue-200 rounded-xl bg-white focus:outline-none focus:border-blue-500 text-sm font-semibold text-slate-700" />
-                            <p class="text-[11px] text-blue-600/70 mt-2 font-medium leading-tight">La reserva se repetirá los días seleccionados en su horario correspondiente desde el {adminFormDate.value || '-'} hasta la fecha seleccionada. Si se deja vacío, se renovará mensualmente por 1 año.</p>
+                          <div class="pt-4 border-t border-blue-100 grid grid-cols-2 gap-4">
+                            <div>
+                              <label class="block text-[11px] font-black text-blue-700 uppercase tracking-wider mb-1">Fecha de Inicio</label>
+                              <input
+                                type="date"
+                                name="date"
+                                value={adminFormDate.value}
+                                onChange$={(_, el) => adminFormDate.value = el.value}
+                                required={adminIsSubscription.value}
+                                class="w-full px-3 py-2.5 bg-white border border-blue-200 rounded-xl focus:outline-none focus:border-blue-500 text-sm font-black text-slate-700"
+                              />
+                            </div>
+                            <div>
+                              <label class="block text-[11px] font-black text-blue-700 uppercase tracking-wider mb-1">Repetir hasta</label>
+                              <input
+                                type="date"
+                                name="endDate"
+                                value={adminEndDate.value}
+                                onInput$={(_, el) => adminEndDate.value = el.value}
+                                class="w-full px-3 py-2.5 bg-white border border-blue-200 rounded-xl focus:outline-none focus:border-blue-500 text-sm font-black text-slate-700"
+                              />
+                            </div>
                           </div>
+                          <p class="text-[10px] text-blue-500 font-bold leading-tight flex items-start gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                            El sistema generará automáticamente todas las reservas en los días y canchas seleccionadas hasta la fecha límite.
+                          </p>
                         </div>
                       )}
 
@@ -636,6 +736,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                             <option value="CASH">Efectivo</option>
                             <option value="TRANSFER">Transferencia</option>
                             <option value="MERCADO_PAGO">Mercado Pago</option>
+                            <option value="CURRENT_ACCOUNT">Cuenta Corriente</option>
                           </select>
                         </div>
                       </div>
@@ -654,7 +755,19 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                 {/* Footer Flotante */}
                 <div class="bg-white border-t border-slate-200 p-6 shrink-0 flex justify-end gap-3 z-10 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
                   <Button type="button" onClick$={() => isCreateModalOpen.value = false} look="outline" class="font-bold rounded-xl px-6 border-slate-200 text-slate-600 hover:bg-slate-50">Cancelar</Button>
-                  <Button type="button" onClick$={() => document.getElementById('hidden-submit-btn')?.click()} look="primary" disabled={createBookingAction.isRunning || !adminFormTime.value || !adminFormDate.value || !adminFormPitchId.value} class="font-bold rounded-xl px-8 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 border-none shadow-md shadow-emerald-600/20">
+                  <Button 
+                    type="button" 
+                    onClick$={() => document.getElementById('hidden-submit-btn')?.click()} 
+                    look="primary" 
+                    disabled={
+                      createBookingAction.isRunning || 
+                      (adminIsSubscription.value 
+                        ? (adminSubSchedules.slots.length === 0 || !adminFormDate.value)
+                        : (!adminFormTime.value || !adminFormDate.value || !adminFormPitchId.value)
+                      )
+                    } 
+                    class="font-bold rounded-xl px-8 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 border-none shadow-md shadow-emerald-600/20"
+                  >
                     {createBookingAction.isRunning ? "Guardando..." : "Crear Reserva"}
                   </Button>
                 </div>
