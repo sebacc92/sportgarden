@@ -119,6 +119,30 @@ export const useCreateAdminBookingAction = routeAction$(
       openRegisterId = openRegister.id;
     }
 
+    let finalUserId = data.userId || null;
+
+    // Handle guest registration if no userId provided but customer info exists
+    if (!finalUserId && data.customerPhone) {
+      const existingUser = await db.query.users.findFirst({
+        where: eq(users.phone, data.customerPhone)
+      });
+      
+      if (existingUser) {
+        finalUserId = existingUser.id;
+      } else {
+        // Create new guest user
+        const newUserId = crypto.randomUUID();
+        await db.insert(users).values({
+          id: newUserId,
+          name: data.customerName || "Invitado",
+          phone: data.customerPhone,
+          email: data.customerEmail || null,
+          role: "GUEST",
+        });
+        finalUserId = newUserId;
+      }
+    }
+
     for (let i = 0; i < datesToBook.length; i++) {
       const bookingInfo = datesToBook[i];
       const startDateTime = new Date(`${bookingInfo.date}T${bookingInfo.startTime}:00`);
@@ -128,7 +152,7 @@ export const useCreateAdminBookingAction = routeAction$(
 
       await db.insert(bookings).values({
         id: bookingId,
-        userId: data.userId || null,
+        userId: finalUserId,
         pitchId: data.pitchId,
         startTime: startDateTime,
         endTime: endDateTime,

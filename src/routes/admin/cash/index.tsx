@@ -219,6 +219,14 @@ export default component$(() => {
     }
   });
 
+  // Close close modal when register is toggled (closed)
+  useTask$(({ track }) => {
+    track(() => toggleAction.value);
+    if (toggleAction.value?.success) {
+      showCloseModal.value = false;
+    }
+  });
+
   return (
     <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans print:bg-white print:p-0">
       <style>{`

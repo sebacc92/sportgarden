@@ -55,6 +55,43 @@ export default component$(() => {
 
   const navItems = [
     {
+      name: "Reservas",
+      href: "/admin/calendar/",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]
+    },
+    {
+      name: "Perfil del Club",
+      href: "/admin/club/",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <path d="M3 21h18"></path>
+          <path d="M3 7v1a3 3 0 0 0 6 0V7m6 0v1a3 3 0 0 0 6 0V7m-6 0h6m-6 0a3 3 0 0 0-6 0m6 0v12m-6-12v12"></path>
+        </svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER"]
+    },
+    {
+      name: "Canchas",
+      href: "/admin/pitches/",
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
+          <path d="M12 22v-7l-2-2"></path>
+          <path d="M12 22v-7l2-2"></path>
+          <path d="M22 10a9 9 0 0 0-18 0c0 4 3 6 8 11.5 5-5.5 8-7.5 8-11.5z"></path>
+          <circle cx="12" cy="10" r="3"></circle>
+        </svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER"]
+    },
+    {
       name: "Dashboard",
       href: "/admin/",
       icon: (
@@ -72,32 +109,6 @@ export default component$(() => {
       href: "/admin/cash/",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2" /><path d="M6 12h.01M18 12h.01" /></svg>
-      ),
-      roles: ["DEV", "OWNER", "MANAGER"]
-    },
-    {
-      name: "Reservas",
-      href: "/admin/calendar/",
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="16" y1="2" x2="16" y2="6"></line>
-          <line x1="8" y1="2" x2="8" y2="6"></line>
-          <line x1="3" y1="10" x2="21" y2="10"></line>
-        </svg>
-      ),
-      roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]
-    },
-    {
-      name: "Canchas",
-      href: "/admin/pitches/",
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-          <path d="M12 22v-7l-2-2"></path>
-          <path d="M12 22v-7l2-2"></path>
-          <path d="M22 10a9 9 0 0 0-18 0c0 4 3 6 8 11.5 5-5.5 8-7.5 8-11.5z"></path>
-          <circle cx="12" cy="10" r="3"></circle>
-        </svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
     },
@@ -138,17 +149,6 @@ export default component$(() => {
       href: "/admin/chats/",
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
-      ),
-      roles: ["DEV", "OWNER", "MANAGER"]
-    },
-    {
-      name: "Perfil del Club",
-      href: "/admin/club/",
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0">
-          <path d="M3 21h18"></path>
-          <path d="M3 7v1a3 3 0 0 0 6 0V7m6 0v1a3 3 0 0 0 6 0V7m-6 0h6m-6 0a3 3 0 0 0-6 0m6 0v12m-6-12v12"></path>
-        </svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER"]
     },
@@ -344,13 +344,13 @@ export default component$(() => {
           const today = new Date();
           const openedYMD = `${openedDate.getFullYear()}-${String(openedDate.getMonth() + 1).padStart(2, '0')}-${String(openedDate.getDate()).padStart(2, '0')}`;
           const todayYMD = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-          
+
           if (openedYMD !== todayYMD && openedDate < today) {
             return (
               <div class="bg-amber-500 text-white px-8 py-3 flex items-center justify-between gap-4 shrink-0 shadow-lg z-20 print:hidden">
                 <div class="flex items-center gap-4">
                   <div class="bg-white/20 p-2 rounded-xl">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
                   </div>
                   <div>
                     <div class="text-xs font-black uppercase tracking-widest leading-none mb-1">Advertencia: Caja Abierta de ayer</div>
