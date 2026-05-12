@@ -247,7 +247,7 @@ export const BookingTimelineView = component$<Props>(
                               >
                                 {slotMinutes > 30 && <div class="absolute inset-y-0 left-1/2 w-px border-l border-dashed pointer-events-none opacity-20" />}
                                 <div
-                                  class={cn("h-full w-full transition-colors cursor-pointer", isDragging ? "bg-emerald-100/80" : "hover:bg-slate-200/40")}
+                                  class={cn("h-full w-full transition-all cursor-pointer flex items-center justify-center group/cell", isDragging ? "bg-emerald-100/80" : "hover:bg-slate-200/40")}
                                   onMouseDown$={() => {
                                     dragStart.value = { pitchId: pitch.id, timeMin, slot };
                                     dragEnd.value = { timeMin };
@@ -257,71 +257,81 @@ export const BookingTimelineView = component$<Props>(
                                       dragEnd.value = { timeMin };
                                     }
                                   }}
-                                />
+                                >
+                                  <div class="w-6 h-6 rounded-full bg-white/80 shadow-sm flex items-center justify-center opacity-0 group-hover/cell:opacity-100 scale-75 group-hover/cell:scale-100 transition-all text-slate-400 pointer-events-none">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                  </div>
+                                </div>
                               </div>
                             );
                           })}
 
-                          {/* Bookings Overlay Layer */}
-                          {pitchBookings.map(({ booking, user, guest }) => {
-                            const s = new Date(booking.startTime);
-                            const e = new Date(booking.endTime);
-                            
-                            const bStart = s.getHours() * 60 + s.getMinutes();
-                            const bEnd = e.getHours() * 60 + e.getMinutes();
-                            
-                            const timelineStart = startHour * 60;
-                            const left = ((bStart - timelineStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
-                            const width = ((bEnd - bStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+                            {/* Bookings Overlay Layer */}
+                            {pitchBookings.map(({ booking, user, guest }) => {
+                              const s = new Date(booking.startTime);
+                              const e = new Date(booking.endTime);
+                              
+                              const bStart = s.getHours() * 60 + s.getMinutes();
+                              const bEnd = e.getHours() * 60 + e.getMinutes();
+                              
+                              const timelineStart = startHour * 60;
+                              const left = ((bStart - timelineStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+                              const width = ((bEnd - bStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
 
-                            const name = guest?.name || user?.name || "—";
-                            const phone = guest?.phone || user?.phone || "";
+                              const name = guest?.name || user?.name || "—";
+                              const phone = guest?.phone || user?.phone || "";
+                              
+                              // @ts-ignore
+                              const isSubscription = booking.isSubscription;
 
-                            return (
-                              <div
-                                key={booking.id}
-                                onClick$={() => onBookingClick$ && onBookingClick$(booking.id)}
-                                style={{
-                                  left: `${left}px`,
-                                  width: `${width}px`,
-                                  top: '8px',
-                                  height: 'calc(100% - 16px)'
-                                }}
-                                class={[
-                                  "absolute z-20 rounded-xl border px-3 py-2 cursor-pointer hover:scale-[1.01] hover:shadow-lg transition-all overflow-hidden flex flex-col justify-between group",
-                                  STATUS_CARD[booking.status] || "bg-white border-slate-200"
-                                ]}
-                              >
-                                <div class={["absolute top-0 left-0 right-0 h-1", STATUS_BAR[booking.status]]} />
-                                
-                                <div class="flex flex-col gap-0.5">
-                                  <div class="flex items-center justify-between gap-2">
-                                    <span class="font-black text-xs truncate">{name}</span>
-                                    <span class="text-[8px] font-black opacity-50 uppercase tracking-tighter shrink-0">
+                              return (
+                                <div
+                                  key={booking.id}
+                                  onClick$={() => onBookingClick$ && onBookingClick$(booking.id)}
+                                  style={{
+                                    left: `${left}px`,
+                                    width: `${width}px`,
+                                    top: '8px',
+                                    height: 'calc(100% - 16px)'
+                                  }}
+                                  class={[
+                                    "absolute z-20 rounded-xl border-l-4 px-3 py-2 cursor-pointer transition-all overflow-hidden flex flex-col justify-between group shadow-sm hover:z-30 hover:scale-[1.02] hover:shadow-xl",
+                                    STATUS_CARD[booking.status] || "bg-white border-slate-200"
+                                  ]}
+                                >
+                                  <div class="flex flex-col gap-0.5">
+                                    <div class="flex items-start justify-between gap-2">
+                                      <span class="font-black text-[13px] text-slate-800 leading-tight truncate">{name}</span>
+                                      {isSubscription && (
+                                        <div class="shrink-0 text-slate-500" title="Turno Fijo">
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3M15.5 7.5 14 6" /><path d="M21 7V2h-5" /></svg>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div class="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                      {fmt(booking.startTime)} — {fmt(booking.endTime)}
+                                    </div>
+                                  </div>
+
+                                  <div class="flex items-end justify-between mt-auto pt-1 gap-2">
+                                    <div class="text-[9px] font-black opacity-40 uppercase tracking-widest px-1.5 py-0.5 bg-black/5 rounded">
                                       {STATUS_LABEL[booking.status]}
-                                    </span>
-                                  </div>
-                                  <div class="text-[10px] font-bold opacity-60 flex items-center gap-1">
-                                    {fmt(booking.startTime)} — {fmt(booking.endTime)}
-                                  </div>
-                                </div>
-
-                                <div class="flex items-end justify-between mt-auto pt-1 gap-2">
-                                  <div class="text-[9px] font-bold opacity-40 truncate flex-1">{phone}</div>
-                                  <div class="text-[11px] font-black text-right shrink-0">
-                                    ${booking.totalPrice.toLocaleString('es-AR')}
+                                    </div>
+                                    <div class="text-xs font-black text-right shrink-0 text-slate-800">
+                                      ${booking.totalPrice.toLocaleString('es-AR')}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
           </div>
         </div>
       </div>

@@ -112,8 +112,29 @@ export const CalendarDayView = component$<CalendarDayViewProps>((props) => {
             return (
               <div
                 key={pitch.id}
-                class="flex-1 border-r border-slate-200 last:border-0 relative hover:bg-slate-50/80 transition-colors"
+                class="flex-1 border-r border-slate-200 last:border-0 relative"
               >
+                {/* Interactive background cells for express creation */}
+                {hours.map((hour) => (
+                  <div
+                    key={`empty-${hour}`}
+                    onClick$={() => {
+                      // This is a placeholder for express creation logic
+                      // For now, we just open the modal as usual
+                      // In a real scenario, we'd pre-fill the pitch and hour
+                    }}
+                    class="absolute left-0 right-0 group cursor-pointer hover:bg-slate-100/80 flex items-center justify-center transition-all border-b border-slate-100/50 last:border-0"
+                    style={{
+                      top: `${(hour - calendarStartHour) * pixelsPerHour}px`,
+                      height: `${pixelsPerHour}px`,
+                    }}
+                  >
+                    <div class="w-8 h-8 rounded-full bg-white/80 shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all text-slate-400">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </div>
+                  </div>
+                ))}
+
                 {pitchBookings.map(({ booking, user, guest }: any) => {
                   const customerName = guest?.name || user?.name || "Desconocido";
                   const customerPhone = guest?.phone || user?.phone || "";
@@ -126,6 +147,7 @@ export const CalendarDayView = component$<CalendarDayViewProps>((props) => {
                       status={booking.status}
                       customerName={customerName}
                       customerPhone={customerPhone}
+                      isSubscription={booking.isSubscription}
                       calendarStartHour={calendarStartHour}
                       pixelsPerHour={pixelsPerHour}
                       onClick$={onBookingClick$}

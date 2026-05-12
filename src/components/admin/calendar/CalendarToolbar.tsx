@@ -50,11 +50,6 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
               {getMonthName(calendarData.selectedDateStr)}
             </div>
           )}
-          {calendarData.selectedDateStr === getBAFormatDate(new Date()) && (
-            <div class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-xs font-black uppercase tracking-wider">
-              Hoy
-            </div>
-          )}
         </div>
 
         <Link
@@ -64,9 +59,18 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
         </Link>
+
+        {calendarData.selectedDateStr !== getBAFormatDate(new Date()) && (
+          <Link
+            href={`?date=${getBAFormatDate(new Date())}&view=${calendarData.view}`}
+            class="px-3 py-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-all uppercase tracking-widest ml-1"
+          >
+            Hoy
+          </Link>
+        )}
       </div>
 
-      {/* Right: Go to today + Layout toggle + View Switcher + New Reservation */}
+      {/* Right: Layout toggle + View Switcher + New Reservation */}
       <div class="flex items-center gap-3 shrink-0">
         <button
           onClick$={() => isCreateModalOpen.value = true}
@@ -75,15 +79,6 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
           Nueva Reserva
         </button>
-
-        {calendarData.selectedDateStr !== getBAFormatDate(new Date()) && (
-          <Link
-            href={`?date=${getBAFormatDate(new Date())}&view=${calendarData.view}`}
-            class="px-3 py-1.5 text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
-          >
-            Ir a Hoy
-          </Link>
-        )}
 
         {/* Layout Mode Toggle */}
         <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">

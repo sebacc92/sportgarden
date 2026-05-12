@@ -107,8 +107,25 @@ export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
             return (
               <div
                 key={idx}
-                class={cn("flex-1 border-r border-slate-200 last:border-0 relative hover:bg-slate-50/80 transition-colors", isToday ? "bg-emerald-50/10" : "")}
+                class={cn("flex-1 border-r border-slate-200 last:border-0 relative", isToday ? "bg-emerald-50/10" : "")}
               >
+                {/* Interactive background cells for express creation */}
+                {hours.map((hour) => (
+                  <div
+                    key={`empty-${hour}`}
+                    onClick$={() => {}}
+                    class="absolute left-0 right-0 group cursor-pointer hover:bg-slate-100/80 flex items-center justify-center transition-all border-b border-slate-100/50 last:border-0"
+                    style={{
+                      top: `${(hour - calendarStartHour) * pixelsPerHour}px`,
+                      height: `${pixelsPerHour}px`,
+                    }}
+                  >
+                    <div class="w-6 h-6 rounded-full bg-white/80 shadow-sm flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all text-slate-400">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </div>
+                  </div>
+                ))}
+
                 {dayBookings.map(({ booking, user, guest }: any) => {
                   const customerName = guest?.name || user?.name || "Desconocido";
                   const customerPhone = guest?.phone || user?.phone || "";
@@ -123,6 +140,7 @@ export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
                       customerName={customerName}
                       customerPhone={customerPhone}
                       pitchName={pitchName}
+                      isSubscription={booking.isSubscription}
                       calendarStartHour={calendarStartHour}
                       pixelsPerHour={pixelsPerHour}
                       onClick$={onBookingClick$}
