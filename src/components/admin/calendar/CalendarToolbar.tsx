@@ -1,7 +1,7 @@
 import { component$, type Signal, type PropFunction } from "@builder.io/qwik";
 import { Link } from "@builder.io/qwik-city";
 import { cn } from "@qwik-ui/utils";
-import { getBAFormatDate, getWeekName, getMonthName } from "~/routes/admin/calendar/utils";
+import { getWeekName, getMonthName } from "~/routes/admin/calendar/utils";
 
 interface CalendarToolbarProps {
   calendarData: any;
