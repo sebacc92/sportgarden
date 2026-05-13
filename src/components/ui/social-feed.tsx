@@ -79,7 +79,7 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
             href="https://www.instagram.com/gardenclubfutbol/"
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-3 border-2 border-white/20 bg-slate-900 px-6 py-3 text-xs font-black uppercase tracking-[0.25em] text-white transition-all hover:-translate-y-1 hover:bg-emerald-500 hover:border-emerald-500 hover:text-slate-950 hover:shadow-lg hover:shadow-emerald-500/20 rounded-full"
+            class="inline-flex items-center gap-3 border-2 border-white/20 bg-slate-900 px-6 py-3 text-xs font-black uppercase tracking-[0.25em] text-white transition-all hover:-translate-y-1 hover:bg-emerald-500 hover:border-emerald-500 hover:text-white hover:shadow-lg hover:shadow-emerald-900/30 rounded-full"
           >
             <span>Ver perfil</span>
             <svg

@@ -187,7 +187,7 @@ export default component$(() => {
           <h1 class="text-3xl font-black text-slate-800 tracking-tighter uppercase">Usuarios del Sistema</h1>
           <p class="text-sm font-medium text-slate-500 mt-1">Gestiona accesos y roles del panel administrativo.</p>
         </div>
-        <Button onClick$={() => openModal()} look="primary" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black uppercase tracking-widest flex items-center gap-2">
+        <Button onClick$={() => openModal()} look="primary" class="bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest flex items-center gap-2">
           <LuPlus class="w-5 h-5" />
           Nuevo Usuario
         </Button>
@@ -309,7 +309,7 @@ export default component$(() => {
               <Button type="button" onClick$={() => isModalOpen.value = false} look="outline" class="flex-1 rounded-xl">
                 Cancelar
               </Button>
-              <Button type="submit" look="primary" disabled={saveAction.isRunning} class="flex-1 bg-emerald-500 text-slate-950 hover:bg-emerald-400 rounded-xl font-black uppercase">
+              <Button type="submit" look="primary" disabled={saveAction.isRunning} class="flex-1 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-black uppercase">
                 {saveAction.isRunning ? 'Guardando...' : 'Guardar'}
               </Button>
             </div>

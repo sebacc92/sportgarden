@@ -214,7 +214,7 @@ export default component$(() => {
             <div class="flex items-center gap-3">
               <img src={logo} alt="GardenClubFutbol" width={40} height={40} class="h-10 w-auto object-contain" />
               <div class="font-black text-xl tracking-tighter text-white uppercase whitespace-nowrap">
-                Sport<span class="text-emerald-500">Garden</span>
+                Sport<span class="text-emerald-400">Garden</span>
               </div>
             </div>
           )}
@@ -252,7 +252,7 @@ export default component$(() => {
             return (
               <div class="flex items-center justify-between px-1">
                 <div class="flex items-center gap-2">
-                  <div class={["w-2 h-2 rounded-full", isOpen ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse"]}></div>
+                  <div class={["w-2 h-2 rounded-full", isOpen ? "bg-emerald-500 shadow-[0_0_8px_rgba(0,20,7,0.45)]" : "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)] animate-pulse"]}></div>
                   <span class="text-xs font-black uppercase tracking-widest text-slate-400">Estado</span>
                 </div>
 

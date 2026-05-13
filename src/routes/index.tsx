@@ -9,7 +9,7 @@ import { SocialFeed, MOCK_INSTAGRAM_POSTS } from "~/components/ui/social-feed";
 import { Chatbot } from "~/components/chatbot/chatbot";
 import { WhatsAppButton } from "~/components/ui/whatsapp-button";
 import { siteSettings } from "../db/schema";
-import logo from "~/media/GardenClubFutbol8.png";
+import logo from "~/media/g184.png";
 
 export { useGuestBookingAction, useUserBookingAction };
 
@@ -318,7 +318,7 @@ export default component$(() => {
                   disabled
                     ? "opacity-30 border-white/5 bg-slate-900 cursor-not-allowed text-slate-500 line-through"
                     : selected
-                      ? "bg-emerald-500 border-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20"
+                      ? "bg-emerald-500 border-emerald-300 text-white shadow-lg shadow-emerald-900/40"
                       : "bg-slate-800 border-white/10 text-white hover:border-emerald-500/50 hover:bg-slate-700"
                 ]}
               >
@@ -342,35 +342,38 @@ export default component$(() => {
   return (
     <div class="min-h-screen bg-slate-950 text-white font-sans selection:bg-emerald-500 selection:text-white pb-20">
 
-      {/* Navbar */}
-      <nav class="fixed top-0 inset-x-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/5">
-        <div class="mx-auto max-w-7xl px-6 lg:px-8 h-20 flex items-center justify-between">
-          <Link href="/" class="flex items-center gap-2 group py-2">
-            <img src={logo} alt="GardenClubFutbol Logo" width={48} height={48} class="h-12 w-auto object-contain transition-transform group-hover:scale-105" />
-            <div class="font-black text-2xl tracking-tighter uppercase hidden sm:block">
-              Sport<span class="text-emerald-500">Garden</span>
-            </div>
+      {/* Navbar — fondo completo #001407 (verde del logo) */}
+      <nav class="fixed top-0 inset-x-0 z-50 border-b border-white/10 bg-[#001407]">
+        <div class="mx-auto flex h-28 max-w-7xl items-center justify-between px-6 lg:px-8">
+          <Link href="/" class="group flex shrink-0 items-center py-1">
+            <img
+              src={logo}
+              alt="Garden Club"
+              width={393}
+              height={451}
+              class="h-[5.6875rem] w-auto object-contain object-left transition-transform group-hover:scale-105 sm:h-[6.5rem]"
+            />
           </Link>
-          <div class="hidden md:flex gap-8 items-center text-sm font-medium text-slate-300">
-            <a href="#historia" class="hover:text-emerald-400 transition-colors">Historia</a>
-            <a href="#canchas" class="hover:text-emerald-400 transition-colors">Canchas</a>
+          <div class="hidden min-w-0 items-center gap-8 text-sm font-medium text-slate-200 md:flex">
+            <a href="#historia" class="transition-colors hover:text-emerald-400">Historia</a>
+            <a href="#canchas" class="transition-colors hover:text-emerald-400">Canchas</a>
             {gallery.value.length > 0 && (
-              <a href="#galeria" class="hover:text-emerald-400 transition-colors">Galería</a>
+              <a href="#galeria" class="transition-colors hover:text-emerald-400">Galería</a>
             )}
-            <a href="#contacto" class="hover:text-emerald-400 transition-colors">Contacto</a>
+            <a href="#contacto" class="transition-colors hover:text-emerald-400">Contacto</a>
             {user.value?.role === "ADMIN" && (
-              <a href="/admin/calendar" class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors text-white">Panel Admin</a>
+              <a href="/admin/calendar" class="rounded-full bg-white/10 px-4 py-2 text-white transition-colors hover:bg-white/20">Panel Admin</a>
             )}
             {user.value ? (
               <div class="flex items-center gap-4">
-                <span class="text-emerald-400 font-bold">Hola!</span>
+                <span class="font-bold text-emerald-400">Hola!</span>
               </div>
             ) : (
-              <Link href="/auth/login" class="hover:text-white transition-colors">
+              <Link href="/auth/login" class="transition-colors hover:text-white">
                 Iniciar Sesión
               </Link>
             )}
-            <a href="#canchas" class="px-6 py-2.5 bg-emerald-500 hover:bg-emerald-400 rounded-full transition-all text-slate-950 font-black tracking-widest uppercase shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:-translate-y-0.5">
+            <a href="#canchas" class="rounded-full border border-white/20 bg-white px-6 py-2.5 font-black uppercase tracking-widest text-[#001407] shadow-lg shadow-black/25 transition-all hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-black/30">
               Reservar
             </a>
           </div>
@@ -402,7 +405,7 @@ export default component$(() => {
                     <p class="mt-4 text-xl md:text-2xl text-slate-200 font-medium mb-10 drop-shadow-md max-w-2xl mx-auto">
                       {slide.subtitle}
                     </p>
-                    <a href="#canchas" class="inline-block px-8 py-4 bg-emerald-500 hover:bg-emerald-400 rounded-full transition-all text-slate-950 font-black tracking-widest uppercase text-lg shadow-xl shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:-translate-y-1">
+                    <a href="#canchas" class="inline-block rounded-full bg-emerald-500 px-8 py-4 font-black uppercase tracking-widest text-lg text-white shadow-xl shadow-emerald-900/35 transition-all hover:-translate-y-1 hover:bg-emerald-600 hover:shadow-emerald-900/50">
                       Reservar Ahora
                     </a>
                   </div>
@@ -430,7 +433,7 @@ export default component$(() => {
         <div class="mx-auto max-w-7xl px-6 lg:px-8">
           <div class="grid lg:grid-cols-2 gap-16 items-center">
             <div class="space-y-8">
-              <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white">Nuestra <span class="text-emerald-500">Historia</span></h2>
+              <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white">Nuestra <span class="text-emerald-400">Historia</span></h2>
               <p class="text-lg text-slate-400 leading-relaxed">
                 GardenClubFutbol nació con la visión de crear el espacio definitivo para los amantes del fútbol. Desde nuestros humildes comienzos, nos hemos dedicado a ofrecer canchas de primer nivel donde la pasión por el deporte se vive al máximo en cada partido.
               </p>
@@ -439,11 +442,11 @@ export default component$(() => {
               </p>
               <div class="grid grid-cols-2 gap-6 pt-4 border-t border-white/10">
                 <div>
-                  <div class="text-4xl font-black text-emerald-500 mb-2">+10k</div>
+                  <div class="text-4xl font-black text-emerald-400 mb-2">+10k</div>
                   <div class="text-sm font-bold text-slate-500 uppercase tracking-widest">Partidos Jugados</div>
                 </div>
                 <div>
-                  <div class="text-4xl font-black text-emerald-500 mb-2">5</div>
+                  <div class="text-4xl font-black text-emerald-400 mb-2">5</div>
                   <div class="text-sm font-bold text-slate-500 uppercase tracking-widest">Años de Pasión</div>
                 </div>
               </div>
@@ -461,7 +464,7 @@ export default component$(() => {
       {/* Pitches Grid */}
       <section id="canchas" class="mx-auto max-w-7xl px-6 lg:px-8 pt-10 pb-20 relative z-20">
         <div class="text-center mb-16">
-          <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">Nuestras <span class="text-emerald-500">Canchas</span></h2>
+          <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">Nuestras <span class="text-emerald-400">Canchas</span></h2>
           <p class="text-lg text-slate-400 max-w-2xl mx-auto">Selecciona tu cancha ideal, verifica la disponibilidad y reserva tu próximo partido.</p>
         </div>
         <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
@@ -525,7 +528,7 @@ export default component$(() => {
                     <Button
                       onClick$={() => openBookingModal(pitch.id)}
                       look="primary"
-                      class="bg-emerald-500 text-slate-950 hover:bg-emerald-400 rounded-xl cursor-pointer"
+                      class="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl cursor-pointer"
                     >
                       RESERVAR
                     </Button>
@@ -543,7 +546,7 @@ export default component$(() => {
           <div class="mx-auto max-w-7xl px-6 lg:px-8">
             <div class="text-center mb-14">
               <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">
-                Nuestras <span class="text-emerald-500">Instalaciones</span>
+                Nuestras <span class="text-emerald-400">Instalaciones</span>
               </h2>
               <p class="text-lg text-slate-400 max-w-xl mx-auto">
                 Conocé cada rincón de GardenClubFutbol antes de tu próxima visita.
@@ -641,7 +644,7 @@ export default component$(() => {
       <section id="contacto" class="py-24 bg-slate-950 relative z-20">
         <div class="mx-auto max-w-7xl px-6 lg:px-8">
           <div class="mb-12">
-            <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">Donde <span class="text-emerald-500">estamos</span></h2>
+            <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white mb-4">Donde <span class="text-emerald-400">estamos</span></h2>
           </div>
 
           <div class="grid lg:grid-cols-5 gap-8 items-start">
@@ -663,7 +666,7 @@ export default component$(() => {
                 <div class="p-6">
                   <div class="flex items-center justify-between mb-4">
                     <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Ubicación</h3>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="m18 15-6-6-6 6" /></svg>
                   </div>
                   <p class="text-white font-bold leading-relaxed">
                     {aiSettings.value?.clubAddress || "Pedro moran 2379. Capital Federal. Argentina"}
@@ -676,7 +679,7 @@ export default component$(() => {
                 <div class="p-6">
                   <div class="flex items-center justify-between mb-6">
                     <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Horarios del Club</h3>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="m18 15-6-6-6 6" /></svg>
                   </div>
                   <div class="space-y-4">
                     {(() => {
@@ -726,7 +729,7 @@ export default component$(() => {
                 <div class="p-6">
                   <div class="flex items-center justify-between mb-8">
                     <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest">Servicios del Club</h3>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500"><path d="m18 15-6-6-6 6" /></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="m18 15-6-6-6 6" /></svg>
                   </div>
 
                   <div class="grid grid-cols-2 gap-y-6 gap-x-4">
@@ -756,7 +759,7 @@ export default component$(() => {
 
                         return (
                           <div key={s} class="flex items-center gap-3 group/item">
-                            <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-emerald-400 group-hover/item:bg-emerald-500 group-hover/item:text-slate-950 transition-colors">
+                            <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-emerald-400 group-hover/item:bg-emerald-500 group-hover/item:text-white transition-colors">
                               {icon}
                             </div>
                             <span class="text-xs font-bold text-slate-300 group-hover/item:text-white transition-colors">{s}</span>
@@ -797,7 +800,7 @@ export default component$(() => {
           <div>
             {(guestAction.value?.success || userAction.value?.success) ? (
               <div class="text-center py-8">
-                <div class="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <div class="w-20 h-20 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-6">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
                 </div>
                 <h3 class="text-2xl font-black text-white mb-2">¡Reserva Exitosa!</h3>
@@ -822,7 +825,7 @@ export default component$(() => {
                   <div class="absolute left-8 top-1/2 -translate-y-1/2 h-1 bg-emerald-500 -z-10 transition-all duration-300 rounded-full" style={{ width: `calc(${(currentStep.value - 1) * 50}% - 2rem)` }}></div>
 
                   {[1, 2, 3].map((step) => (
-                    <div key={step} class={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black border-4 border-slate-900 transition-colors ${currentStep.value >= step ? 'bg-emerald-500 text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                    <div key={step} class={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black border-4 border-slate-900 transition-colors ${currentStep.value >= step ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
                       {step}
                     </div>
                   ))}
@@ -877,7 +880,7 @@ export default component$(() => {
                                 const dd = String(today.getDate()).padStart(2, '0');
                                 dateStr.value = `${yyyy}-${mm}-${dd}`;
                               }}
-                              class="text-[10px] font-black text-emerald-500 hover:text-emerald-400 px-2 py-0.5 border border-emerald-500/30 hover:border-emerald-500 rounded-md transition-all uppercase tracking-widest"
+                              class="text-[10px] font-black text-emerald-400 hover:text-emerald-200 px-2 py-0.5 border border-emerald-500/30 hover:border-emerald-500 rounded-md transition-all uppercase tracking-widest"
                             >
                               Hoy
                             </button>
@@ -891,7 +894,7 @@ export default component$(() => {
                                 const dd = String(tomorrow.getDate()).padStart(2, '0');
                                 dateStr.value = `${yyyy}-${mm}-${dd}`;
                               }}
-                              class="text-[10px] font-black text-emerald-500 hover:text-emerald-400 px-2 py-0.5 border border-emerald-500/30 hover:border-emerald-500 rounded-md transition-all uppercase tracking-widest"
+                              class="text-[10px] font-black text-emerald-400 hover:text-emerald-200 px-2 py-0.5 border border-emerald-500/30 hover:border-emerald-500 rounded-md transition-all uppercase tracking-widest"
                             >
                               Mañana
                             </button>
@@ -912,7 +915,7 @@ export default component$(() => {
                     {timeGridUI}
 
                     <div class="pt-4 border-t border-white/5">
-                      <Button type="button" onClick$={nextStep} disabled={!timeStr.value || isSubmitDisabled} look="primary" class="w-full py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20">
+                      <Button type="button" onClick$={nextStep} disabled={!timeStr.value || isSubmitDisabled} look="primary" class="w-full py-4 rounded-xl bg-emerald-500 text-white font-black uppercase tracking-wider hover:bg-emerald-600 disabled:opacity-50 transition-all shadow-lg shadow-emerald-500/20">
                         Siguiente Paso
                       </Button>
                     </div>
@@ -951,7 +954,7 @@ export default component$(() => {
                       <Button type="button" onClick$={prevStep} look="secondary" class="flex-[1] py-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold uppercase tracking-wider transition-colors">
                         Atrás
                       </Button>
-                      <Button type="button" onClick$={nextStep} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
+                      <Button type="button" onClick$={nextStep} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-white font-black uppercase tracking-wider hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20">
                         Siguiente Paso
                       </Button>
                     </div>
@@ -969,12 +972,12 @@ export default component$(() => {
                               key={extra.name}
                               type="button"
                               onClick$={() => toggleExtra({ name: extra.name, price: Number(extra.price) })}
-                              class={`p-3 rounded-xl border transition-all flex flex-col items-center gap-2 ${isSelected ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]' : 'bg-slate-800 border-white/10 text-slate-400 hover:border-emerald-500/50 hover:bg-slate-800/80'}`}
+                              class={`p-3 rounded-xl border transition-all flex flex-col items-center gap-2 ${isSelected ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_15px_rgba(0,20,7,0.35)]' : 'bg-slate-800 border-white/10 text-slate-400 hover:border-emerald-500/50 hover:bg-slate-800/80'}`}
                             >
                               <span class="text-2xl">{extra.icon}</span>
                               <div class="text-center">
                                 <div class="text-[10px] font-bold uppercase leading-tight text-white mb-1">{extra.name}</div>
-                                <div class="text-xs font-black text-emerald-500">+${extra.price}</div>
+                                <div class="text-xs font-black text-emerald-400">+${extra.price}</div>
                               </div>
                             </button>
                           );
@@ -1049,19 +1052,19 @@ export default component$(() => {
                       <div class="space-y-2">
                         {paymentMethod.value === "CASH" && (
                           <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                            <input type="radio" name="paymentOption" value="LATER" bind:value={paymentOption} class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                            <input type="radio" name="paymentOption" value="LATER" bind:value={paymentOption} class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" />
                             <span class="text-sm font-medium text-white flex-1">Abonar en el club</span>
                           </label>
                         )}
                         <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                          <input type="radio" name="paymentOption" value="SENA" bind:value={paymentOption} class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                          <input type="radio" name="paymentOption" value="SENA" bind:value={paymentOption} class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" />
                           <div class="flex-1">
                             <span class="text-sm font-medium text-white block">Abonar Seña ({senaLabel})</span>
                             <span class="text-xs text-slate-400">Pagas hoy: ${senaAmount}</span>
                           </div>
                         </label>
                         <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                          <input type="radio" name="paymentOption" value="TOTAL" bind:value={paymentOption} class="text-emerald-500 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                          <input type="radio" name="paymentOption" value="TOTAL" bind:value={paymentOption} class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" />
                           <div class="flex-1">
                             <span class="text-sm font-medium text-white block">Abonar Total</span>
                             <span class="text-xs text-slate-400">Pagas hoy: ${totalPrice}</span>
@@ -1074,7 +1077,7 @@ export default component$(() => {
                       <Button type="button" onClick$={prevStep} look="secondary" class="flex-[1] py-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700 font-bold uppercase tracking-wider transition-colors">
                         Atrás
                       </Button>
-                      <Button type="submit" disabled={userAction.isRunning || guestAction.isRunning} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-slate-950 font-black uppercase tracking-wider hover:bg-emerald-400 transition-colors shadow-lg shadow-emerald-500/20">
+                      <Button type="submit" disabled={userAction.isRunning || guestAction.isRunning} look="primary" class="flex-[2] py-4 rounded-xl bg-emerald-500 text-white font-black uppercase tracking-wider hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20">
                         {(userAction.isRunning || guestAction.isRunning) ? "Procesando..." : "Confirmar Reserva"}
                       </Button>
                     </div>
@@ -1091,7 +1094,7 @@ export default component$(() => {
         <div class="mx-auto max-w-7xl px-6 lg:px-8 text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-6">
           <div>
             <div class="font-black text-2xl tracking-tighter text-white uppercase">
-              Sport<span class="text-emerald-500">Garden</span>
+              Sport<span class="text-emerald-400">Garden</span>
             </div>
             <p class="text-slate-500 mt-2 text-sm">Las mejores canchas, el mejor tercer tiempo.</p>
           </div>

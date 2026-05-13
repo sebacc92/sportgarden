@@ -652,7 +652,7 @@ export default component$(() => {
 
   const handleNewBooking = $(() => {
     adminFormPitchId.value = "";
-    adminFormDate.value = "";
+    adminFormDate.value = calendarData.value.selectedDateStr;
     adminFormTime.value = "";
     adminFormDuration.value = "60";
     adminIsSubscription.value = false;

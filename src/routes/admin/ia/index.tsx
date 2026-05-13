@@ -311,7 +311,7 @@ export default component$(() => {
           <button
             type="submit"
             disabled={action.isRunning}
-            class="bg-emerald-500 text-slate-950 px-10 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-emerald-400 transition shadow-md inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg active:scale-[0.98]"
+            class="bg-emerald-500 text-white px-10 py-4 rounded-xl font-bold uppercase tracking-widest hover:bg-emerald-600 transition shadow-md inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg active:scale-[0.98]"
           >
             {action.isRunning || isCompressing.value ? (
               <>

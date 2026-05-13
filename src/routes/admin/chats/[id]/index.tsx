@@ -61,7 +61,7 @@ export default component$(() => {
               <p class="text-xs font-bold">{session.lastActive ? new Date(session.lastActive).toLocaleString('es-AR') : '—'}</p>
             </div>
           </div>
-          <div class="bg-emerald-500 text-slate-950 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+          <div class="bg-emerald-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
             {messages.length} mensajes
           </div>
         </div>

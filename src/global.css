@@ -16,8 +16,8 @@
     --card-foreground: var(--color-slate-900);
     --border: var(--color-slate-200);
     --input: var(--color-slate-200);
-    --primary: var(--color-cyan-600);
-    --primary-foreground: white;
+    --primary: #001407;
+    --primary-foreground: #f8fafc;
     --secondary: var(--color-slate-900);
     --secondary-foreground: white;
     --accent: var(--color-slate-100);
@@ -53,8 +53,8 @@
     --card-foreground: var(--color-slate-50);
     --border: var(--color-slate-800);
     --input: var(--color-slate-800);
-    --primary: var(--color-cyan-600);
-    --primary-foreground: white;
+    --primary: #001407;
+    --primary-foreground: #f8fafc;
     --secondary: var(--color-slate-100);
     --secondary-foreground: black;
     --accent: var(--color-slate-700);
@@ -101,6 +101,20 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  /* Marca Garden Club (#001407): reemplaza la escala emerald en toda la app */
+  --color-emerald-50: #eef6f0;
+  --color-emerald-100: #dcece1;
+  --color-emerald-200: #c4dcc9;
+  --color-emerald-300: #9ec9ae;
+  --color-emerald-400: #a8dcbf;
+  --color-emerald-500: #001407;
+  --color-emerald-600: #153528;
+  --color-emerald-700: #001a0e;
+  --color-emerald-800: #001208;
+  --color-emerald-900: #000d06;
+  --color-emerald-950: #000402;
+
   --radius-xs: var(--border-radius);
   --radius-sm: calc(var(--border-radius) + 0.125rem);
   --radius-md: calc(var(--border-radius) + 0.375rem);

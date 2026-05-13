@@ -53,7 +53,7 @@ export default component$(() => {
     <div class="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans selection:bg-emerald-500 selection:text-white">
       <div class="sm:mx-auto sm:w-full sm:max-w-md">
         <Link href="/" class="block text-center font-black text-3xl tracking-tighter uppercase text-white mb-6">
-          Sport<span class="text-emerald-500">Garden</span>
+          Sport<span class="text-emerald-400">Garden</span>
         </Link>
         <h2 class="text-center text-3xl font-bold tracking-tight text-white">
           Inicia Sesión
@@ -120,7 +120,7 @@ export default component$(() => {
                 type="submit"
                 look="primary"
                 disabled={loginAction.isRunning}
-                class="flex w-full justify-center rounded-xl bg-emerald-500 px-4 py-4 text-sm font-black uppercase tracking-wider text-slate-950 hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+                class="flex w-full justify-center rounded-xl bg-emerald-500 px-4 py-4 text-sm font-black uppercase tracking-wider text-white hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
               >
                 {loginAction.isRunning ? "Iniciando..." : "Ingresar"}
               </Button>

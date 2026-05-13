@@ -137,7 +137,7 @@ export default component$(() => {
 
             <button
               type="submit"
-              class="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black uppercase tracking-widest text-sm py-3 rounded-lg transition-all duration-200 shadow-lg shadow-emerald-500/20 disabled:opacity-60"
+              class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase tracking-widest text-sm py-3 rounded-lg transition-all duration-200 shadow-lg shadow-emerald-900/30 disabled:opacity-60"
             >
               {action.isRunning ? 'Verificando...' : 'Ingresar'}
             </button>

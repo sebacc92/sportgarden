@@ -20,8 +20,8 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
       <div class="flex items-center gap-3 shrink-0">
         <h1 class="text-base font-black text-slate-800">Reservas</h1>
         <div class="w-px h-5 bg-slate-200"></div>
-        <span class="text-xs font-bold text-slate-400">
-          <span class="text-slate-800 font-black">{calendarData.bookings.length}</span> reservas
+        <span class="text-sm font-bold text-slate-400">
+          <span class="text-slate-800 font-black text-lg">{calendarData.bookings.length}</span> reservas
         </span>
       </div>
 
@@ -66,7 +66,7 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
             href={`?date=${calendarData.todayStr}&view=${calendarData.view}`}
             class="px-3 py-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-all uppercase tracking-widest ml-1"
           >
-            Hoy
+            Ir a HOY
           </Link>
         )}
       </div>
@@ -75,9 +75,9 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
       <div class="flex items-center gap-3 shrink-0">
         <button
           onClick$={() => onNewBooking$()}
-          class="px-4 py-1.5 text-xs font-black text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-colors flex items-center gap-2"
+          class="px-4 h-10 text-sm font-black text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-colors flex items-center gap-2"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
           Nueva Reserva
         </button>
 

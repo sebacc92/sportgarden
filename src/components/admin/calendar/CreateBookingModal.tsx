@@ -189,7 +189,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                   <div class="flex flex-col gap-3 w-full max-w-xs">
                     <Link 
                       href="/admin/cash/" 
-                      class="w-full py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20 text-center"
+                      class="w-full py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20 text-center"
                     >
                       Ir a Abrir Caja
                     </Link>
