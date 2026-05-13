@@ -53,7 +53,7 @@ export const useLoginAction = routeAction$(
 );
 
 export const head: DocumentHead = {
-  title: 'Login — Admin | SportGarden',
+  title: 'Login — Admin | GardenClubFutbol',
 };
 
 export default component$(() => {
@@ -76,7 +76,7 @@ export default component$(() => {
           <h1 class="text-2xl font-black text-white uppercase tracking-tighter">
             Acceso Administrador
           </h1>
-          <p class="text-sm text-slate-400 mt-1">SportGarden Futbol</p>
+          <p class="text-sm text-slate-400 mt-1">GardenClubFutbol</p>
         </div>
 
         {/* Card */}
@@ -145,7 +145,7 @@ export default component$(() => {
         </div>
 
         <p class="text-center text-xs text-slate-600 mt-6">
-          © {new Date().getFullYear()} SportGarden Futbol
+          © {new Date().getFullYear()} GardenClubFutbol
         </p>
       </div>
     </div>

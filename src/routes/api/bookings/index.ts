@@ -116,7 +116,7 @@ export const useGuestBookingAction = routeAction$(
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido"),
     time: z.string().regex(/^\d{2}:\d{2}$/, "Formato de hora inválido"),
     duration: z.coerce.number().min(30),
-    paymentMethod: z.enum(["CASH", "TRANSFER", "MERCADO_PAGO"]).optional(),
+    paymentMethod: z.string().optional(),
     extras: z.array(z.string()).optional(),
   })
 );
@@ -208,7 +208,7 @@ export const useUserBookingAction = routeAction$(
     time: z.string().regex(/^\d{2}:\d{2}$/, "Formato de hora inválido"),
     duration: z.coerce.number().min(30),
     paymentOption: z.enum(["LATER", "SENA", "TOTAL"]),
-    paymentMethod: z.enum(["CASH", "TRANSFER", "MERCADO_PAGO"]).optional(),
+    paymentMethod: z.string().optional(),
     extras: z.array(z.string()).optional(),
   })
 );

@@ -12,7 +12,7 @@ export const Chatbot = component$((props: { avatarUrl?: string }) => {
     messages: [
       {
         role: 'assistant',
-        content: '¡Hola! Soy el asistente virtual de SportGarden. ¿En qué te puedo ayudar hoy?',
+        content: '¡Hola! Soy el asistente virtual de GardenClubFutbol. ¿En qué te puedo ayudar hoy?',
       },
     ] as Message[],
     sessionId: '',
@@ -132,7 +132,7 @@ export const Chatbot = component$((props: { avatarUrl?: string }) => {
                   <img src={props.avatarUrl} alt="Asistente IA" class="w-10 h-10 rounded-full object-cover border-2 border-emerald-500" />
                 ) : (
                   <div class="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center text-slate-950 font-black text-lg">
-                    SG
+                    GC
                   </div>
                 )}
                 <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-slate-950 rounded-full animate-pulse"></div>

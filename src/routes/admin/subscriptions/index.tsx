@@ -267,5 +267,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Abonos - SportGardenFutbol",
+  title: "Abonos - GardenClubFutbol",
 };

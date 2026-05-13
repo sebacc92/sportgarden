@@ -128,13 +128,11 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
     }
   });
 
-  // Load availability
   useTask$(({ track }) => {
     const pitchId = track(() => adminFormPitchId.value);
     const date = track(() => adminFormDate.value);
     if (pitchId && date) {
       adminIsChecking.value = true;
-      adminFormTime.value = "";
       getAdminDailyBookings(pitchId, date).then(slots => {
         adminOccupiedSlots.value = slots;
         adminIsChecking.value = false;
@@ -430,7 +428,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                             </select>
                           </div>
                           <div>
-                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Hora Fin</label>
+                            <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Duración</label>
                             <input type="hidden" name="endTime" value={adminEndTime.value} />
                             <select
                               class="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 hover:bg-slate-50 transition-colors text-sm font-medium font-mono"
@@ -733,10 +731,20 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                         <div class="col-span-2 md:col-span-1">
                           <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Medio de Pago</label>
                           <select name="paymentMethod" class="w-full px-3 py-2.5 border border-slate-600 rounded-xl bg-slate-700 focus:outline-none focus:border-emerald-500 text-sm font-bold text-white transition-all appearance-none">
-                            <option value="CASH">Efectivo</option>
-                            <option value="TRANSFER">Transferencia</option>
-                            <option value="MERCADO_PAGO">Mercado Pago</option>
-                            <option value="CURRENT_ACCOUNT">Cuenta Corriente</option>
+                            {(calendarData.settings?.paymentMethods || [])
+                              .filter((pm: any) => pm.isActive)
+                              .map((pm: any) => (
+                                <option key={pm.id} value={pm.id}>{pm.name}</option>
+                              ))
+                            }
+                            {(calendarData.settings?.paymentMethods || []).filter((pm: any) => pm.isActive).length === 0 && (
+                              <>
+                                <option value="CASH">Efectivo</option>
+                                <option value="TRANSFER">Transferencia</option>
+                                <option value="MERCADO_PAGO">Mercado Pago</option>
+                                <option value="CURRENT_ACCOUNT">Cuenta Corriente</option>
+                              </>
+                            )}
                           </select>
                         </div>
                       </div>

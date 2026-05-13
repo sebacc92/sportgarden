@@ -301,10 +301,19 @@ export default component$(() => {
 
   const openCreateModal = $(() => {
     editModalState.value = {
-      id: null, name: "", type: "F5", pricePerHour: 0,
-      depositType: "PERCENTAGE", depositAmount: 0,
-      isCovered: false, isLit: false, notes: "",
-      imageUrl: null, previewUrl: null,
+      id: null,
+      name: "",
+      type: "F5",
+      sport: "Fútbol",
+      surface: "Sintético",
+      pricePerHour: 0,
+      depositType: "PERCENTAGE",
+      depositAmount: 0,
+      isCovered: false,
+      isLit: false,
+      notes: "",
+      imageUrl: null,
+      previewUrl: null,
     };
   });
 
@@ -327,24 +336,6 @@ export default component$(() => {
     selectedPitchForPricing.value = { id: pitch.id, name: pitch.name, rules: pitch.pricingRules || [] };
   });
 
-  const handleAddNew = $(() => {
-    editModalState.value = {
-      id: null,
-      name: "",
-      type: "F5",
-      sport: "Fútbol",
-      surface: "Sintético",
-      pricePerHour: 0,
-      depositType: "PERCENTAGE",
-      depositAmount: 0,
-      isCovered: false,
-      isLit: false,
-      notes: "",
-      imageUrl: null,
-      previewUrl: null,
-    };
-    selectedPitchForPricing.value = null;
-  });
 
   const selectForDeletion = $((pitch: any) => {
     pitchToDelete.value = { id: pitch.id, name: pitch.name };

@@ -1,7 +1,7 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, Form, z, zod$, Link } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { groups, groupTransactions, cashRegisters, cashMovements } from "~/db/schema";
+import { groups, groupTransactions, cashRegisters, cashMovements, siteSettings } from "~/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Button } from "~/components/ui";
 
@@ -22,9 +22,20 @@ export const useGroupDetailsData = routeLoader$(async (requestEvent) => {
     orderBy: [desc(groupTransactions.createdAt)],
   });
 
+  const settings = await db.query.siteSettings.findFirst({
+    where: eq(siteSettings.id, 1),
+  });
+  const paymentMethods = (settings?.paymentMethods || []) as { id: string, name: string, isActive: boolean }[];
+
   return {
     group,
     transactions,
+    paymentMethods: paymentMethods.length > 0 ? paymentMethods : [
+      { id: "CASH", name: "Efectivo", isActive: true },
+      { id: "TRANSFER", name: "Transferencia", isActive: true },
+      { id: "CARD", name: "Tarjeta", isActive: true },
+      { id: "MERCADO_PAGO", name: "Mercado Pago", isActive: true }
+    ],
   };
 });
 
@@ -87,7 +98,7 @@ export const useAddTransactionAction = routeAction$(
     type: z.enum(["CHARGE", "PAYMENT"]),
     amount: z.string().min(1),
     description: z.string().optional(),
-    paymentMethod: z.enum(["CASH", "TRANSFER", "CARD", "MERCADO_PAGO", "NONE"]).optional(),
+    paymentMethod: z.string().optional(),
   })
 );
 
@@ -154,11 +165,10 @@ export default component$(() => {
               <div id="payment-method-container" style="display: none;">
                 <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Impactar en Caja Abierta</label>
                 <select name="paymentMethod" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-semibold text-slate-700">
-                  <option value="NONE">No impactar en caja</option>
-                  <option value="CASH">Efectivo</option>
-                  <option value="TRANSFER">Transferencia</option>
-                  <option value="CARD">Tarjeta</option>
-                  <option value="MERCADO_PAGO">Mercado Pago</option>
+                  <option value="">No impactar en caja</option>
+                  {data.value.paymentMethods.filter(pm => pm.isActive).map(pm => (
+                    <option key={pm.id} value={pm.id}>{pm.name}</option>
+                  ))}
                 </select>
                 <p class="text-[10px] text-slate-400 mt-1">Si seleccionas un método de pago, se registrará el ingreso automáticamente en la caja actual si está abierta.</p>
               </div>
@@ -224,5 +234,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Detalles de Cuenta Corriente - SportGardenFutbol",
+  title: "Detalles de Cuenta Corriente - GardenClubFutbol",
 };

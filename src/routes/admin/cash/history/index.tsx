@@ -115,5 +115,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Historial de Caja - SportGardenFutbol",
+  title: "Historial de Caja - GardenClubFutbol",
 };

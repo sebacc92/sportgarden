@@ -166,5 +166,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Crear Cuenta - SportGarden",
+  title: "Crear Cuenta - GardenClubFutbol",
 };

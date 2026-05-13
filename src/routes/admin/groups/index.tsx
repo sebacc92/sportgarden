@@ -134,5 +134,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Cuentas Corrientes - SportGardenFutbol",
+  title: "Cuentas Corrientes - GardenClubFutbol",
 };

@@ -1,25 +1,8 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { cashMovements, cashRegisters } from "~/db/schema";
-import { and, gte, lte } from "drizzle-orm";
-
-const CATEGORIES = [
-  { id: "BOOKING", name: "Reservas", icon: "⚽" },
-  { id: "SCHOOL", name: "Escuelita", icon: "🏫" },
-  { id: "GROUP_PAYMENT", name: "Cuentas Ctes.", icon: "🤝" },
-  { id: "MAINTENANCE", name: "Mantenimiento", icon: "🔧" },
-  { id: "SALARY", name: "Sueldos", icon: "💼" },
-  { id: "SERVICES", name: "Servicios", icon: "💡" },
-  { id: "OTHER", name: "Otros", icon: "📌" },
-];
-
-const METHOD_META: Record<string, string> = {
-  CASH: "Efectivo",
-  TRANSFER: "Transferencia",
-  CARD: "Tarjeta",
-  MERCADO_PAGO: "Mercado Pago",
-};
+import { cashMovements, cashRegisters, siteSettings } from "~/db/schema";
+import { and, eq, gte, lte } from "drizzle-orm";
 
 export const useBalancesData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -45,6 +28,11 @@ export const useBalancesData = routeLoader$(async (requestEvent) => {
   const balancesByCategory: Record<string, { incomes: number; expenses: number }> = {};
   const balancesByMethod: Record<string, { incomes: number; expenses: number }> = {};
   let totalIncomes = 0, totalExpenses = 0;
+
+  const settings = await db.query.siteSettings.findFirst({
+    where: eq(siteSettings.id, 1),
+  });
+  const paymentMethods = (settings?.paymentMethods || []) as { id: string, name: string, isActive: boolean }[];
 
   for (const m of movements) {
     if (!balancesByCategory[m.category]) balancesByCategory[m.category] = { incomes: 0, expenses: 0 };
@@ -72,6 +60,18 @@ export const useBalancesData = routeLoader$(async (requestEvent) => {
     totalIncomes, totalExpenses,
     netBalance: totalIncomes - totalExpenses,
     turnsCount: allRegisters.length,
+    paymentMethods,
+    movementCategories: (settings?.movementCategories || [
+      { id: "BOOKING", name: "Reservas", type: "INCOME", icon: "⚽" },
+      { id: "SCHOOL", name: "Escuelita", type: "INCOME", icon: "🏫" },
+      { id: "KIOSK", name: "Ventas Kiosco", type: "INCOME", icon: "🍿" },
+      { id: "EXTRAS", name: "Alquileres Extra", type: "INCOME", icon: "🎟️" },
+      { id: "OTHER_INCOME", name: "Otros Ingresos", type: "INCOME", icon: "📌" },
+      { id: "MAINTENANCE", name: "Mantenimiento", type: "EXPENSE", icon: "🔧" },
+      { id: "SALARY", name: "Sueldos", type: "EXPENSE", icon: "💼" },
+      { id: "SERVICES", name: "Servicios", type: "EXPENSE", icon: "💡" },
+      { id: "OTHER_EXPENSE", name: "Otros Gastos", type: "EXPENSE", icon: "📌" },
+    ]) as { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }[],
   };
 });
 
@@ -142,7 +142,7 @@ export default component$(() => {
           {/* By Category */}
           <h2 class="text-base font-black text-slate-800 mb-4 border-b border-slate-200 pb-2 print:border-black">Desglose por Categoría</h2>
           <div class="grid grid-cols-1 gap-3 mb-10">
-            {CATEGORIES.map((cat) => {
+            {data.value.movementCategories.map((cat) => {
               const vals = balancesByCategory[cat.id];
               if (!vals || (vals.incomes === 0 && vals.expenses === 0)) return null;
               const net = vals.incomes - vals.expenses;
@@ -193,7 +193,9 @@ export default component$(() => {
               <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
                 {Object.entries(balancesByMethod).map(([method, vals]) => (
                   <div key={method} class="p-4 bg-slate-50 border border-slate-100 rounded-xl print:border-black print:bg-transparent">
-                    <div class="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">{METHOD_META[method] || method}</div>
+                    <div class="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+                      {data.value.paymentMethods.find(pm => pm.id === method)?.name || method}
+                    </div>
                     {vals.incomes > 0 && <div class="text-sm font-bold text-emerald-600">+${vals.incomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>}
                     {vals.expenses > 0 && <div class="text-sm font-bold text-red-600">-${vals.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>}
                   </div>
@@ -213,5 +215,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Balance Mensual - SportGardenFutbol",
+  title: "Balance Mensual - GardenClubFutbol",
 };

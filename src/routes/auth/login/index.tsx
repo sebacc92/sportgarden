@@ -133,5 +133,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Iniciar Sesión - SportGarden",
+  title: "Iniciar Sesión - GardenClubFutbol",
 };

@@ -8,7 +8,7 @@ interface WhatsAppButtonProps {
 export const WhatsAppButton = component$<WhatsAppButtonProps>(
   ({
     phone = "5491112345678",
-    message = "Hola SportGarden, me gustaría consultar sobre una reserva.",
+    message = "Hola GardenClubFutbol, me gustaría consultar sobre una reserva.",
   }) => {
     if (!phone) {
       return null;

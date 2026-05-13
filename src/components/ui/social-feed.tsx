@@ -35,7 +35,7 @@ export const MOCK_INSTAGRAM_POSTS: InstagramPostProps[] = [
     imageUrl: '/slider1.png',
     link: '#',
     likes: 876,
-    caption: 'Torneo de verano en SportGarden. Inscribite ya.',
+    caption: 'Torneo de verano en GardenClubFutbol. Inscribite ya.',
   },
   {
     id: 'post-5',
@@ -71,12 +71,12 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
               COMUNIDAD · FÚTBOL · AMIGOS
             </p>
             <h2 class="text-3xl font-black uppercase leading-tight tracking-[0.25em] md:text-4xl text-white">
-              @sportgarden
+              @gardenclubfutbol
             </h2>
           </div>
 
           <a
-            href="https://instagram.com/"
+            href="https://www.instagram.com/gardenclubfutbol/"
             target="_blank"
             rel="noopener noreferrer"
             class="inline-flex items-center gap-3 border-2 border-white/20 bg-slate-900 px-6 py-3 text-xs font-black uppercase tracking-[0.25em] text-white transition-all hover:-translate-y-1 hover:bg-emerald-500 hover:border-emerald-500 hover:text-slate-950 hover:shadow-lg hover:shadow-emerald-500/20 rounded-full"
@@ -104,7 +104,7 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
             >
               <img
                 src={post.imageUrl}
-                alt={post.caption || 'Post de Instagram de SportGarden'}
+                alt={post.caption || 'Post de Instagram de GardenClubFutbol'}
                 loading="lazy"
                 class="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
               />

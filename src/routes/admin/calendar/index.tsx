@@ -269,7 +269,7 @@ export const useCreateAdminBookingAction = routeAction$(
     price: z.string(),
     paidAmount: z.string().optional(),
     paymentStatus: z.enum(["PENDING", "PARTIAL", "PAID"]).optional(),
-    paymentMethod: z.enum(["CASH", "TRANSFER", "MERCADO_PAGO", "CURRENT_ACCOUNT"]).default("CASH"),
+    paymentMethod: z.string().default("CASH"),
     notes: z.string().optional(),
     extras: z.string().optional(),
     isSubscription: z.coerce.boolean().optional(),
@@ -322,7 +322,7 @@ export const useAddBookingPaymentAction = routeAction$(
   zod$({
     bookingId: z.string(),
     amount: z.string(),
-    paymentMethod: z.enum(["CASH", "TRANSFER", "MERCADO_PAGO"]),
+    paymentMethod: z.string(),
   })
 );
 
@@ -332,7 +332,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
   const viewStr = requestEvent.url.searchParams.get("view") || "day"; // "day", "week", "month"
 
   if (!dateStr) {
-    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date());
+    const todayStr = getBAFormatDate(new Date());
     throw requestEvent.redirect(302, `?date=${todayStr}&view=${viewStr}`);
   }
 
@@ -354,11 +354,9 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     where: eq(cashRegisters.status, "OPEN"),
   });
 
-  let selectedDate = new Date();
-  const [year, month, day] = dateStr.split("-").map(Number);
-  if (year && month && day) {
-    selectedDate = new Date(year, month - 1, day);
-  }
+  // Create selectedDate in BA timezone (UTC-3)
+  const selectedDate = new Date(`${dateStr}T12:00:00-03:00`);
+
 
   let startDate = new Date(selectedDate);
   let endDate = new Date(selectedDate);
@@ -366,13 +364,19 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
   if (viewStr === "week") {
     startDate = getStartOfWeek(selectedDate);
     endDate = getEndOfWeek(selectedDate);
+    // Adjust week boundaries to BA time if they were created in local time
+    startDate = new Date(`${getBAFormatDate(startDate)}T00:00:00-03:00`);
+    endDate = new Date(`${getBAFormatDate(endDate)}T23:59:59-03:00`);
   } else if (viewStr === "month") {
     startDate = getStartOfMonth(selectedDate);
     endDate = getEndOfMonth(selectedDate);
+    // Adjust month boundaries to BA time
+    startDate = new Date(`${getBAFormatDate(startDate)}T00:00:00-03:00`);
+    endDate = new Date(`${getBAFormatDate(endDate)}T23:59:59-03:00`);
   } else {
-    // Day view
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
+    // Day view - explicitly in BA time
+    startDate = new Date(`${dateStr}T00:00:00-03:00`);
+    endDate = new Date(`${dateStr}T23:59:59-03:00`);
   }
 
   const allPitches = await db.query.pitches.findMany({
@@ -435,9 +439,10 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
   const formatDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
   return {
-    selectedDateStr: `${yyyy}-${mm}-${dd}`,
-    prevDateStr: formatDateStr(prevDate),
-    nextDateStr: formatDateStr(nextDate),
+    selectedDateStr: getBAFormatDate(selectedDate),
+    todayStr: getBAFormatDate(new Date()),
+    prevDateStr: getBAFormatDate(prevDate),
+    nextDateStr: getBAFormatDate(nextDate),
     view: viewStr,
     pitches: allPitches,
     bookings: dailyBookings,
@@ -445,12 +450,17 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     endDateStr: endDate.toISOString(),
     extraServices,
     settings: settings ? {
-      ...settings,
+      id: settings.id,
+      clubName: settings.clubName,
+      clubAddress: settings.clubAddress,
+      clubPhone: settings.clubPhone,
+      bankAlias: settings.bankAlias,
       extraServices: (settings.extraServices || []) as any[],
       operatingHours: (settings.operatingHours || []) as any[],
       services: (settings.services || []) as string[],
       galleryImages: (settings.galleryImages || []) as string[],
       schoolCategories: (settings.schoolCategories || []) as any[],
+      paymentMethods: (settings.paymentMethods || []) as { id: string, name: string, isActive: boolean }[],
     } : null,
     openRegister: openRegister ? {
       id: openRegister.id,
@@ -581,19 +591,20 @@ export default component$(() => {
   );
 
   const selectedDateStr = calendarData.value.selectedDateStr;
-  const calendarView = calendarData.value.view;
+  const view = calendarData.value.view;
   const startDateStr = calendarData.value.startDateStr;
   const endDateStr = calendarData.value.endDateStr;
+
+  const viewSignal = useComputed$(() => calendarData.value.view);
 
   useVisibleTask$(({ cleanup }) => {
     const updateTimeIndicator = () => {
       const now = new Date();
-      const selected = new Date(selectedDateStr + "T00:00:00");
-      const isToday = now.toDateString() === selected.toDateString();
+      const isToday = getBAFormatDate(now) === selectedDateStr;
 
       let shouldShow = false;
-      if (calendarView === "day" && isToday) shouldShow = true;
-      if (calendarView === "week") {
+      if (view === "day" && isToday) shouldShow = true;
+      if (view === "week") {
         const start = new Date(startDateStr);
         const end = new Date(endDateStr);
         if (now >= start && now <= end) shouldShow = true;
@@ -639,14 +650,34 @@ export default component$(() => {
     }
   });
 
+  const handleNewBooking = $(() => {
+    adminFormPitchId.value = "";
+    adminFormDate.value = "";
+    adminFormTime.value = "";
+    adminFormDuration.value = "60";
+    adminIsSubscription.value = false;
+    adminEndDate.value = "";
+    adminNotes.value = "";
+    adminDiscountAmount.value = "";
+    adminDiscountType.value = "FIXED";
+    adminSelectedExtras.value = [];
+    adminSelectedUserId.value = "";
+    adminSelectedUserName.value = "";
+    adminSelectedUserPhone.value = "";
+    adminSelectedUserEmail.value = "";
+    adminIsFullPayment.value = false;
+    adminPaidAmount.value = "";
+    isCreateModalOpen.value = true;
+  });
+
   const handleViewChange = $((newView: string) => {
-    nav(`?date=${calendarData.value.selectedDateStr}&view=${newView}`);
+    nav(`?date=${selectedDateStr}&view=${newView}`);
   });
 
   // Force grid layout for week/month views
   useTask$(({ track }) => {
-    const view = track(() => calendarData.value.view);
-    if (view !== "day" && layoutMode.value !== "grid") {
+    const v = track(() => viewSignal.value);
+    if (v !== "day" && layoutMode.value !== "grid") {
       layoutMode.value = "grid";
     }
   });
@@ -654,9 +685,9 @@ export default component$(() => {
   // Generate days for Week View
   const weekDays = useComputed$(() => {
     const days = [];
-    if (calendarData.value.view === "week") {
-      const current = new Date(calendarData.value.startDateStr);
-      const end = new Date(calendarData.value.endDateStr);
+    if (view === "week") {
+      const current = new Date(startDateStr);
+      const end = new Date(endDateStr);
       while (current <= end) {
         days.push(new Date(current));
         current.setDate(current.getDate() + 1);
@@ -668,12 +699,12 @@ export default component$(() => {
   // Generate days for Month View
   const monthDays = useComputed$(() => {
     const days = [];
-    if (calendarData.value.view === "month") {
-      const current = new Date(calendarData.value.startDateStr);
+    if (view === "month") {
+      const current = new Date(startDateStr);
       while (current.getDay() !== 1) current.setDate(current.getDate() - 1);
       const startRender = new Date(current);
 
-      const endMonth = new Date(calendarData.value.endDateStr);
+      const endMonth = new Date(endDateStr);
       while (endMonth.getDay() !== 0) endMonth.setDate(endMonth.getDate() + 1);
 
       const renderCursor = new Date(startRender);
@@ -692,6 +723,7 @@ export default component$(() => {
         layoutMode={layoutMode}
         isCreateModalOpen={isCreateModalOpen}
         onViewChange$={handleViewChange}
+        onNewBooking$={handleNewBooking}
       />
 
       {layoutMode.value === 'list' ? (
@@ -716,7 +748,7 @@ export default component$(() => {
               onBookingClick$={handleBookingClick}
               onEmptySlotDragEnd$={(pitchId, time, duration) => {
                 adminFormPitchId.value = pitchId;
-                adminFormDate.value = getBAFormatDate(new Date(calendarData.value.selectedDateStr + 'T12:00:00'));
+                adminFormDate.value = getBAFormatDate(new Date(selectedDateStr + 'T12:00:00'));
                 adminFormTime.value = time;
                 adminFormDuration.value = String(duration);
                 adminIsSubscription.value = false;
@@ -746,6 +778,13 @@ export default component$(() => {
                 currentTimePosition={currentTimePosition}
                 scrollContainerRef={scrollContainerRef}
                 onBookingClick$={handleBookingClick}
+                onEmptySlotClick$={(pitchId, time) => {
+                  adminFormPitchId.value = pitchId;
+                  adminFormDate.value = calendarData.value.selectedDateStr;
+                  adminFormTime.value = time;
+                  adminFormDuration.value = "60";
+                  isCreateModalOpen.value = true;
+                }}
               />
             )}
             {calendarData.value.view === "week" && (
@@ -759,6 +798,13 @@ export default component$(() => {
                 currentTimePosition={currentTimePosition}
                 scrollContainerRef={scrollContainerRef}
                 onBookingClick$={handleBookingClick}
+                onEmptySlotClick$={(pitchId, time) => {
+                  adminFormPitchId.value = pitchId;
+                  adminFormDate.value = selectedDateStr;
+                  adminFormTime.value = time;
+                  adminFormDuration.value = "60";
+                  isCreateModalOpen.value = true;
+                }}
               />
             )}
             {calendarData.value.view === "month" && (
@@ -766,6 +812,12 @@ export default component$(() => {
                 calendarData={calendarData.value}
                 monthDays={monthDays.value}
                 onBookingClick$={handleBookingClick}
+                onEmptySlotClick$={(dateStr) => {
+                  adminFormDate.value = dateStr;
+                  adminFormTime.value = "18:00";
+                  adminFormDuration.value = "60";
+                  isCreateModalOpen.value = true;
+                }}
               />
             )}
           </div>
@@ -813,5 +865,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Reservas - SportGardenFutbol",
+  title: "Reservas - GardenClubFutbol",
 };

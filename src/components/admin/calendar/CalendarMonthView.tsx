@@ -1,14 +1,16 @@
 import { component$, type PropFunction } from "@builder.io/qwik";
 import { cn } from "@qwik-ui/utils";
+import { getBAFormatDate } from "~/routes/admin/calendar/utils";
 
 interface CalendarMonthViewProps {
   calendarData: any;
   monthDays: Date[];
   onBookingClick$: PropFunction<(id: string) => void>;
+  onEmptySlotClick$: PropFunction<(dateStr: string) => void>;
 }
 
 export const CalendarMonthView = component$<CalendarMonthViewProps>((props) => {
-  const { calendarData, monthDays, onBookingClick$ } = props;
+  const { calendarData, monthDays, onBookingClick$, onEmptySlotClick$ } = props;
 
   return (
     <div class="flex flex-col h-full overflow-hidden">
@@ -25,21 +27,26 @@ export const CalendarMonthView = component$<CalendarMonthViewProps>((props) => {
       <div class="flex-1 grid grid-cols-7 grid-rows-5 bg-slate-200 gap-[1px]">
         {monthDays.map((day, idx) => {
           const isCurrentMonth = day.getMonth() === new Date(calendarData.startDateStr).getMonth();
-          const isToday = new Date().toDateString() === day.toDateString();
+          const isToday = getBAFormatDate(new Date()) === getBAFormatDate(day);
 
           const dayBookings = calendarData.bookings.filter((b: any) => {
             const bDate = new Date(b.booking.startTime);
-            return bDate.toDateString() === day.toDateString();
+            return getBAFormatDate(bDate) === getBAFormatDate(day);
           });
 
           return (
             <div
               key={idx}
               class={cn(
-                "bg-white p-2 overflow-y-auto overflow-x-hidden flex flex-col gap-1",
+                "bg-white p-2 overflow-y-auto overflow-x-hidden flex flex-col gap-1 cursor-pointer hover:bg-slate-50 transition-colors",
                 !isCurrentMonth ? "bg-slate-50 opacity-50" : "",
                 isToday ? "bg-emerald-50/30" : ""
               )}
+              onClick$={(ev) => {
+                if (ev.target === ev.currentTarget) {
+                   onEmptySlotClick$(getBAFormatDate(day));
+                }
+              }}
             >
               <div class={cn(
                 "text-xs font-black self-end w-6 h-6 flex items-center justify-center rounded-full mb-1",

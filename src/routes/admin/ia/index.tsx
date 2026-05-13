@@ -12,8 +12,8 @@ const DEFAULT_SETTINGS = {
   aiEnabled: true,
   aiTone: 'Amigable, apasionado por el fútbol, respetuoso y servicial',
   aiInstructions: '1. TRATO NEUTRO E INCLUSIVO: NUNCA asumas el género del usuario.\n2. CERO ALUCINACIONES: Si un usuario pregunta por disponibilidad exacta, derivalo al sistema de reservas.',
-  aiKnowledge: '- Identidad: Somos SportGarden Futbol. Nuestro foco es brindar las mejores canchas de césped sintético e iluminación LED.',
-  aiInitialGreeting: 'Hola! Soy el Asistente de SportGarden, ¿en qué te puedo ayudar hoy?',
+  aiKnowledge: '- Identidad: Somos GardenClubFutbol. Nuestro foco es brindar las mejores canchas de césped sintético e iluminación LED.',
+  aiInitialGreeting: 'Hola! Soy el Asistente de GardenClubFutbol, ¿en qué te puedo ayudar hoy?',
   aiCallToAction: 'Para más info o reservas directas, escribinos a nuestro WhatsApp:',
   whatsappNumber: '5491112345678',
   aiAvatarUrl: null,
@@ -162,7 +162,7 @@ export default component$(() => {
           <div class="bg-slate-950 px-8 py-5 border-b border-white/10 flex items-center justify-between">
             <div>
               <h2 class="text-xl font-bold text-emerald-400 flex items-center gap-2 tracking-wide">
-                <span>🤖</span> AI Chatbot "SportGarden"
+                <span>🤖</span> AI Chatbot "GardenClubFutbol"
               </h2>
               <p class="text-xs text-slate-400 mt-1 uppercase tracking-wider font-medium">Configuración y personalidad del asistente virtual.</p>
             </div>
@@ -285,7 +285,7 @@ export default component$(() => {
                 name="aiInitialGreeting"
                 rows={2}
                 style={{ fieldSizing: 'content' }}
-                placeholder="Hola! Soy el Asistente de SportGarden..."
+                placeholder="Hola! Soy el Asistente de GardenClubFutbol..."
                 class="block w-full rounded-lg border border-slate-200 px-4 py-3 text-sm shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition outline-none resize-none"
               >{s.aiInitialGreeting || ''}</textarea>
               <p class="text-[10px] text-slate-400 mt-1.5 uppercase tracking-wide">Mensaje inicial o primer frase que usará el chatbot.</p>
@@ -332,5 +332,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: 'Configuración IA | Admin | SportGarden',
+  title: 'Configuración IA | Admin | GardenClubFutbol',
 };

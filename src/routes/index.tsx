@@ -9,7 +9,7 @@ import { SocialFeed, MOCK_INSTAGRAM_POSTS } from "~/components/ui/social-feed";
 import { Chatbot } from "~/components/chatbot/chatbot";
 import { WhatsAppButton } from "~/components/ui/whatsapp-button";
 import { siteSettings } from "../db/schema";
-import logo from "~/media/SportGarden8.png";
+import logo from "~/media/GardenClubFutbol8.png";
 
 export { useGuestBookingAction, useUserBookingAction };
 
@@ -49,7 +49,13 @@ export const useInstagramFeed = routeLoader$(async (requestEvent) => {
 export const useAISettingsLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
-  return settings;
+  return {
+    ...settings,
+    paymentMethods: (settings?.paymentMethods || []) as { id: string, name: string, isActive: boolean }[],
+    extraServices: (settings?.extraServices || []) as any[],
+    operatingHours: (settings?.operatingHours || []) as any[],
+    services: (settings?.services || []) as string[],
+  };
 });
 
 export const useGalleryLoader = routeLoader$(async (requestEvent) => {
@@ -339,7 +345,7 @@ export default component$(() => {
       <nav class="fixed top-0 inset-x-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/5">
         <div class="mx-auto max-w-7xl px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link href="/" class="flex items-center gap-2 group py-2">
-            <img src={logo} alt="SportGarden Logo" class="h-12 w-auto object-contain transition-transform group-hover:scale-105" />
+            <img src={logo} alt="GardenClubFutbol Logo" class="h-12 w-auto object-contain transition-transform group-hover:scale-105" />
             <div class="font-black text-2xl tracking-tighter uppercase hidden sm:block">
               Sport<span class="text-emerald-500">Garden</span>
             </div>
@@ -425,7 +431,7 @@ export default component$(() => {
             <div class="space-y-8">
               <h2 class="text-4xl md:text-5xl font-black uppercase tracking-tighter text-white">Nuestra <span class="text-emerald-500">Historia</span></h2>
               <p class="text-lg text-slate-400 leading-relaxed">
-                SportGarden nació con la visión de crear el espacio definitivo para los amantes del fútbol. Desde nuestros humildes comienzos, nos hemos dedicado a ofrecer canchas de primer nivel donde la pasión por el deporte se vive al máximo en cada partido.
+                GardenClubFutbol nació con la visión de crear el espacio definitivo para los amantes del fútbol. Desde nuestros humildes comienzos, nos hemos dedicado a ofrecer canchas de primer nivel donde la pasión por el deporte se vive al máximo en cada partido.
               </p>
               <p class="text-lg text-slate-400 leading-relaxed">
                 Creemos que el fútbol es más que un juego; es comunidad, amistad y esfuerzo. Por eso, nuestras instalaciones no solo cuentan con la mejor tecnología en césped artificial, sino que también ofrecen un ambiente inigualable para el tan esperado "tercer tiempo".
@@ -443,7 +449,7 @@ export default component$(() => {
             </div>
             <div class="relative">
               <div class="aspect-square rounded-3xl overflow-hidden bg-slate-900 border border-white/10 relative z-10">
-                <img src="/slider1.png" alt="SportGarden Historia" class="w-full h-full object-cover mix-blend-luminosity hover:mix-blend-normal transition-all duration-700" />
+                <img src="/slider1.png" alt="GardenClubFutbol Historia" class="w-full h-full object-cover mix-blend-luminosity hover:mix-blend-normal transition-all duration-700" />
               </div>
               <div class="absolute -inset-4 bg-emerald-500/20 blur-3xl -z-10 rounded-full"></div>
             </div>
@@ -539,7 +545,7 @@ export default component$(() => {
                 Nuestras <span class="text-emerald-500">Instalaciones</span>
               </h2>
               <p class="text-lg text-slate-400 max-w-xl mx-auto">
-                Conocé cada rincón de SportGarden antes de tu próxima visita.
+                Conocé cada rincón de GardenClubFutbol antes de tu próxima visita.
               </p>
             </div>
 
@@ -995,15 +1001,28 @@ export default component$(() => {
                       </div>
 
                       <label class="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Método de Pago</label>
-                      <div class="flex gap-2 mb-6">
-                        <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                          <input type="radio" name="paymentMethod" value="CASH" bind:value={paymentMethod} class="hidden" />
-                          <span class="text-sm font-bold text-white">Efectivo</span>
-                        </label>
-                        <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                          <input type="radio" name="paymentMethod" value="TRANSFER" bind:value={paymentMethod} class="hidden" />
-                          <span class="text-sm font-bold text-white">Transferencia</span>
-                        </label>
+                      <div class="flex flex-wrap gap-2 mb-6">
+                        {(aiSettings.value?.paymentMethods || [])
+                          .filter((pm: any) => pm.isActive)
+                          .map((pm: any) => (
+                            <label key={pm.id} class="flex-1 min-w-[120px] text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
+                              <input type="radio" name="paymentMethod" value={pm.id} bind:value={paymentMethod} class="hidden" />
+                              <span class="text-sm font-bold text-white">{pm.name}</span>
+                            </label>
+                          ))
+                        }
+                        {(aiSettings.value?.paymentMethods || []).filter((pm: any) => pm.isActive).length === 0 && (
+                          <>
+                            <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
+                              <input type="radio" name="paymentMethod" value="CASH" bind:value={paymentMethod} class="hidden" />
+                              <span class="text-sm font-bold text-white">Efectivo</span>
+                            </label>
+                            <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
+                              <input type="radio" name="paymentMethod" value="TRANSFER" bind:value={paymentMethod} class="hidden" />
+                              <span class="text-sm font-bold text-white">Transferencia</span>
+                            </label>
+                          </>
+                        )}
                       </div>
 
                       {paymentMethod.value === "TRANSFER" && (
@@ -1077,7 +1096,7 @@ export default component$(() => {
             <a href="#canchas" class="text-sm font-bold text-slate-400 hover:text-emerald-400 uppercase tracking-widest transition-colors">Canchas</a>
           </div>
           <p class="text-slate-600 text-xs mt-4 md:mt-0">
-            © {new Date().getFullYear()} SportGarden Futbol. Todos los derechos reservados.
+            © {new Date().getFullYear()} GardenClubFutbol. Todos los derechos reservados.
           </p>
         </div>
       </footer>
@@ -1087,11 +1106,11 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: "SportGarden - El Mejor Fútbol",
+  title: "GardenClubFutbol - El Mejor Fútbol",
   meta: [
     {
       name: "description",
-      content: "Alquiler de canchas de fútbol premium. Reserva tu turno online en SportGarden.",
+      content: "Alquiler de canchas de fútbol premium. Reserva tu turno online en GardenClubFutbol.",
     },
   ],
 };

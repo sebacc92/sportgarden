@@ -166,8 +166,10 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    font-family: 'Montserrat', sans-serif;
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Montserrat', sans-serif;
   }
 }

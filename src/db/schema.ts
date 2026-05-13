@@ -61,9 +61,7 @@ export const bookings = sqliteTable("bookings", {
     .default("PENDING"),
   preferenceId: text("preference_id"),
   paymentId: text("payment_id"),
-  paymentMethod: text("payment_method", {
-    enum: ["CASH", "TRANSFER", "MERCADO_PAGO", "CURRENT_ACCOUNT", "OTHER"],
-  })
+  paymentMethod: text("payment_method")
     .notNull()
     .default("CASH"),
   notes: text("notes"),
@@ -121,6 +119,8 @@ export const siteSettings = sqliteTable('site_settings', {
   bankAlias: text('bank_alias'),
   galleryImages: text('gallery_images', { mode: 'json' }), // array of image URLs (max 20)
   schoolCategories: text('school_categories', { mode: 'json' }), // array of { id: string, name: string, teacher: string }
+  paymentMethods: text('payment_methods', { mode: 'json' }), // array of { id: string, name: string, isActive: boolean }
+  movementCategories: text('movement_categories', { mode: 'json' }), // array of { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }
   
   updatedAt: integer('updated_at', { mode: 'timestamp' }),
 });
@@ -222,10 +222,10 @@ export const cashMovements = sqliteTable("cash_movements", {
   id: text("id").primaryKey(),
   registerId: text("register_id").notNull().references(() => cashRegisters.id),
   type: text("type", { enum: ["INCOME", "EXPENSE"] }).notNull(),
-  category: text("category", { enum: ["BOOKING", "SCHOOL", "GROUP_PAYMENT", "MAINTENANCE", "SALARY", "SERVICES", "OTHER"] }).notNull(),
+  category: text("category").notNull(),
   amount: real("amount").notNull(),
   description: text("description"),
-  paymentMethod: text("payment_method", { enum: ["CASH", "TRANSFER", "CARD", "MERCADO_PAGO"] }).notNull().default("CASH"),
+  paymentMethod: text("payment_method").notNull().default("CASH"),
   referenceId: text("reference_id"), // ID to booking, student_payment, group_transaction depending on category
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

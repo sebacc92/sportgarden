@@ -4,18 +4,18 @@ import { instagramPosts } from '~/db/schema';
 
 export const onGet: RequestHandler = async (requestEvent) => {
   const { env, request, json } = requestEvent;
-  
+
   // Security verification to ensure only authorized callers (e.g., Vercel Cron) can run this endpoint.
   const authHeader = request.headers.get('authorization');
   const cronSecret = env.get('CRON_SECRET');
-  
+
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     json(401, { error: 'Unauthorized' });
     return;
   }
 
   try {
-    const res = await fetch('https://feeds.behold.so/DPNOhrNZKVOOvpy5y2OS', {
+    const res = await fetch('https://feeds.behold.so/tTcVjk6ooAq94BPJcVRi', {
       headers: {
         Accept: 'application/json',
       },
@@ -48,8 +48,8 @@ export const onGet: RequestHandler = async (requestEvent) => {
 
     const postsToInsert = topPosts.map(post => {
       // Use thumbnailUrl if it's a video, else mediaUrl
-      const imageUrl = (post.mediaType === 'VIDEO' && post.thumbnailUrl) 
-        ? post.thumbnailUrl 
+      const imageUrl = (post.mediaType === 'VIDEO' && post.thumbnailUrl)
+        ? post.thumbnailUrl
         : post.mediaUrl;
 
       return {

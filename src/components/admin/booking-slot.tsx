@@ -1,4 +1,5 @@
 import { component$, type PropFunction } from "@builder.io/qwik";
+import { cn } from "@qwik-ui/utils";
 
 export type BookingSlotProps = {
   id: string;

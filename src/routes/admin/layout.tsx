@@ -3,7 +3,7 @@ import { Link, useLocation, routeLoader$, server$ } from "@builder.io/qwik-city"
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
 import { siteSettings, users, cashRegisters } from "~/db/schema";
-import logo from "../../media/SportGarden8.png";
+import logo from "../../media/GardenClubFutbol8.png";
 
 export const useAdminUser = routeLoader$(async (requestEvent) => {
   const isLogin = requestEvent.url.pathname.startsWith('/admin/login');
@@ -212,7 +212,7 @@ export default component$(() => {
             </div>
           ) : (
             <div class="flex items-center gap-3">
-              <img src={logo} alt="SportGarden" class="h-10 w-auto object-contain" />
+              <img src={logo} alt="GardenClubFutbol" class="h-10 w-auto object-contain" />
               <div class="font-black text-xl tracking-tighter text-white uppercase whitespace-nowrap">
                 Sport<span class="text-emerald-500">Garden</span>
               </div>

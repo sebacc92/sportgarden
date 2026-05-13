@@ -1,27 +1,10 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { cashRegisters, cashMovements } from "~/db/schema";
+import { cashRegisters, cashMovements, siteSettings } from "~/db/schema";
 import { eq, desc } from "drizzle-orm";
 
 const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 100];
-
-const CATEGORY_META: Record<string, { label: string; color: string }> = {
-  BOOKING:       { label: "Reserva",       color: "bg-emerald-100 text-emerald-800" },
-  SCHOOL:        { label: "Escuelita",     color: "bg-blue-100 text-blue-800" },
-  GROUP_PAYMENT: { label: "Cuenta Cte.",   color: "bg-purple-100 text-purple-800" },
-  MAINTENANCE:   { label: "Mantenimiento", color: "bg-orange-100 text-orange-800" },
-  SALARY:        { label: "Sueldo",        color: "bg-red-100 text-red-800" },
-  SERVICES:      { label: "Servicios",     color: "bg-yellow-100 text-yellow-800" },
-  OTHER:         { label: "Otro",          color: "bg-slate-100 text-slate-700" },
-};
-
-const METHOD_META: Record<string, string> = {
-  CASH:         "Efectivo",
-  TRANSFER:     "Transferencia",
-  CARD:         "Tarjeta",
-  MERCADO_PAGO: "Mercado Pago",
-};
 
 export const useRegisterDetailData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -40,7 +23,7 @@ export const useRegisterDetailData = routeLoader$(async (requestEvent) => {
     orderBy: [desc(cashMovements.createdAt)],
   });
 
-  const totalIncomes  = movements.filter(m => m.type === "INCOME").reduce((a, m) => a + m.amount, 0);
+  const totalIncomes = movements.filter(m => m.type === "INCOME").reduce((a, m) => a + m.amount, 0);
   const totalExpenses = movements.filter(m => m.type === "EXPENSE").reduce((a, m) => a + m.amount, 0);
   const calculatedBalance = register.openingBalance + totalIncomes - totalExpenses;
 
@@ -60,12 +43,37 @@ export const useRegisterDetailData = routeLoader$(async (requestEvent) => {
     else byMethod[m.paymentMethod].expenses += m.amount;
   }
 
-  return { register, movements, totalIncomes, totalExpenses, calculatedBalance, byCategory, byMethod };
+  const settings = await db.query.siteSettings.findFirst({
+    where: eq(siteSettings.id, 1),
+  });
+  const paymentMethods = (settings?.paymentMethods || []) as { id: string, name: string, isActive: boolean }[];
+
+  return { 
+    register, 
+    movements, 
+    totalIncomes, 
+    totalExpenses, 
+    calculatedBalance, 
+    byCategory, 
+    byMethod, 
+    paymentMethods,
+    movementCategories: (settings?.movementCategories || [
+      { id: "BOOKING", name: "Reservas", type: "INCOME", icon: "⚽" },
+      { id: "SCHOOL", name: "Escuelita", type: "INCOME", icon: "🏫" },
+      { id: "KIOSK", name: "Ventas Kiosco", type: "INCOME", icon: "🍿" },
+      { id: "EXTRAS", name: "Alquileres Extra", type: "INCOME", icon: "🎟️" },
+      { id: "OTHER_INCOME", name: "Otros Ingresos", type: "INCOME", icon: "📌" },
+      { id: "MAINTENANCE", name: "Mantenimiento", type: "EXPENSE", icon: "🔧" },
+      { id: "SALARY", name: "Sueldos", type: "EXPENSE", icon: "💼" },
+      { id: "SERVICES", name: "Servicios", type: "EXPENSE", icon: "💡" },
+      { id: "OTHER_EXPENSE", name: "Otros Gastos", type: "EXPENSE", icon: "📌" },
+    ]) as { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }[]
+  };
 });
 
 export default component$(() => {
   const detailData = useRegisterDetailData();
-  const { register, movements, totalIncomes, totalExpenses, calculatedBalance, byCategory, byMethod } = detailData.value;
+  const { register, movements, totalIncomes, totalExpenses, calculatedBalance, byCategory, byMethod, paymentMethods, movementCategories } = detailData.value;
 
   const openedStr = register.openedAt
     ? new Date(register.openedAt).toLocaleString("es-AR", { dateStyle: "long", timeStyle: "short" })
@@ -87,12 +95,12 @@ export default component$(() => {
         <div class="flex justify-between items-center print:hidden">
           <Link href="/admin/cash/history/"
             class="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
             Volver al Historial
           </Link>
           <button onClick$={() => window.print()}
             class="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect width="12" height="8" x="6" y="14" /></svg>
             Descargar PDF
           </button>
         </div>
@@ -169,10 +177,18 @@ export default component$(() => {
               <h2 class="text-base font-black text-slate-800 mb-3 border-b border-slate-200 pb-2 print:border-black">Resumen por Categoría</h2>
               <div class="space-y-2">
                 {Object.entries(byCategory).map(([cat, vals]) => {
-                  const meta = CATEGORY_META[cat] || CATEGORY_META["OTHER"];
+                  const mc = movementCategories.find(c => c.id === cat);
+                  const label = mc ? mc.name : cat;
+                  const icon = mc ? mc.icon : "📌";
+                  const isIncome = movementCategories.find(c => c.id === cat)?.type === "INCOME";
+                  const typeColor = isIncome ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100";
+                  
                   return (
                     <div key={cat} class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 print:border-black print:bg-transparent">
-                      <span class={`px-2 py-0.5 rounded-md text-xs font-bold ${meta.color}`}>{meta.label}</span>
+                      <span class={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight border ${typeColor}`}>
+                        <span class="mr-1">{icon}</span>
+                        {label}
+                      </span>
                       <div class="flex gap-6 text-sm">
                         {vals.incomes > 0 && <span class="font-bold text-emerald-600">+${vals.incomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
                         {vals.expenses > 0 && <span class="font-bold text-red-600">-${vals.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>}
@@ -192,7 +208,9 @@ export default component$(() => {
               <div class="grid grid-cols-2 gap-3">
                 {Object.entries(byMethod).map(([method, vals]) => (
                   <div key={method} class="p-3 bg-slate-50 border border-slate-100 rounded-xl print:border-black print:bg-transparent">
-                    <div class="text-xs font-bold text-slate-500 uppercase mb-1">{METHOD_META[method] || method}</div>
+                    <div class="text-xs font-bold text-slate-500 uppercase mb-1">
+                      {paymentMethods.find(pm => pm.id === method)?.name || method}
+                    </div>
                     {vals.incomes > 0 && <div class="text-sm font-bold text-emerald-600">+${vals.incomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>}
                     {vals.expenses > 0 && <div class="text-sm font-bold text-red-600">-${vals.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>}
                   </div>
@@ -218,17 +236,26 @@ export default component$(() => {
                 <tr><td colSpan={5} class="p-6 text-center text-slate-400">Sin movimientos</td></tr>
               ) : (
                 movements.map((m) => {
-                  const cat = CATEGORY_META[m.category] || CATEGORY_META["OTHER"];
+                  const mc = movementCategories.find(c => c.id === m.category);
+                  const label = mc ? mc.name : m.category;
+                  const icon = mc ? mc.icon : "📌";
+                  const typeColor = m.type === "INCOME" ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100";
+                  
                   return (
                     <tr key={m.id} class="border-b border-slate-100 last:border-0 print:border-black">
                       <td class="p-3 text-xs whitespace-nowrap">
                         {new Date(m.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
                       </td>
                       <td class="p-3">
-                        <span class={`px-2 py-0.5 rounded-md text-xs font-bold print:bg-transparent print:font-bold ${cat.color}`}>{cat.label}</span>
+                        <span class={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight border print:bg-transparent print:font-bold ${typeColor}`}>
+                          <span class="mr-1">{icon}</span>
+                          {label}
+                        </span>
                       </td>
                       <td class="p-3 text-sm text-slate-500 print:text-black">{m.description || "—"}</td>
-                      <td class="p-3 text-xs text-slate-500 print:text-black">{METHOD_META[m.paymentMethod] || m.paymentMethod}</td>
+                      <td class="p-3 text-xs text-slate-500 print:text-black">
+                        {paymentMethods.find(pm => pm.id === m.paymentMethod)?.name || m.paymentMethod}
+                      </td>
                       <td class={`p-3 text-right font-black text-sm print:text-black ${m.type === "INCOME" ? "text-emerald-600" : "text-red-600"}`}>
                         {m.type === "INCOME" ? "+" : "-"}${m.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                       </td>
@@ -250,5 +277,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Reporte de Caja - SportGardenFutbol",
+  title: "Reporte de Caja - GardenClubFutbol",
 };

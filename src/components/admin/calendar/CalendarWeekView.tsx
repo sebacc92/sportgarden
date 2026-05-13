@@ -1,6 +1,7 @@
 import { component$, type Signal, type PropFunction } from "@builder.io/qwik";
 import { cn } from "@qwik-ui/utils";
 import { BookingSlot } from "~/components/admin/booking-slot";
+import { getBAFormatDate } from "~/routes/admin/calendar/utils";
 
 interface CalendarWeekViewProps {
   calendarData: any;
@@ -12,6 +13,7 @@ interface CalendarWeekViewProps {
   currentTimePosition: Signal<number>;
   scrollContainerRef: Signal<HTMLElement | undefined>;
   onBookingClick$: PropFunction<(id: string) => void>;
+  onEmptySlotClick$: PropFunction<(dateStr: string, time: string) => void>;
 }
 
 export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
@@ -24,7 +26,8 @@ export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
     showCurrentTimeLine, 
     currentTimePosition, 
     scrollContainerRef, 
-    onBookingClick$ 
+    onBookingClick$,
+    onEmptySlotClick$
   } = props;
 
   return (
@@ -35,7 +38,7 @@ export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
           <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora</span>
         </div>
         {weekDays.map((day, idx) => {
-          const isToday = new Date().toDateString() === day.toDateString();
+          const isToday = getBAFormatDate(new Date()) === getBAFormatDate(day);
           return (
             <div
               key={idx}
@@ -99,10 +102,10 @@ export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
           {weekDays.map((day, idx) => {
             const dayBookings = calendarData.bookings.filter((b: any) => {
               const bDate = new Date(b.booking.startTime);
-              return bDate.toDateString() === day.toDateString();
+              return getBAFormatDate(bDate) === getBAFormatDate(day);
             });
 
-            const isToday = new Date().toDateString() === day.toDateString();
+            const isToday = getBAFormatDate(new Date()) === getBAFormatDate(day);
 
             return (
               <div
@@ -113,7 +116,11 @@ export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
                 {hours.map((hour) => (
                   <div
                     key={`empty-${hour}`}
-                    onClick$={() => {}}
+                    onClick$={() => {
+                      const time = `${String(hour).padStart(2, "0")}:00`;
+                      const dateStr = getBAFormatDate(day);
+                      onEmptySlotClick$(dateStr, time);
+                    }}
                     class="absolute left-0 right-0 group cursor-pointer hover:bg-slate-100/80 flex items-center justify-center transition-all border-b border-slate-100/50 last:border-0"
                     style={{
                       top: `${(hour - calendarStartHour) * pixelsPerHour}px`,

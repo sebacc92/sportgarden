@@ -59,13 +59,13 @@ export const onPost: RequestHandler = async (requestEvent) => {
     ).join('\n');
 
     // System prompt
-    const systemPrompt = `${settings?.aiInitialGreeting || 'Hola! Soy el Asistente de SportGarden, ¿en qué te puedo ayudar hoy?'}
+    const systemPrompt = `${settings?.aiInitialGreeting || 'Hola! Soy el Asistente de GardenClubFutbol, ¿en qué te puedo ayudar hoy?'}
 
 DATOS EN TIEMPO REAL (CANCHAS DISPONIBLES EN EL COMPLEJO):
 ${activePitches.length > 0 ? formatPitches(activePitches) : 'No hay información de canchas en este momento.'}
 
 CONOCIMIENTO DEL CLUB:
-${settings?.aiKnowledge || '- Identidad: Somos SportGarden Futbol. Nuestro foco es brindar las mejores canchas de césped sintético e iluminación LED de la zona.'}
+${settings?.aiKnowledge || '- Identidad: Somos GardenClubFutbol. Nuestro foco es brindar las mejores canchas de césped sintético e iluminación LED de la zona.'}
 
 INSTRUCCIONES Y REGLAS:
 - Tono: ${settings?.aiTone || 'Amigable, apasionado por el fútbol, respetuoso y servicial'}.

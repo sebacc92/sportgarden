@@ -8,10 +8,11 @@ interface CalendarToolbarProps {
   layoutMode: Signal<'timeline' | 'list' | 'grid'>;
   isCreateModalOpen: Signal<boolean>;
   onViewChange$: PropFunction<(newView: string) => void>;
+  onNewBooking$: PropFunction<() => void>;
 }
 
 export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
-  const { calendarData, layoutMode, isCreateModalOpen, onViewChange$ } = props;
+  const { calendarData, layoutMode, onViewChange$, onNewBooking$ } = props;
 
   return (
     <div class="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-10 shrink-0 gap-4">
@@ -60,9 +61,9 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>
         </Link>
 
-        {calendarData.selectedDateStr !== getBAFormatDate(new Date()) && (
+        {calendarData.selectedDateStr !== calendarData.todayStr && (
           <Link
-            href={`?date=${getBAFormatDate(new Date())}&view=${calendarData.view}`}
+            href={`?date=${calendarData.todayStr}&view=${calendarData.view}`}
             class="px-3 py-1.5 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-all uppercase tracking-widest ml-1"
           >
             Hoy
@@ -73,7 +74,7 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
       {/* Right: Layout toggle + View Switcher + New Reservation */}
       <div class="flex items-center gap-3 shrink-0">
         <button
-          onClick$={() => isCreateModalOpen.value = true}
+          onClick$={() => onNewBooking$()}
           class="px-4 py-1.5 text-xs font-black text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-colors flex items-center gap-2"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>

@@ -75,7 +75,7 @@ export default component$(() => {
             >
               <div class="flex items-center gap-2 mb-1 px-1">
                 <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  {msg.role === 'user' ? '👤 Usuario' : '🤖 Asistente SportGarden'}
+                  {msg.role === 'user' ? '👤 Usuario' : '🤖 Asistente GardenClubFutbol'}
                 </span>
                 <span class="text-[9px] text-slate-300 font-bold">{new Date(msg.createdAt).toLocaleTimeString('es-AR')}</span>
               </div>
@@ -104,5 +104,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: 'Detalle de Chat | Admin | SportGarden',
+  title: 'Detalle de Chat | Admin | GardenClubFutbol',
 };

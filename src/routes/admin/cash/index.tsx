@@ -8,22 +8,7 @@ import { cn } from "@qwik-ui/utils";
 
 const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 100];
 
-const CATEGORY_META: Record<string, { label: string; color: string }> = {
-  BOOKING: { label: "Reserva", color: "bg-emerald-100 text-emerald-800" },
-  SCHOOL: { label: "Escuelita", color: "bg-blue-100 text-blue-800" },
-  GROUP_PAYMENT: { label: "Cuenta Cte.", color: "bg-purple-100 text-purple-800" },
-  MAINTENANCE: { label: "Mantenimiento", color: "bg-orange-100 text-orange-800" },
-  SALARY: { label: "Sueldo", color: "bg-red-100 text-red-800" },
-  SERVICES: { label: "Servicios", color: "bg-yellow-100 text-yellow-800" },
-  OTHER: { label: "Otro", color: "bg-slate-100 text-slate-700" },
-};
 
-const METHOD_META: Record<string, string> = {
-  CASH: "Efectivo",
-  TRANSFER: "Transferencia",
-  CARD: "Tarjeta",
-  MERCADO_PAGO: "Mercado Pago",
-};
 
 export const useCashData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -99,18 +84,32 @@ export const useCashData = routeLoader$(async (requestEvent) => {
   const totalExpenses = allMovements.filter(m => m.type === "EXPENSE").reduce((a, m) => a + m.amount, 0);
   const currentBalance = (latestRegister?.openingBalance || 0) + totalIncomes - totalExpenses;
 
+  const settings = await db.query.siteSettings.findFirst();
+  const paymentMethods = (settings?.paymentMethods || []) as { id: string, name: string, isActive: boolean }[];
+  
   // Desglose por método de pago
-  const byMethod: Record<string, { incomes: number; expenses: number }> = {
-    CASH: { incomes: 0, expenses: 0 },
-    TRANSFER: { incomes: 0, expenses: 0 },
-    CARD: { incomes: 0, expenses: 0 },
-    MERCADO_PAGO: { incomes: 0, expenses: 0 },
-  };
+  const byMethod: Record<string, { incomes: number; expenses: number }> = {};
+  
+  // Initialize with all available payment methods (from settings or defaults)
+  const availableMethods = paymentMethods.length > 0 
+    ? paymentMethods 
+    : [
+        { id: "CASH", name: "Efectivo", isActive: true },
+        { id: "TRANSFER", name: "Transferencia", isActive: true },
+        { id: "CARD", name: "Tarjeta", isActive: true },
+        { id: "MERCADO_PAGO", name: "Mercado Pago", isActive: true }
+      ];
+
+  availableMethods.forEach(pm => {
+    byMethod[pm.id] = { incomes: 0, expenses: 0 };
+  });
+
   for (const m of allMovements) {
-    if (byMethod[m.paymentMethod]) {
-      if (m.type === "INCOME") byMethod[m.paymentMethod].incomes += m.amount;
-      else byMethod[m.paymentMethod].expenses += m.amount;
+    if (!byMethod[m.paymentMethod]) {
+      byMethod[m.paymentMethod] = { incomes: 0, expenses: 0 };
     }
+    if (m.type === "INCOME") byMethod[m.paymentMethod].incomes += m.amount;
+    else byMethod[m.paymentMethod].expenses += m.amount;
   }
 
   return {
@@ -120,6 +119,18 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     totalExpenses,
     currentBalance,
     byMethod,
+    paymentMethods: availableMethods,
+    movementCategories: (settings?.movementCategories || [
+      { id: "BOOKING", name: "Reservas", type: "INCOME", icon: "⚽" },
+      { id: "SCHOOL", name: "Escuelita", type: "INCOME", icon: "🏫" },
+      { id: "KIOSK", name: "Ventas Kiosco", type: "INCOME", icon: "🍿" },
+      { id: "EXTRAS", name: "Alquileres Extra", type: "INCOME", icon: "🎟️" },
+      { id: "OTHER_INCOME", name: "Otros Ingresos", type: "INCOME", icon: "📌" },
+      { id: "MAINTENANCE", name: "Mantenimiento", type: "EXPENSE", icon: "🔧" },
+      { id: "SALARY", name: "Sueldos", type: "EXPENSE", icon: "💼" },
+      { id: "SERVICES", name: "Servicios", type: "EXPENSE", icon: "💡" },
+      { id: "OTHER_EXPENSE", name: "Otros Gastos", type: "EXPENSE", icon: "📌" },
+    ]) as { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }[],
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalCount / limit),
@@ -172,7 +183,7 @@ export const useAddMovementAction = routeAction$(
       registerId: data.registerId,
       type: data.type as any,
       category: data.category as any,
-      amount: Number(data.amount),
+      amount: data.amount,
       description: data.description,
       paymentMethod: data.paymentMethod as any,
     });
@@ -181,10 +192,10 @@ export const useAddMovementAction = routeAction$(
   zod$({
     registerId: z.string(),
     type: z.enum(["INCOME", "EXPENSE"]),
-    category: z.enum(["BOOKING", "SCHOOL", "GROUP_PAYMENT", "MAINTENANCE", "SALARY", "SERVICES", "OTHER"]),
-    amount: z.string(),
-    description: z.string().optional(),
-    paymentMethod: z.enum(["CASH", "TRANSFER", "CARD", "MERCADO_PAGO"]),
+    category: z.string().min(1, "La categoría es requerida"),
+    amount: z.coerce.number().positive("El monto debe ser mayor a 0"),
+    description: z.string().min(1, "La descripción / concepto es requerida"),
+    paymentMethod: z.string(),
   })
 );
 
@@ -197,6 +208,7 @@ export default component$(() => {
   const isMovementModalOpen = useSignal(false);
   const selectedMovement = useSignal<any>(null);
   const isDetailModalOpen = useSignal(false);
+  const movementType = useSignal<"INCOME" | "EXPENSE">("INCOME");
 
   // Arqueo de billetes
   const bills = useSignal<Record<number, number>>(
@@ -244,7 +256,7 @@ export default component$(() => {
         
         {/* Print-only Header */}
         <div class="hidden print:block mb-6 border-b border-slate-900 pb-4">
-          <h1 class="text-xl font-black">SportGarden - Reporte de Caja</h1>
+          <h1 class="text-xl font-black">GardenClubFutbol - Reporte de Caja</h1>
           <p class="text-xs text-slate-500 font-bold uppercase">{new Date().toLocaleString("es-AR")}</p>
         </div>
 
@@ -380,7 +392,7 @@ export default component$(() => {
                 <div class="mt-4 pt-4 border-t border-slate-100 space-y-1.5">
                   {Object.entries(cashData.value.byMethod).filter(([, v]) => v.incomes > 0).map(([k, v]) => (
                     <div key={k} class="flex justify-between text-[10px] text-slate-500 font-bold uppercase tracking-tight">
-                      <span>{METHOD_META[k]}</span>
+                      <span>{cashData.value.paymentMethods.find((pm: any) => pm.id === k)?.name || k}</span>
                       <span class="text-emerald-600">+${v.incomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>
                     </div>
                   ))}
@@ -389,17 +401,17 @@ export default component$(() => {
 
               <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
                 <div class="flex items-center gap-3 mb-3">
-                  <div class="p-2 bg-red-50 rounded-lg text-red-600">
+                  <div class="p-2 bg-rose-50 rounded-lg text-rose-600">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></svg>
                   </div>
                   <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Egresos Totales</div>
                 </div>
-                <div class="text-2xl font-black text-red-600">${cashData.value.totalExpenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
+                <div class="text-2xl font-black text-rose-600">${cashData.value.totalExpenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
                 <div class="mt-4 pt-4 border-t border-slate-100 space-y-1.5">
                   {Object.entries(cashData.value.byMethod).filter(([, v]) => v.expenses > 0).map(([k, v]) => (
                     <div key={k} class="flex justify-between text-[10px] text-slate-500 font-bold uppercase tracking-tight">
-                      <span>{METHOD_META[k]}</span>
-                      <span class="text-red-600">-${v.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>
+                      <span>{cashData.value.paymentMethods.find((pm: any) => pm.id === k)?.name || k}</span>
+                      <span class="text-rose-600">-${v.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>
                     </div>
                   ))}
                 </div>
@@ -427,8 +439,8 @@ export default component$(() => {
                     if (bal === 0 && k !== 'CASH') return null;
                     return (
                       <div key={k} class="px-3 py-1 bg-white/5 rounded-lg border border-white/5 flex flex-col">
-                        <span class="text-[8px] font-black text-slate-500 uppercase">{METHOD_META[k]}</span>
-                        <span class={cn("text-[10px] font-bold", bal >= 0 ? "text-emerald-400" : "text-red-400")}>
+                        <span class="text-[8px] font-black text-slate-500 uppercase">{cashData.value.paymentMethods.find((pm: any) => pm.id === k)?.name || k}</span>
+                        <span class={cn("text-[10px] font-bold", bal >= 0 ? "text-emerald-400" : "text-rose-400")}>
                           ${bal.toLocaleString("es-AR")}
                         </span>
                       </div>
@@ -482,24 +494,33 @@ export default component$(() => {
                       </tr>
                     ) : (
                       cashData.value.movements.map((m) => {
-                        const cat = CATEGORY_META[m.category] || CATEGORY_META["OTHER"];
+                        const mc = cashData.value.movementCategories.find(c => c.id === m.category);
+                        const label = mc ? mc.name : m.category;
+                        const icon = mc ? mc.icon : "📌";
+                        const typeColor = m.type === "INCOME" ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100";
+                        
                         return (
                           <tr key={m.id} class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors group">
                             <td class="p-4 pl-6 text-slate-500 text-xs font-bold whitespace-nowrap">
                               {new Date(m.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
                             </td>
                             <td class="p-4">
-                              <span class={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight ${cat.color}`}>{cat.label}</span>
+                              <span class={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight border ${typeColor}`}>
+                                <span class="mr-1">{icon}</span>
+                                {label}
+                              </span>
                             </td>
                             <td class="p-4 text-slate-600 font-medium max-w-md truncate">{m.description || <span class="text-slate-300">—</span>}</td>
                             <td class="p-4">
                               <div class="flex items-center gap-2">
                                 <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                                <span class="text-xs text-slate-500 font-bold uppercase tracking-widest">{METHOD_META[m.paymentMethod] || m.paymentMethod}</span>
+                                <span class="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                                  {cashData.value.paymentMethods.find((pm: any) => pm.id === m.paymentMethod)?.name || m.paymentMethod}
+                                </span>
                               </div>
                             </td>
-                            <td class={`p-4 text-right font-black text-base ${m.type === "INCOME" ? "text-emerald-600" : "text-red-600"}`}>
-                              {m.type === "INCOME" ? "+" : "-"}${m.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                            <td class={`p-4 text-right font-black text-base whitespace-nowrap ${m.type === "INCOME" ? "text-emerald-600" : "text-rose-600"}`}>
+                              {m.type === "INCOME" ? "+ $" : "- $"}{m.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                             </td>
                             <td class="p-4 pr-6 text-center print:hidden">
                               {(m.category === "BOOKING" && m.booking) || (m.category === "SCHOOL" && m.student) ? (
@@ -576,7 +597,7 @@ export default component$(() => {
                 </button>
                 <div class="text-[10px] font-black uppercase tracking-widest text-emerald-200 mb-2">Detalle de Operación</div>
                 <h2 class="text-2xl font-black tracking-tighter uppercase mb-1">
-                  {CATEGORY_META[selectedMovement.value.category]?.label || "Movimiento"}
+                  {cashData.value.movementCategories.find(mc => mc.id === selectedMovement.value?.category)?.name || "Movimiento"}
                 </h2>
                 <div class="flex items-center gap-2 text-emerald-100 text-xs font-bold">
                   <span>{new Date(selectedMovement.value.createdAt).toLocaleDateString("es-AR")}</span>
@@ -590,13 +611,15 @@ export default component$(() => {
                 <div class="flex justify-between items-end pb-6 border-b border-slate-100">
                   <div>
                     <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Monto Registrado</div>
-                    <div class={`text-3xl font-black ${selectedMovement.value.type === "INCOME" ? "text-emerald-600" : "text-red-600"}`}>
-                      {selectedMovement.value.type === "INCOME" ? "+" : "-"}${selectedMovement.value.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                    <div class={`text-3xl font-black ${selectedMovement.value.type === "INCOME" ? "text-emerald-600" : "text-rose-600"}`}>
+                      {selectedMovement.value.type === "INCOME" ? "+ $" : "- $"}{selectedMovement.value.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                   <div class="text-right">
                     <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Método</div>
-                    <div class="text-sm font-black text-slate-700 uppercase tracking-tight">{METHOD_META[selectedMovement.value.paymentMethod]}</div>
+                    <div class="text-sm font-black text-slate-700 uppercase tracking-tight">
+                      {cashData.value.paymentMethods.find((pm: any) => pm.id === selectedMovement.value.paymentMethod)?.name || selectedMovement.value.paymentMethod}
+                    </div>
                   </div>
                 </div>
 
@@ -746,7 +769,12 @@ export default component$(() => {
               <div class="grid grid-cols-2 gap-4">
                 <div class="space-y-1.5">
                   <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo</label>
-                  <select name="type" class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-bold text-slate-700 appearance-none cursor-pointer transition-all">
+                  <select 
+                    name="type" 
+                    value={movementType.value}
+                    onChange$={(e) => movementType.value = (e.target as HTMLSelectElement).value as any}
+                    class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-bold text-slate-700 appearance-none cursor-pointer transition-all"
+                  >
                     <option value="INCOME">📈 Ingreso</option>
                     <option value="EXPENSE">📉 Egreso</option>
                   </select>
@@ -754,14 +782,14 @@ export default component$(() => {
 
                 <div class="space-y-1.5">
                   <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoría</label>
-                  <select name="category" class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-bold text-slate-700 appearance-none cursor-pointer transition-all">
-                    <option value="BOOKING">⚽ Reserva</option>
-                    <option value="SCHOOL">🏫 Escuelita</option>
-                    <option value="GROUP_PAYMENT">🤝 Cuenta Cte.</option>
-                    <option value="MAINTENANCE">🔧 Mant.</option>
-                    <option value="SALARY">💼 Sueldo</option>
-                    <option value="SERVICES">💡 Servicios</option>
-                    <option value="OTHER">📌 Otro</option>
+                  <select name="category" required class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-bold text-slate-700 appearance-none cursor-pointer transition-all">
+                    <option value="" disabled selected>Seleccione...</option>
+                    {cashData.value.movementCategories
+                      .filter(mc => mc.type === movementType.value)
+                      .map(mc => (
+                        <option key={mc.id} value={mc.id}>{`${mc.icon} ${mc.name}`}</option>
+                      ))
+                    }
                   </select>
                 </div>
               </div>
@@ -770,7 +798,7 @@ export default component$(() => {
                 <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto ($)</label>
                 <div class="relative">
                   <span class="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400">$</span>
-                  <input type="number" step="0.01" name="amount" required placeholder="0.00"
+                  <input type="number" step="1" name="amount" required placeholder="0"
                     class="w-full pl-8 pr-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-black text-slate-800 transition-all" />
                 </div>
               </div>
@@ -778,16 +806,15 @@ export default component$(() => {
               <div class="space-y-1.5">
                 <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Método de Pago</label>
                 <select name="paymentMethod" class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-bold text-slate-700 appearance-none cursor-pointer transition-all">
-                  <option value="CASH">💵 Efectivo</option>
-                  <option value="TRANSFER">🏦 Transferencia</option>
-                  <option value="CARD">💳 Tarjeta</option>
-                  <option value="MERCADO_PAGO">🔵 Mercado Pago</option>
+                  {cashData.value.paymentMethods.filter((pm: any) => pm.isActive).map((pm: any) => (
+                    <option key={pm.id} value={pm.id}>{pm.name}</option>
+                  ))}
                 </select>
               </div>
 
               <div class="space-y-1.5">
-                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Descripción</label>
-                <textarea name="description" rows={2} placeholder="Detalle opcional del movimiento..."
+                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Descripción / Concepto</label>
+                <textarea name="description" rows={2} required placeholder="Ej: Pago de luz, Venta de gaseosas..."
                   class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-medium text-slate-600 transition-all resize-none" />
               </div>
 
@@ -799,9 +826,13 @@ export default component$(() => {
                 >
                   Cancelar
                 </button>
-                <Button look="primary" type="submit" disabled={addMovementAction.isRunning}
-                  class="flex-[2] py-4 bg-emerald-500 text-slate-950 hover:bg-emerald-400 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-emerald-500/20">
-                  {addMovementAction.isRunning ? "Guardando..." : "Registrar"}
+                <Button 
+                  look="primary" 
+                  type="submit" 
+                  disabled={addMovementAction.isRunning}
+                  class="flex-[2] py-4 bg-slate-900 text-white hover:bg-slate-800 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-slate-900/10 disabled:opacity-50"
+                >
+                  {addMovementAction.isRunning ? "Registrando..." : "Confirmar Movimiento"}
                 </Button>
               </div>
             </Form>
@@ -813,5 +844,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Caja - SportGardenFutbol",
+  title: "Caja - GardenClubFutbol",
 };

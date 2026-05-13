@@ -238,5 +238,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Detalles del Alumno - SportGardenFutbol",
+  title: "Detalles del Alumno - GardenClubFutbol",
 };

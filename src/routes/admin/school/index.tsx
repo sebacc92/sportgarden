@@ -36,9 +36,17 @@ export const useStudentsData = routeLoader$(async (event) => {
 
   const categories = (settings?.schoolCategories as any[]) || [];
 
+  const paymentMethods = (settings?.paymentMethods || []) as { id: string, name: string, isActive: boolean }[];
+
   return {
     students: paginatedStudents,
     categories,
+    paymentMethods: paymentMethods.length > 0 ? paymentMethods : [
+      { id: "CASH", name: "Efectivo", isActive: true },
+      { id: "TRANSFER", name: "Transferencia", isActive: true },
+      { id: "CARD", name: "Tarjeta", isActive: true },
+      { id: "MERCADO_PAGO", name: "Mercado Pago", isActive: true }
+    ],
     pagination: {
       totalCount,
       totalPages: Math.ceil(totalCount / limit),
@@ -120,9 +128,9 @@ export const useUpdateCategoryAction = routeAction$(
     const categories = (settings?.schoolCategories as any[]) || [];
     const idx = categories.findIndex((c: any) => c.id === data.id);
     if (idx !== -1) {
-      categories[idx] = { 
-        ...categories[idx], 
-        name: data.name, 
+      categories[idx] = {
+        ...categories[idx],
+        name: data.name,
         teacher: data.teacher,
         monthlyFee: data.monthlyFee || 0
       };
@@ -212,7 +220,7 @@ export const useCreateStudentAction = routeAction$(
       id: paymentId,
       subscriptionId,
       amount: fee,
-      paymentMethod: "CASH",
+      paymentMethod: data.paymentMethod || "CASH",
       paymentDate: now,
     });
 
@@ -224,7 +232,7 @@ export const useCreateStudentAction = routeAction$(
       category: "SCHOOL",
       amount: fee,
       description: `Inscripción y 1ra cuota: ${data.name} (${data.category})`,
-      paymentMethod: "CASH",
+      paymentMethod: data.paymentMethod || "CASH",
       referenceId: studentId, // Using studentId as reference for school movements
     });
 
@@ -237,6 +245,7 @@ export const useCreateStudentAction = routeAction$(
     guardianEmail: z.string().email().optional().or(z.literal("")),
     category: z.string().min(1),
     birthDate: z.string().optional(),
+    paymentMethod: z.string().optional(),
   })
 );
 
@@ -276,7 +285,7 @@ export const usePayFeeAction = routeAction$(
       id: crypto.randomUUID(),
       subscriptionId,
       amount: student.monthlyFee,
-      paymentMethod: "CASH",
+      paymentMethod: data.paymentMethod || "CASH",
       paymentDate: now,
     });
 
@@ -288,7 +297,7 @@ export const usePayFeeAction = routeAction$(
       category: "SCHOOL",
       amount: student.monthlyFee,
       description: `Pago de cuota: ${student.name} (${student.category})`,
-      paymentMethod: "CASH",
+      paymentMethod: data.paymentMethod || "CASH",
       referenceId: student.id,
     });
 
@@ -296,6 +305,7 @@ export const usePayFeeAction = routeAction$(
   },
   zod$({
     studentId: z.string(),
+    paymentMethod: z.string().optional(),
   })
 );
 
@@ -316,6 +326,7 @@ export default component$(() => {
   const payFeeAction = usePayFeeAction();
   const deleteStudentAction = useDeleteStudentAction();
   const seedStudentsAction = useSeedStudentsAction();
+  const openPaymentForId = useSignal<string | null>(null);
 
   const loc = useLocation();
   const nav = useNavigate();
@@ -383,7 +394,7 @@ export default component$(() => {
                   Categorías
                   <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md uppercase tracking-widest">{studentsData.value.categories.length}</span>
                   {selectedCategory.value && (
-                    <button 
+                    <button
                       onClick$={() => selectedCategory.value = null}
                       class="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-md uppercase tracking-widest font-bold hover:bg-emerald-600 transition-colors flex items-center gap-1 shadow-sm shadow-emerald-100 ml-2"
                     >
@@ -452,138 +463,156 @@ export default component$(() => {
             </div>
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto">
-                <table class="w-full text-left border-collapse min-w-[700px]">
-                  <thead>
-                    <tr class="bg-slate-50/80 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
-                      <th class="p-4">Alumno</th>
-                      <th class="p-4">Categoría</th>
-                      <th class="p-4">Cuota</th>
-                      <th class="p-4 text-center">Estado</th>
-                      <th class="p-4 text-center">Ingreso</th>
-                      <th class="p-4">Tutor</th>
-                      <th class="p-4 text-center">Acciones</th>
+              <table class="w-full text-left border-collapse min-w-[700px]">
+                <thead>
+                  <tr class="bg-slate-50/80 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
+                    <th class="p-4">Alumno</th>
+                    <th class="p-4">Categoría</th>
+                    <th class="p-4">Cuota</th>
+                    <th class="p-4 text-center">Estado</th>
+                    <th class="p-4 text-center">Ingreso</th>
+                    <th class="p-4">Tutor</th>
+                    <th class="p-4 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody class="text-sm font-semibold text-slate-700">
+                  {filteredStudents.value.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} class="p-8 text-center text-slate-500">
+                        {selectedCategory.value ? `No hay alumnos en la categoría "${selectedCategory.value}".` : "No hay alumnos inscriptos."}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody class="text-sm font-semibold text-slate-700">
-                    {filteredStudents.value.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} class="p-8 text-center text-slate-500">
-                          {selectedCategory.value ? `No hay alumnos en la categoría "${selectedCategory.value}".` : "No hay alumnos inscriptos."}
+                  ) : (
+                    filteredStudents.value.map((s) => (
+                      <tr key={s.id} class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                        <td class="p-4">
+                          <div class="font-black text-slate-800">{s.name}</div>
                         </td>
-                      </tr>
-                    ) : (
-                      filteredStudents.value.map((s) => (
-                        <tr key={s.id} class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
-                          <td class="p-4">
-                            <div class="font-black text-slate-800">{s.name}</div>
-                          </td>
-                          <td class="p-4">
-                            <span class="px-2 py-1 bg-slate-100 rounded-md text-xs font-bold text-slate-600">{s.category || "Sin asignar"}</span>
-                          </td>
-                          <td class="p-4">
-                            <div class="font-black text-slate-800">${s.monthlyFee?.toLocaleString("es-AR")}</div>
-                          </td>
-                          <td class="p-4 text-center">
+                        <td class="p-4">
+                          <span class="px-2 py-1 bg-slate-100 rounded-md text-xs font-bold text-slate-600">{s.category || "Sin asignar"}</span>
+                        </td>
+                        <td class="p-4">
+                          <div class="font-black text-slate-800">${s.monthlyFee?.toLocaleString("es-AR")}</div>
+                        </td>
+                        <td class="p-4 text-center">
+                          {(() => {
+                            const lastSub = s.subscriptions?.[0];
+                            const isPaid = lastSub?.status === "PAID" && lastSub.dueDate && new Date(lastSub.dueDate) > new Date();
+                            return isPaid ? (
+                              <span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Pagado</span>
+                            ) : (
+                              <span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Vencido</span>
+                            );
+                          })()}
+                        </td>
+                        <td class="p-4 text-center">
+                          <div class="text-xs font-bold text-slate-500">{new Date(s.createdAt).toLocaleDateString("es-AR")}</div>
+                        </td>
+                        <td class="p-4 text-slate-500">
+                          <div>{s.guardianName || "-"}</div>
+                          <div class="text-[10px] text-slate-400">{s.guardianPhone}</div>
+                        </td>
+                        <td class="p-4 text-center">
+                          <div class="flex items-center justify-center gap-2">
                             {(() => {
-                               const lastSub = s.subscriptions?.[0];
+                              const lastSub = s.subscriptions?.[0];
                               const isPaid = lastSub?.status === "PAID" && lastSub.dueDate && new Date(lastSub.dueDate) > new Date();
-                              return isPaid ? (
-                                <span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Pagado</span>
-                              ) : (
-                                <span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-wider">Vencido</span>
-                              );
-                            })()}
-                          </td>
-                          <td class="p-4 text-center">
-                            <div class="text-xs font-bold text-slate-500">{new Date(s.createdAt).toLocaleDateString("es-AR")}</div>
-                          </td>
-                          <td class="p-4 text-slate-500">
-                            <div>{s.guardianName || "-"}</div>
-                            <div class="text-[10px] text-slate-400">{s.guardianPhone}</div>
-                          </td>
-                          <td class="p-4 text-center">
-                            <div class="flex items-center justify-center gap-2">
-                              {(() => {
-                                const lastSub = s.subscriptions?.[0];
-                                const isPaid = lastSub?.status === "PAID" && lastSub.dueDate && new Date(lastSub.dueDate) > new Date();
-                                if (!isPaid) {
-                                  return (
+                              if (!isPaid) {
+                                return (
+                                  <div class="relative">
                                     <button
-                                      onClick$={() => payFeeAction.submit({ studentId: s.id })}
-                                      disabled={payFeeAction.isRunning}
+                                      onClick$={() => openPaymentForId.value = openPaymentForId.value === s.id ? null : s.id}
                                       class="text-amber-600 hover:text-white hover:bg-amber-500 font-bold text-[10px] uppercase tracking-widest border border-amber-200 px-3 py-1.5 rounded-lg transition-all active:scale-95 disabled:opacity-50"
                                     >
-                                      {payFeeAction.isRunning ? "..." : "Cobrar Cuota"}
+                                      Cobrar Cuota
                                     </button>
-                                  );
-                                }
-                                return (
-                                  <Link href={`/admin/school/${s.id}/`} class="text-emerald-600 hover:text-emerald-700 font-bold text-xs uppercase tracking-wider bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors">
-                                    Ficha
-                                  </Link>
+                                    {openPaymentForId.value === s.id && (
+                                      <div class="absolute right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 min-w-[160px] animate-fade-in">
+                                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest p-2 border-b border-slate-50 mb-1">Medio de Pago</p>
+                                        {studentsData.value.paymentMethods.filter(pm => pm.isActive).map(pm => (
+                                          <button
+                                            key={pm.id}
+                                            onClick$={() => {
+                                              payFeeAction.submit({ studentId: s.id, paymentMethod: pm.id });
+                                              openPaymentForId.value = null;
+                                            }}
+                                            class="w-full text-left px-3 py-2 hover:bg-slate-50 rounded-lg text-xs font-bold text-slate-700 transition-colors"
+                                          >
+                                            {pm.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
                                 );
-                              })()}
-                              <button
-                                type="button"
-                                class="p-2 text-slate-400 hover:text-red-600 transition-colors bg-slate-50 hover:bg-red-50 rounded-lg border border-slate-200"
-                                onClick$={() => {
-                                  if (window.confirm(`¿Estás seguro de que deseas eliminar a ${s.name}? Esta acción no se puede deshacer.`)) {
-                                    deleteStudentAction.submit({ id: s.id });
-                                  }
-                                }}
-                              >
-                                <LuTrash2 class="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-
-                {/* Pagination Footer */}
-                {studentsData.value.pagination.totalPages > 1 && (
-                  <div class="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
-                      Mostrando <span class="text-slate-900">{studentsData.value.students.length}</span> de <span class="text-slate-900">{studentsData.value.pagination.totalCount}</span> alumnos
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <button
-                        disabled={studentsData.value.pagination.currentPage <= 1}
-                        onClick$={() => changePage(studentsData.value.pagination.currentPage - 1)}
-                        class="p-2 rounded-xl border border-slate-200 bg-white disabled:opacity-40 hover:border-emerald-500 hover:text-emerald-600 transition-all active:scale-90"
-                      >
-                        <LuChevronLeft class="w-4 h-4" />
-                      </button>
-                      <div class="flex items-center gap-1">
-                        {Array.from({ length: studentsData.value.pagination.totalPages }).map((_, i) => {
-                          const p = i + 1;
-                          const isCurrent = p === studentsData.value.pagination.currentPage;
-                          return (
+                              }
+                              return (
+                                <Link href={`/admin/school/${s.id}/`} class="text-emerald-600 hover:text-emerald-700 font-bold text-xs uppercase tracking-wider bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors">
+                                  Ficha
+                                </Link>
+                              );
+                            })()}
                             <button
-                              key={p}
-                              onClick$={() => changePage(p)}
-                              class={cn(
-                                "w-8 h-8 rounded-lg text-xs font-black transition-all",
-                                isCurrent ? "bg-emerald-500 text-white shadow-md shadow-emerald-100" : "bg-white text-slate-500 border border-slate-200 hover:border-slate-300"
-                              )}
+                              type="button"
+                              class="p-2 text-slate-400 hover:text-red-600 transition-colors bg-slate-50 hover:bg-red-50 rounded-lg border border-slate-200"
+                              onClick$={() => {
+                                if (window.confirm(`¿Estás seguro de que deseas eliminar a ${s.name}? Esta acción no se puede deshacer.`)) {
+                                  deleteStudentAction.submit({ id: s.id });
+                                }
+                              }}
                             >
-                              {p}
+                              <LuTrash2 class="w-4 h-4" />
                             </button>
-                          );
-                        })}
-                      </div>
-                      <button
-                        disabled={studentsData.value.pagination.currentPage >= studentsData.value.pagination.totalPages}
-                        onClick$={() => changePage(studentsData.value.pagination.currentPage + 1)}
-                        class="p-2 rounded-xl border border-slate-200 bg-white disabled:opacity-40 hover:border-emerald-500 hover:text-emerald-600 transition-all active:scale-90"
-                      >
-                        <LuChevronRight class="w-4 h-4" />
-                      </button>
-                    </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              {/* Pagination Footer */}
+              {studentsData.value.pagination.totalPages > 1 && (
+                <div class="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div class="text-[11px] text-slate-500 font-bold uppercase tracking-wider">
+                    Mostrando <span class="text-slate-900">{studentsData.value.students.length}</span> de <span class="text-slate-900">{studentsData.value.pagination.totalCount}</span> alumnos
                   </div>
-                )}
+                  <div class="flex items-center gap-2">
+                    <button
+                      disabled={studentsData.value.pagination.currentPage <= 1}
+                      onClick$={() => changePage(studentsData.value.pagination.currentPage - 1)}
+                      class="p-2 rounded-xl border border-slate-200 bg-white disabled:opacity-40 hover:border-emerald-500 hover:text-emerald-600 transition-all active:scale-90"
+                    >
+                      <LuChevronLeft class="w-4 h-4" />
+                    </button>
+                    <div class="flex items-center gap-1">
+                      {Array.from({ length: studentsData.value.pagination.totalPages }).map((_, i) => {
+                        const p = i + 1;
+                        const isCurrent = p === studentsData.value.pagination.currentPage;
+                        return (
+                          <button
+                            key={p}
+                            onClick$={() => changePage(p)}
+                            class={cn(
+                              "w-8 h-8 rounded-lg text-xs font-black transition-all",
+                              isCurrent ? "bg-emerald-500 text-white shadow-md shadow-emerald-100" : "bg-white text-slate-500 border border-slate-200 hover:border-slate-300"
+                            )}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      disabled={studentsData.value.pagination.currentPage >= studentsData.value.pagination.totalPages}
+                      onClick$={() => changePage(studentsData.value.pagination.currentPage + 1)}
+                      class="p-2 rounded-xl border border-slate-200 bg-white disabled:opacity-40 hover:border-emerald-500 hover:text-emerald-600 transition-all active:scale-90"
+                    >
+                      <LuChevronRight class="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
@@ -661,12 +690,19 @@ export default component$(() => {
                   <input type="date" name="birthDate" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                 </div>
                 <div>
-                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Categoría</label>
                   <select name="category" required class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-bold">
                     <option value="">Seleccionar categoría *</option>
-                      {studentsData.value.categories.map((c: any) => (
-                        <option key={c.id} value={c.name}>{`${c.name} ($${c.monthlyFee?.toLocaleString()})`}</option>
-                      ))}
+                    {studentsData.value.categories.map((c: any) => (
+                      <option key={c.id} value={c.name}>{`${c.name} ($${c.monthlyFee?.toLocaleString()})`}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Medio de Pago *</label>
+                  <select name="paymentMethod" required class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm font-bold">
+                    {studentsData.value.paymentMethods.filter(pm => pm.isActive).map((pm: any) => (
+                      <option key={pm.id} value={pm.id}>{pm.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -703,5 +739,5 @@ export default component$(() => {
 });
 
 export const head = {
-  title: "Escuelita - SportGardenFutbol",
+  title: "Escuelita - GardenClubFutbol",
 };

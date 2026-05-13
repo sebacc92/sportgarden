@@ -48,7 +48,7 @@ export default component$(() => {
           Auditoría de IA
         </h1>
         <p class="text-sm text-slate-500 mt-1">
-          Revisa las conversaciones que los usuarios mantienen con el Asistente de SportGarden.
+          Revisa las conversaciones que los usuarios mantienen con el Asistente de GardenClubFutbol.
         </p>
       </div>
 
@@ -137,5 +137,5 @@ export default component$(() => {
 });
 
 export const head: DocumentHead = {
-  title: 'Auditoría de IA | Admin | SportGarden',
+  title: 'Auditoría de IA | Admin | GardenClubFutbol',
 };

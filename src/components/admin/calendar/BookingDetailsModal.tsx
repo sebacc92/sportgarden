@@ -1,7 +1,6 @@
 import { component$, type Signal } from "@builder.io/qwik";
 import { Form } from "@builder.io/qwik-city";
 import { Modal, Button } from "~/components/ui";
-import { Alert } from "~/components/ui/alert/alert";
 import { cn } from "@qwik-ui/utils";
 
 interface BookingDetailsModalProps {
@@ -35,16 +34,16 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
                   {selectedBookingDetails.guest?.name || selectedBookingDetails.user?.name || "Desconocido"}
                 </div>
                 <div class="flex items-center gap-2 text-sm font-bold text-slate-500">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
                   {selectedBookingDetails.guest?.phone || selectedBookingDetails.user?.phone || "Sin teléfono"}
                 </div>
               </div>
-              <a 
+              <a
                 href={`https://wa.me/${(selectedBookingDetails.guest?.phone || selectedBookingDetails.user?.phone || "").replace(/\D/g, "")}`}
                 target="_blank"
                 class="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-md shadow-emerald-500/20"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12A10 10 0 1 1 12 2a10 10 0 0 1 10 10Z"/><path d="M17 12a5 5 0 0 0-5-5"/><path d="M12 17a5 5 0 0 0 5-5"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12A10 10 0 1 1 12 2a10 10 0 0 1 10 10Z" /><path d="M17 12a5 5 0 0 0-5-5" /><path d="M12 17a5 5 0 0 0 5-5" /></svg>
                 WhatsApp
               </a>
             </div>
@@ -74,7 +73,7 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
             {/* Bloque Financiero */}
             <div class="bg-slate-900 p-6 rounded-2xl shadow-xl shadow-slate-900/20 space-y-4 relative overflow-hidden">
               <div class="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
               </div>
               <div class="flex justify-between border-b border-white/10 pb-4">
                 <div>
@@ -102,7 +101,7 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
                 </div>
                 {!calendarData.openRegister ? (
                   <div class="text-xs font-bold text-amber-700 bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
                     Caja cerrada. Abre la caja para cobrar.
                   </div>
                 ) : (
@@ -111,21 +110,31 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
                     <div class="flex gap-3">
                       <div class="flex-1 relative">
                         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black">$</span>
-                        <input 
-                          type="number" 
-                          name="amount" 
-                          min="1" 
-                          max={selectedBookingDetails.booking.totalPrice - selectedBookingDetails.booking.paidAmount} 
-                          placeholder="Monto" 
-                          required 
-                          class="w-full pl-8 pr-4 py-3 bg-white border border-emerald-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" 
+                        <input
+                          type="number"
+                          name="amount"
+                          min="1"
+                          max={selectedBookingDetails.booking.totalPrice - selectedBookingDetails.booking.paidAmount}
+                          placeholder="Monto"
+                          required
+                          class="w-full pl-8 pr-4 py-3 bg-white border border-emerald-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                         />
                       </div>
                       <select name="paymentMethod" class="flex-1 px-4 py-3 bg-white border border-emerald-200 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all appearance-none">
-                        <option value="CASH">Efectivo</option>
-                        <option value="TRANSFER">Transferencia</option>
-                        <option value="MERCADO_PAGO">Mercado Pago</option>
-                        <option value="CURRENT_ACCOUNT">Cuenta Corriente</option>
+                        {(calendarData.settings?.paymentMethods || [])
+                          .filter((pm: any) => pm.isActive)
+                          .map((pm: any) => (
+                            <option key={pm.id} value={pm.id}>{pm.name}</option>
+                          ))
+                        }
+                        {(calendarData.settings?.paymentMethods || []).filter((pm: any) => pm.isActive).length === 0 && (
+                          <>
+                            <option value="CASH">Efectivo</option>
+                            <option value="TRANSFER">Transferencia</option>
+                            <option value="MERCADO_PAGO">Mercado Pago</option>
+                            <option value="CURRENT_ACCOUNT">Cuenta Corriente</option>
+                          </>
+                        )}
                       </select>
                     </div>
                     <button type="submit" disabled={addPaymentAction.isRunning} class="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50">
@@ -147,19 +156,19 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
                 ].map((s) => {
                   const isCurrent = selectedBookingDetails.booking.status === s.value;
                   if (isCurrent && s.value !== "CANCELLED") return null;
-                  
+
                   return (
                     <Form action={updateStatusAction} key={s.value} class="flex-1 min-w-[140px]">
                       <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
                       <input type="hidden" name="status" value={s.value} />
-                      <button 
-                        type="submit" 
-                        disabled={updateStatusAction.isRunning} 
+                      <button
+                        type="submit"
+                        disabled={updateStatusAction.isRunning}
                         class={cn(
                           "w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
                           s.color === "emerald" ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-500 hover:text-white" :
-                          s.color === "red" ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-500 hover:text-white" :
-                          "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-700 hover:text-white"
+                            s.color === "red" ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-500 hover:text-white" :
+                              "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-700 hover:text-white"
                         )}
                       >
                         {s.label}

@@ -10,6 +10,7 @@ interface CalendarDayViewProps {
   currentTimePosition: Signal<number>;
   scrollContainerRef: Signal<HTMLElement | undefined>;
   onBookingClick$: PropFunction<(id: string) => void>;
+  onEmptySlotClick$: PropFunction<(pitchId: string, time: string) => void>;
 }
 
 export const CalendarDayView = component$<CalendarDayViewProps>((props) => {
@@ -21,7 +22,8 @@ export const CalendarDayView = component$<CalendarDayViewProps>((props) => {
     showCurrentTimeLine, 
     currentTimePosition, 
     scrollContainerRef, 
-    onBookingClick$ 
+    onBookingClick$,
+    onEmptySlotClick$
   } = props;
 
   return (
@@ -119,9 +121,8 @@ export const CalendarDayView = component$<CalendarDayViewProps>((props) => {
                   <div
                     key={`empty-${hour}`}
                     onClick$={() => {
-                      // This is a placeholder for express creation logic
-                      // For now, we just open the modal as usual
-                      // In a real scenario, we'd pre-fill the pitch and hour
+                      const time = `${String(hour).padStart(2, "0")}:00`;
+                      onEmptySlotClick$(pitch.id, time);
                     }}
                     class="absolute left-0 right-0 group cursor-pointer hover:bg-slate-100/80 flex items-center justify-center transition-all border-b border-slate-100/50 last:border-0"
                     style={{
