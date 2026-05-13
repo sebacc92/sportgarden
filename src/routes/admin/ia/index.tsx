@@ -186,7 +186,7 @@ export default component$(() => {
                 <div class="w-24 h-24 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden relative group">
                   {(previewUrl.value || avatarUrl.value) ? (
                     <>
-                      <img src={previewUrl.value || avatarUrl.value} alt="Avatar IA" class="w-full h-full object-cover" />
+                      <img src={previewUrl.value || avatarUrl.value} alt="Avatar IA" width={96} height={96} class="w-full h-full object-cover" />
                       <button
                         type="button"
                         onClick$={() => {

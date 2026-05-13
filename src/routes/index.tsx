@@ -143,6 +143,7 @@ export default component$(() => {
     }
   ];
 
+  // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(() => {
     const interval = setInterval(() => {
       activeSlide.value = (activeSlide.value + 1) % slides.length;
@@ -345,7 +346,7 @@ export default component$(() => {
       <nav class="fixed top-0 inset-x-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/5">
         <div class="mx-auto max-w-7xl px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link href="/" class="flex items-center gap-2 group py-2">
-            <img src={logo} alt="GardenClubFutbol Logo" class="h-12 w-auto object-contain transition-transform group-hover:scale-105" />
+            <img src={logo} alt="GardenClubFutbol Logo" width={48} height={48} class="h-12 w-auto object-contain transition-transform group-hover:scale-105" />
             <div class="font-black text-2xl tracking-tighter uppercase hidden sm:block">
               Sport<span class="text-emerald-500">Garden</span>
             </div>
@@ -385,7 +386,7 @@ export default component$(() => {
           >
             <div class="absolute inset-0 bg-slate-950/60 z-10 mix-blend-multiply"></div>
             <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent z-10"></div>
-            <img src={slide.image} alt={slide.title} class="absolute inset-0 w-full h-full object-cover" />
+            <img src={slide.image} alt={slide.title} width={1920} height={1080} class="absolute inset-0 w-full h-full object-cover" />
 
             <div class="absolute inset-0 flex items-center justify-center z-20">
               <div class="text-center px-6 max-w-4xl mx-auto transform transition-transform duration-1000 delay-100 translate-y-0">
@@ -449,7 +450,7 @@ export default component$(() => {
             </div>
             <div class="relative">
               <div class="aspect-square rounded-3xl overflow-hidden bg-slate-900 border border-white/10 relative z-10">
-                <img src="/slider1.png" alt="GardenClubFutbol Historia" class="w-full h-full object-cover mix-blend-luminosity hover:mix-blend-normal transition-all duration-700" />
+                <img src="/slider1.png" alt="GardenClubFutbol Historia" width={600} height={600} class="w-full h-full object-cover mix-blend-luminosity hover:mix-blend-normal transition-all duration-700" />
               </div>
               <div class="absolute -inset-4 bg-emerald-500/20 blur-3xl -z-10 rounded-full"></div>
             </div>
@@ -477,7 +478,7 @@ export default component$(() => {
               >
                 <div class="relative h-56 bg-slate-800 flex items-center justify-center overflow-hidden">
                   {pitch.imageUrl && (
-                    <img src={pitch.imageUrl} alt={pitch.name} class="absolute inset-0 w-full h-full object-cover z-0 group-hover:scale-105 transition-transform duration-700" />
+                    <img src={pitch.imageUrl} alt={pitch.name} width={400} height={300} class="absolute inset-0 w-full h-full object-cover z-0 group-hover:scale-105 transition-transform duration-700" />
                   )}
 
                   <div class={["absolute inset-0 z-10", pitch.imageUrl ? "bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent" : "bg-gradient-to-t from-slate-900 via-transparent to-transparent"]}></div>
@@ -560,6 +561,8 @@ export default component$(() => {
                   <img
                     src={url}
                     alt={`Instalación ${idx + 1}`}
+                    width={400}
+                    height={400}
                     class="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-700"
                     loading="lazy"
                   />
@@ -607,6 +610,8 @@ export default component$(() => {
               <img
                 src={lightboxUrl.value}
                 alt="Vista ampliada"
+                width={1200}
+                height={800}
                 class="max-h-[88vh] max-w-[92vw] object-contain rounded-2xl shadow-2xl select-none"
                 onClick$={(e) => e.stopPropagation()}
               />

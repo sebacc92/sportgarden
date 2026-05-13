@@ -64,8 +64,7 @@ export default component$(() => {
   const clientsData = useClientsData();
   const searchInput = useSignal(loc.url.searchParams.get("search") || "");
 
-  const handleSearch = $((e: Event) => {
-    e.preventDefault();
+  const handleSearch = $(() => {
     const url = new URL(loc.url.toString());
     url.searchParams.set("search", searchInput.value);
     url.searchParams.set("page", "1");
@@ -80,7 +79,7 @@ export default component$(() => {
           <p class="text-sm font-medium text-slate-500 mt-1">Lista completa de clientes registrados e invitados.</p>
         </div>
         
-        <form onSubmit$={handleSearch} class="relative w-72">
+        <form onSubmit$={handleSearch} preventdefault:submit class="relative w-72">
           <LuSearch class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"

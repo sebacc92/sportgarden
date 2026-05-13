@@ -418,9 +418,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
       )
     );
 
-  const yyyy = selectedDate.getFullYear();
-  const mm = String(selectedDate.getMonth() + 1).padStart(2, "0");
-  const dd = String(selectedDate.getDate()).padStart(2, "0");
+
 
   const prevDate = new Date(selectedDate);
   const nextDate = new Date(selectedDate);
@@ -436,7 +434,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     nextDate.setDate(nextDate.getDate() + 1);
   }
 
-  const formatDateStr = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 
   return {
     selectedDateStr: getBAFormatDate(selectedDate),
@@ -597,6 +595,7 @@ export default component$(() => {
 
   const viewSignal = useComputed$(() => calendarData.value.view);
 
+  // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ cleanup }) => {
     const updateTimeIndicator = () => {
       const now = new Date();
@@ -637,6 +636,7 @@ export default component$(() => {
     cleanup(() => clearInterval(interval));
   });
 
+  // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ track }) => {
     const successUpdate = track(() => updateStatusAction.value?.success);
     if (successUpdate) isModalOpen.value = false;

@@ -215,6 +215,8 @@ export default component$(() => {
               <img
                 src={url}
                 alt={`Foto ${idx + 1}`}
+                width={300}
+                height={300}
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-pointer"
                 onClick$={() => openLightbox(url)}
               />
@@ -306,6 +308,8 @@ export default component$(() => {
           <img
             src={lightboxUrl.value}
             alt="Vista ampliada"
+            width={1200}
+            height={800}
             class="max-h-[85vh] max-w-[90vw] object-contain rounded-xl shadow-2xl"
             onClick$={(e) => e.stopPropagation()}
           />

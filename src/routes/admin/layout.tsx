@@ -208,11 +208,11 @@ export default component$(() => {
         <div class="h-20 flex items-center px-6 border-b border-white/5 overflow-hidden">
           {isCollapsed.value ? (
             <div class="w-full flex justify-center">
-              <img src={logo} alt="SG" class="h-10 w-auto object-contain" />
+              <img src={logo} alt="SG" width={40} height={40} class="h-10 w-auto object-contain" />
             </div>
           ) : (
             <div class="flex items-center gap-3">
-              <img src={logo} alt="GardenClubFutbol" class="h-10 w-auto object-contain" />
+              <img src={logo} alt="GardenClubFutbol" width={40} height={40} class="h-10 w-auto object-contain" />
               <div class="font-black text-xl tracking-tighter text-white uppercase whitespace-nowrap">
                 Sport<span class="text-emerald-500">Garden</span>
               </div>
