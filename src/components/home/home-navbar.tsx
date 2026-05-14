@@ -7,9 +7,10 @@ export type HomeNavbarUser = { userId: string; role: string } | undefined;
 type HomeNavbarProps = {
   user: HomeNavbarUser;
   showGalleryLink: boolean;
+  showSchoolLink: boolean;
 };
 
-export const HomeNavbar = component$<HomeNavbarProps>(({ user, showGalleryLink }) => {
+export const HomeNavbar = component$<HomeNavbarProps>(({ user, showGalleryLink, showSchoolLink }) => {
   return (
     <nav class="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#001407]">
       <div class="mx-auto flex h-28 max-w-7xl items-center justify-between px-6 lg:px-8">
@@ -29,6 +30,11 @@ export const HomeNavbar = component$<HomeNavbarProps>(({ user, showGalleryLink }
           <a href="#canchas" class="transition-colors hover:text-emerald-400">
             Canchas
           </a>
+          {showSchoolLink && (
+            <a href="#escuelita" class="transition-colors hover:text-emerald-400">
+              Escuelita
+            </a>
+          )}
           {showGalleryLink && (
             <a href="#galeria" class="transition-colors hover:text-emerald-400">
               Galería

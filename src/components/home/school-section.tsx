@@ -23,7 +23,10 @@ export const SchoolSection = component$<SchoolSectionProps>(({ categories }) => 
   const shortDaysOfWeek = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
   return (
-    <section class="py-24 bg-slate-950 relative overflow-hidden" id="escuelita">
+    <section
+      class="scroll-mt-28 py-24 bg-slate-950 relative overflow-hidden"
+      id="escuelita"
+    >
       {/* Decorative background */}
       <div class="absolute inset-0 z-0 opacity-20 pointer-events-none">
         <div class="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500 rounded-full mix-blend-screen filter blur-[100px] animate-blob"></div>

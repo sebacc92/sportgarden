@@ -106,7 +106,9 @@ export const useCreateCategoryAction = routeAction$(
         if (data.schedules) {
             parsedSchedules = JSON.parse(data.schedules);
         }
-    } catch(e) {}
+    } catch {
+        // Ignoramos errores de parseo, usamos el arreglo vacío por defecto
+    }
     
     categories.push({
       id: crypto.randomUUID(),
@@ -140,7 +142,9 @@ export const useUpdateCategoryAction = routeAction$(
         if (data.schedules) {
             parsedSchedules = JSON.parse(data.schedules);
         }
-    } catch(e) {}
+    } catch {
+        // Ignoramos errores de parseo, usamos el arreglo vacío por defecto
+    }
     
     const idx = categories.findIndex((c: any) => c.id === data.id);
     if (idx !== -1) {

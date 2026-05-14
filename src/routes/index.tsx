@@ -50,7 +50,11 @@ export default component$(() => {
 
   return (
     <div class="min-h-screen bg-slate-950 pb-20 font-sans text-white selection:bg-emerald-500 selection:text-white">
-      <HomeNavbar user={user.value} showGalleryLink={gallery.value.length > 0} />
+      <HomeNavbar
+        user={user.value}
+        showGalleryLink={gallery.value.length > 0}
+        showSchoolLink={(aiSettings.value?.schoolCategories || []).length > 0}
+      />
 
       <HeroSlider />
 
