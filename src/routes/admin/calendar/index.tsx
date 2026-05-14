@@ -1,4 +1,4 @@
-import { component$, useSignal, useVisibleTask$, useTask$, $, useComputed$, useStore } from "@builder.io/qwik";
+import { component$, useSignal, useVisibleTask$, $, useComputed$, useStore } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, useNavigate, server$ } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { bookings, pitches, users, guestRequests, cashRegisters, cashMovements } from "~/db/schema";
@@ -9,7 +9,6 @@ import { cn } from "@qwik-ui/utils";
 
 // New Components
 import { CalendarToolbar } from "~/components/admin/calendar/CalendarToolbar";
-import { CalendarDayView } from "~/components/admin/calendar/CalendarDayView";
 import { CalendarWeekView } from "~/components/admin/calendar/CalendarWeekView";
 import { CalendarMonthView } from "~/components/admin/calendar/CalendarMonthView";
 import { BookingDetailsModal } from "~/components/admin/calendar/BookingDetailsModal";
@@ -385,7 +384,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
   });
 
   let dailyBookings: any = [];
-  let monthCounts: Record<string, number> = {};
+  const monthCounts: Record<string, number> = {};
 
   if (viewStr === "month") {
     // Optimized month query: only get IDs and start times
@@ -616,8 +615,6 @@ export default component$(() => {
   const view = calendarData.value.view;
   const startDateStr = calendarData.value.startDateStr;
   const endDateStr = calendarData.value.endDateStr;
-
-  const viewSignal = useComputed$(() => calendarData.value.view);
 
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(({ cleanup }) => {

@@ -31,7 +31,7 @@ export default component$(() => {
       <div class="flex items-center justify-between mb-8">
         <div>
           <nav class="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-widest font-bold mb-2">
-            <Link href="/admin/chats" class="hover:text-emerald-500 transition-colors">Auditoría</Link>
+            <Link href="/admin/ia/" class="hover:text-emerald-500 transition-colors">Asistente IA</Link>
             <span>/</span>
             <span class="text-slate-900">Detalle de Sesión</span>
           </nav>
@@ -41,7 +41,7 @@ export default component$(() => {
           <p class="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">ID: {session.id}</p>
         </div>
         <Link 
-          href="/admin/chats" 
+          href="/admin/ia/" 
           class="bg-white border border-slate-200 text-slate-700 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
         >
           &larr; Volver

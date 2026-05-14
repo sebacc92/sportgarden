@@ -1,4 +1,5 @@
-const DAY_NAMES = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"] as const;
+/** 0–6 = domingo–sábado; 7 = feriado (misma convención que el admin del club). */
+const DAY_NAMES = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Feriado"] as const;
 
 export type OperatingHourRow = {
   day: number;
@@ -23,7 +24,8 @@ export function groupOperatingHoursForDisplay(hours: OperatingHourRow[]): Operat
   for (const h of hours) {
     const timeStr = h.isOpen ? `${h.openTime} a ${h.closeTime}` : "Cerrado";
     if (!groups[timeStr]) groups[timeStr] = [];
-    const dayLabel = DAY_NAMES[h.day] ?? "?";
+    const dayLabel =
+      typeof h.day === "number" && h.day >= 0 && h.day < DAY_NAMES.length ? DAY_NAMES[h.day] : "?";
     groups[timeStr]!.push(dayLabel);
   }
 
