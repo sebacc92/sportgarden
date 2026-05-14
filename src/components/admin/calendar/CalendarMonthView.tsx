@@ -5,12 +5,11 @@ import { getBAFormatDate } from "~/routes/admin/calendar/utils";
 interface CalendarMonthViewProps {
   calendarData: any;
   monthDays: Date[];
-  onBookingClick$: PropFunction<(id: string) => void>;
-  onEmptySlotClick$: PropFunction<(dateStr: string) => void>;
+  onDayClick$: PropFunction<(dateStr: string) => void>;
 }
 
 export const CalendarMonthView = component$<CalendarMonthViewProps>((props) => {
-  const { calendarData, monthDays, onBookingClick$, onEmptySlotClick$ } = props;
+  const { calendarData, monthDays, onDayClick$ } = props;
 
   return (
     <div class="flex flex-col h-full overflow-hidden">
@@ -28,57 +27,42 @@ export const CalendarMonthView = component$<CalendarMonthViewProps>((props) => {
         {monthDays.map((day, idx) => {
           const isCurrentMonth = day.getMonth() === new Date(calendarData.startDateStr).getMonth();
           const isToday = getBAFormatDate(new Date()) === getBAFormatDate(day);
-
-          const dayBookings = calendarData.bookings.filter((b: any) => {
-            const bDate = new Date(b.booking.startTime);
-            return getBAFormatDate(bDate) === getBAFormatDate(day);
-          });
+          const dateStr = getBAFormatDate(day);
+          
+          const totalBookings = calendarData.monthCounts?.[dateStr] || 0;
 
           return (
             <div
               key={idx}
               class={cn(
-                "bg-white p-2 overflow-y-auto overflow-x-hidden flex flex-col gap-1 cursor-pointer hover:bg-slate-50 transition-colors",
+                "bg-white p-3 flex flex-col justify-between cursor-pointer hover:bg-slate-50 transition-colors group",
                 !isCurrentMonth ? "bg-slate-50 opacity-50" : "",
                 isToday ? "bg-emerald-50/30" : ""
               )}
-              onClick$={(ev) => {
-                if (ev.target === ev.currentTarget) {
-                   onEmptySlotClick$(getBAFormatDate(day));
-                }
+              onClick$={() => {
+                onDayClick$(dateStr);
               }}
             >
-              <div class={cn(
-                "text-xs font-black self-end w-6 h-6 flex items-center justify-center rounded-full mb-1",
-                isToday ? "bg-emerald-500 text-white shadow-md" : "text-slate-400"
-              )}>
-                {day.getDate()}
+              <div class="flex items-start justify-end">
+                <div class={cn(
+                  "text-xs font-black w-7 h-7 flex items-center justify-center rounded-full transition-transform group-hover:scale-110",
+                  isToday ? "bg-emerald-500 text-white shadow-md" : "text-slate-400 bg-slate-100 group-hover:bg-slate-200"
+                )}>
+                  {day.getDate()}
+                </div>
               </div>
 
-              {dayBookings.map(({ booking, user, guest }: any) => {
-                const customerName = guest?.name || user?.name || "Desconocido";
-                const pitchName = calendarData.pitches.find((p: any) => p.id === booking.pitchId)?.name || "Cancha";
-                const time = new Date(booking.startTime).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
-
-                const statusColors = {
-                  PENDING_APPROVAL: "bg-amber-100 text-amber-800 border-l-2 border-amber-400",
-                  CONFIRMED: "bg-emerald-100 text-emerald-800 border-l-2 border-emerald-400",
-                  CANCELLED: "bg-red-100 text-red-800 border-l-2 border-red-400",
-                  COMPLETED: "bg-slate-100 text-slate-800 border-l-2 border-slate-400",
-                };
-
-                return (
-                  <div
-                    key={booking.id}
-                    onClick$={() => onBookingClick$(booking.id)}
-                    class={cn("text-[9px] p-1 rounded-sm leading-tight truncate shadow-sm cursor-pointer hover:scale-[1.02] hover:shadow-md transition-all", statusColors[booking.status as keyof typeof statusColors])}
-                    title={`${time} - ${customerName} (${pitchName})`}
-                  >
-                    <span class="font-bold opacity-70 mr-1">{time}</span>
-                    <span class="font-black">{customerName}</span>
+              <div class="mt-auto">
+                {totalBookings > 0 ? (
+                  <div class="w-full text-center py-1.5 px-2 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm text-xs font-black truncate">
+                    {totalBookings} Reserva{totalBookings !== 1 && 's'}
                   </div>
-                );
-              })}
+                ) : (
+                  <div class="w-full text-center py-1.5 px-2 text-[10px] font-bold text-slate-300 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                    Sin reservas
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}

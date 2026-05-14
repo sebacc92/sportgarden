@@ -117,16 +117,6 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
               <circle cx="3" cy="18" r="1.5" fill="currentColor" stroke="none" />
             </svg>
           </button>
-          <button
-            onClick$={() => layoutMode.value = 'grid'}
-            class={cn("w-8 h-8 flex items-center justify-center rounded-md transition-all", layoutMode.value === 'grid' ? "bg-white text-emerald-600 shadow-sm" : "text-slate-400 hover:text-slate-700")}
-            title="Vista grilla"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-              <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-            </svg>
-          </button>
         </div>
 
         <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">

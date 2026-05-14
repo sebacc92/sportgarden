@@ -17,11 +17,16 @@ export const useCashData = routeLoader$(async (requestEvent) => {
   const limit = 25;
   const offset = (page - 1) * limit;
 
-  const registers = await db.query.cashRegisters.findMany({
+  let latestRegister = await db.query.cashRegisters.findFirst({
+    where: eq(cashRegisters.status, "OPEN"),
     orderBy: [desc(cashRegisters.openedAt)],
-    limit: 1,
   });
-  const latestRegister = registers[0] || null;
+
+  if (!latestRegister) {
+    latestRegister = await db.query.cashRegisters.findFirst({
+      orderBy: [desc(cashRegisters.openedAt)],
+    });
+  }
   let allMovements: any[] = [];
   let paginatedMovements: any[] = [];
   let totalCount = 0;
@@ -159,7 +164,7 @@ export const useToggleRegisterAction = routeAction$(
         status: "CLOSED",
         closingBalance: Number(balance) || 0,
         closedAt: new Date(),
-        billCount: billCount ?? undefined,
+        billCount: billCount ?? null,
         notes: notes || null,
       }).where(eq(cashRegisters.id, registerId!));
       return { success: true };

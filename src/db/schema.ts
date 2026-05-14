@@ -11,6 +11,8 @@ export const users = sqliteTable("users", {
   role: text("role", { enum: ["DEV", "OWNER", "MANAGER", "EMPLOYEE", "REGISTERED", "GUEST"] })
     .notNull()
     .default("GUEST"),
+  clientType: text("client_type", { enum: ["INDIVIDUAL", "GROUP", "SCHOOL"] }).notNull().default("INDIVIDUAL"),
+  organizationName: text("organization_name"),
   lastLoginAt: integer("last_login_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

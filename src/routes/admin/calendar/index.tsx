@@ -384,41 +384,64 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     orderBy: (pitches, { asc }) => [asc(pitches.name)],
   });
 
-  const dailyBookings = await db
-    .select({
-      booking: {
+  let dailyBookings: any = [];
+  let monthCounts: Record<string, number> = {};
+
+  if (viewStr === "month") {
+    // Optimized month query: only get IDs and start times
+    const allMonthBookings = await db
+      .select({
         id: bookings.id,
-        pitchId: bookings.pitchId,
         startTime: bookings.startTime,
-        endTime: bookings.endTime,
-        status: bookings.status,
-        totalPrice: bookings.totalPrice,
-        paidAmount: bookings.paidAmount,
-        paymentStatus: bookings.paymentStatus,
-        isSubscription: bookings.isSubscription,
-      },
-      user: {
-        id: users.id,
-        name: users.name,
-        phone: users.phone,
-      },
-      guest: {
-        id: guestRequests.id,
-        name: guestRequests.name,
-        phone: guestRequests.phone,
-      },
-    })
-    .from(bookings)
-    .leftJoin(users, eq(bookings.userId, users.id))
-    .leftJoin(guestRequests, eq(bookings.id, guestRequests.bookingId))
-    .where(
-      and(
-        gte(bookings.startTime, startDate),
-        lte(bookings.startTime, endDate)
-      )
-    );
+      })
+      .from(bookings)
+      .where(
+        and(
+          gte(bookings.startTime, startDate),
+          lte(bookings.startTime, endDate)
+        )
+      );
 
-
+    for (const b of allMonthBookings) {
+      const dStr = getBAFormatDate(b.startTime);
+      monthCounts[dStr] = (monthCounts[dStr] || 0) + 1;
+    }
+  } else {
+    // Normal query for day/week
+    dailyBookings = await db
+      .select({
+        booking: {
+          id: bookings.id,
+          pitchId: bookings.pitchId,
+          startTime: bookings.startTime,
+          endTime: bookings.endTime,
+          status: bookings.status,
+          totalPrice: bookings.totalPrice,
+          paidAmount: bookings.paidAmount,
+          paymentStatus: bookings.paymentStatus,
+          isSubscription: bookings.isSubscription,
+        },
+        user: {
+          id: users.id,
+          name: users.name,
+          phone: users.phone,
+        },
+        guest: {
+          id: guestRequests.id,
+          name: guestRequests.name,
+          phone: guestRequests.phone,
+        },
+      })
+      .from(bookings)
+      .leftJoin(users, eq(bookings.userId, users.id))
+      .leftJoin(guestRequests, eq(bookings.id, guestRequests.bookingId))
+      .where(
+        and(
+          gte(bookings.startTime, startDate),
+          lte(bookings.startTime, endDate)
+        )
+      );
+  }
 
   const prevDate = new Date(selectedDate);
   const nextDate = new Date(selectedDate);
@@ -444,6 +467,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     view: viewStr,
     pitches: allPitches,
     bookings: dailyBookings,
+    monthCounts: monthCounts,
     startDateStr: startDate.toISOString(),
     endDateStr: endDate.toISOString(),
     extraServices,
@@ -511,8 +535,8 @@ export default component$(() => {
   const addPaymentAction = useAddBookingPaymentAction();
   const nav = useNavigate();
 
-  // Layout mode: 'timeline' (pitches×time) | 'list' (table) | 'grid' (time-grid per pitch)
-  const layoutMode = useSignal<'timeline' | 'list' | 'grid'>('timeline');
+  // Layout mode: 'timeline' (pitches×time) | 'list' (table)
+  const layoutMode = useSignal<'timeline' | 'list'>('timeline');
 
   const clubSettings = calendarData.value.settings;
   const selectedDateBA = new Date(calendarData.value.selectedDateStr + "T12:00:00");
@@ -585,7 +609,7 @@ export default component$(() => {
   });
 
   const selectedBookingDetails = calendarData.value.bookings.find(
-    (b) => b.booking.id === selectedBookingId.value
+    (b: any) => b.booking?.id === selectedBookingId.value
   );
 
   const selectedDateStr = calendarData.value.selectedDateStr;
@@ -674,13 +698,7 @@ export default component$(() => {
     nav(`?date=${selectedDateStr}&view=${newView}`);
   });
 
-  // Force grid layout for week/month views
-  useTask$(({ track }) => {
-    const v = track(() => viewSignal.value);
-    if (v !== "day" && layoutMode.value !== "grid") {
-      layoutMode.value = "grid";
-    }
-  });
+  // Remove useTask$ for grid forcing
 
   // Generate days for Week View
   const weekDays = useComputed$(() => {
@@ -726,67 +744,50 @@ export default component$(() => {
         onNewBooking$={handleNewBooking}
       />
 
-      {layoutMode.value === 'list' ? (
-        <main class="flex-1 overflow-auto p-6">
-          <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
-            <BookingListView
-              pitches={calendarData.value.pitches}
-              bookings={calendarData.value.bookings as any}
-              onBookingClick$={handleBookingClick}
-            />
-          </div>
-        </main>
-      ) : layoutMode.value === 'timeline' ? (
-        <main class="flex-1 overflow-auto p-6">
-          <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
-            <BookingTimelineView
-              pitches={calendarData.value.pitches}
-              bookings={calendarData.value.bookings as any}
-              slotMinutes={30}
-              startHour={CALENDAR_START_HOUR}
-              endHour={CALENDAR_END_HOUR}
-              onBookingClick$={handleBookingClick}
-              onEmptySlotDragEnd$={(pitchId, time, duration) => {
-                adminFormPitchId.value = pitchId;
-                adminFormDate.value = getBAFormatDate(new Date(selectedDateStr + 'T12:00:00'));
-                adminFormTime.value = time;
-                adminFormDuration.value = String(duration);
-                adminIsSubscription.value = false;
-                adminEndDate.value = "";
-                adminNotes.value = "";
-                adminDiscountAmount.value = "";
-                adminDiscountType.value = "FIXED";
-                adminSelectedExtras.value = [];
-                isCreateModalOpen.value = true;
-              }}
-            />
-          </div>
-        </main>
+      {calendarData.value.view === "day" ? (
+        layoutMode.value === 'list' ? (
+          <main class="flex-1 overflow-auto p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
+              <BookingListView
+                pitches={calendarData.value.pitches}
+                bookings={calendarData.value.bookings as any}
+                onBookingClick$={handleBookingClick}
+              />
+            </div>
+          </main>
+        ) : (
+          <main class="flex-1 overflow-auto p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-full">
+              <BookingTimelineView
+                pitches={calendarData.value.pitches}
+                bookings={calendarData.value.bookings as any}
+                slotMinutes={30}
+                startHour={CALENDAR_START_HOUR}
+                endHour={CALENDAR_END_HOUR}
+                onBookingClick$={handleBookingClick}
+                onEmptySlotDragEnd$={(pitchId, time, duration) => {
+                  adminFormPitchId.value = pitchId;
+                  adminFormDate.value = getBAFormatDate(new Date(selectedDateStr + 'T12:00:00'));
+                  adminFormTime.value = time;
+                  adminFormDuration.value = String(duration);
+                  adminIsSubscription.value = false;
+                  adminEndDate.value = "";
+                  adminNotes.value = "";
+                  adminDiscountAmount.value = "";
+                  adminDiscountType.value = "FIXED";
+                  adminSelectedExtras.value = [];
+                  isCreateModalOpen.value = true;
+                }}
+              />
+            </div>
+          </main>
+        )
       ) : (
         <main class="flex-1 overflow-auto p-6 relative">
           <div class={cn(
             "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full",
             calendarData.value.view !== "month" ? "min-w-[900px]" : "min-w-[700px]"
           )}>
-            {calendarData.value.view === "day" && (
-              <CalendarDayView
-                calendarData={calendarData.value}
-                hours={hours}
-                pixelsPerHour={PIXELS_PER_HOUR}
-                calendarStartHour={CALENDAR_START_HOUR}
-                showCurrentTimeLine={showCurrentTimeLine}
-                currentTimePosition={currentTimePosition}
-                scrollContainerRef={scrollContainerRef}
-                onBookingClick$={handleBookingClick}
-                onEmptySlotClick$={(pitchId, time) => {
-                  adminFormPitchId.value = pitchId;
-                  adminFormDate.value = calendarData.value.selectedDateStr;
-                  adminFormTime.value = time;
-                  adminFormDuration.value = "60";
-                  isCreateModalOpen.value = true;
-                }}
-              />
-            )}
             {calendarData.value.view === "week" && (
               <CalendarWeekView
                 calendarData={calendarData.value}
@@ -811,12 +812,8 @@ export default component$(() => {
               <CalendarMonthView
                 calendarData={calendarData.value}
                 monthDays={monthDays.value}
-                onBookingClick$={handleBookingClick}
-                onEmptySlotClick$={(dateStr) => {
-                  adminFormDate.value = dateStr;
-                  adminFormTime.value = "18:00";
-                  adminFormDuration.value = "60";
-                  isCreateModalOpen.value = true;
+                onDayClick$={(dateStr) => {
+                  nav(`?date=${dateStr}&view=day`);
                 }}
               />
             )}

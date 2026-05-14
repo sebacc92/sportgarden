@@ -1,6 +1,6 @@
 import { component$, useSignal, $ } from "@builder.io/qwik";
 import { routeLoader$, Link, useLocation, useNavigate, type DocumentHead } from "@builder.io/qwik-city";
-import { eq, inArray, desc, sql, like, or } from "drizzle-orm";
+import { eq, inArray, desc, sql, like, or, and } from "drizzle-orm";
 import { getDB } from "~/db";
 import { users } from "~/db/schema";
 import { LuSearch, LuChevronLeft, LuChevronRight } from "@qwikest/icons/lucide";
@@ -26,10 +26,11 @@ export const useClientsData = routeLoader$(async (requestEvent) => {
   const url = new URL(requestEvent.request.url);
   const page = parseInt(url.searchParams.get("page") || "1", 10);
   const search = url.searchParams.get("search") || "";
+  const tab = (url.searchParams.get("tab") || "INDIVIDUAL") as "INDIVIDUAL" | "GROUP" | "SCHOOL";
   const limitNum = 20;
   const offsetNum = (page - 1) * limitNum;
 
-  const baseWhere = inArray(users.role, ["REGISTERED", "GUEST"]);
+  const baseWhere = and(inArray(users.role, ["REGISTERED", "GUEST"]), eq(users.clientType, tab));
   const searchWhere = search ? or(
     like(users.name, `%${search}%`),
     like(users.email, `%${search}%`),
@@ -64,6 +65,27 @@ export default component$(() => {
   const clientsData = useClientsData();
   const searchInput = useSignal(loc.url.searchParams.get("search") || "");
 
+  const currentTab = loc.url.searchParams.get("tab") || "INDIVIDUAL";
+
+  const handleTabChange = $((tabId: string) => {
+    const url = new URL(loc.url.toString());
+    url.searchParams.set("tab", tabId);
+    url.searchParams.set("page", "1");
+    nav(url.pathname + url.search);
+  });
+
+  const getPageUrl = (pageNumber: number) => {
+    const url = new URL(loc.url.toString());
+    url.searchParams.set("page", pageNumber.toString());
+    return url.pathname + url.search;
+  };
+
+  const tabs = [
+    { id: "INDIVIDUAL", label: "Jugadores" },
+    { id: "GROUP", label: "Equipos" },
+    { id: "SCHOOL", label: "Escuelas" }
+  ];
+
   const handleSearch = $(() => {
     const url = new URL(loc.url.toString());
     url.searchParams.set("search", searchInput.value);
@@ -91,12 +113,27 @@ export default component$(() => {
         </form>
       </header>
 
-      <div class="bg-white rounded-[2rem] border shadow-sm overflow-hidden flex flex-col h-[calc(100vh-180px)]">
+      <div class="mb-6 flex gap-6 border-b border-slate-200">
+        {tabs.map(t => (
+          <button
+            key={t.id}
+            onClick$={() => handleTabChange(t.id)}
+            class={`pb-3 text-sm font-bold border-b-2 transition-colors relative -mb-[1px] ${currentTab === t.id ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div class="bg-white rounded-[2rem] border shadow-sm overflow-hidden flex flex-col h-[calc(100vh-230px)]">
         <div class="flex-1 overflow-auto">
           <table class="w-full text-left border-collapse">
             <thead class="sticky top-0 z-10 bg-slate-50 border-b border-slate-200 shadow-sm">
               <tr>
-                <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Nombre</th>
+                {currentTab !== 'INDIVIDUAL' && (
+                  <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Organización</th>
+                )}
+                <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{currentTab === 'INDIVIDUAL' ? 'Nombre' : 'Contacto'}</th>
                 <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Teléfono</th>
                 <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Email</th>
                 <th class="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Tipo</th>
@@ -107,7 +144,10 @@ export default component$(() => {
               {clientsData.value.clients.length > 0 ? (
                 clientsData.value.clients.map((client) => (
                   <tr key={client.id} class="hover:bg-slate-50/50 transition-colors">
-                    <td class="px-6 py-4 font-bold text-slate-800">{client.name}</td>
+                    {currentTab !== 'INDIVIDUAL' && (
+                      <td class="px-6 py-4 font-bold text-slate-800">{client.organizationName || '-'}</td>
+                    )}
+                    <td class={`px-6 py-4 ${currentTab === 'INDIVIDUAL' ? 'font-bold text-slate-800' : 'text-sm text-slate-600'}`}>{client.name}</td>
                     <td class="px-6 py-4 font-mono text-sm text-slate-600">{client.phone || '-'}</td>
                     <td class="px-6 py-4 text-sm text-slate-500">{client.email || '-'}</td>
                     <td class="px-6 py-4">
@@ -140,7 +180,7 @@ export default component$(() => {
           
           <div class="flex gap-2">
             <Link
-              href={clientsData.value.page > 1 ? `?page=${clientsData.value.page - 1}&search=${loc.url.searchParams.get("search") || ""}` : "#"}
+              href={clientsData.value.page > 1 ? getPageUrl(clientsData.value.page - 1) : "#"}
               class={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${clientsData.value.page > 1 ? 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-sm' : 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50'}`}
               preventdefault:click={clientsData.value.page <= 1}
             >
@@ -148,7 +188,7 @@ export default component$(() => {
             </Link>
             
             <Link
-              href={clientsData.value.page < clientsData.value.totalPages ? `?page=${clientsData.value.page + 1}&search=${loc.url.searchParams.get("search") || ""}` : "#"}
+              href={clientsData.value.page < clientsData.value.totalPages ? getPageUrl(clientsData.value.page + 1) : "#"}
               class={`flex items-center gap-1 px-4 py-2 rounded-lg text-sm font-bold transition-colors ${clientsData.value.page < clientsData.value.totalPages ? 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-sm' : 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50'}`}
               preventdefault:click={clientsData.value.page >= clientsData.value.totalPages}
             >

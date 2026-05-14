@@ -69,7 +69,7 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
         </div>
         
         {props.pitchName && (
-          <div class="text-[9px] font-black opacity-60 uppercase tracking-tighter truncate">
+          <div class="mt-0.5 inline-flex w-max items-center px-1.5 py-0.5 rounded shadow-sm text-[9px] font-black uppercase tracking-tighter truncate bg-white/60 text-slate-700">
             {props.pitchName}
           </div>
         )}
