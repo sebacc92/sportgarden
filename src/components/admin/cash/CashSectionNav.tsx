@@ -24,7 +24,8 @@ export const CashSectionNav = component$(() => {
   const path = normalizePathname(loc.url.pathname);
 
   return (
-    <div class="flex flex-wrap gap-1 border-b border-slate-200 pb-4 print:hidden">
+    <div class="overflow-x-auto -mx-1 px-1 print:hidden">
+      <div class="flex flex-wrap gap-1 border-b border-slate-200 pb-4 min-w-0">
       {TABS.map((tab) => {
         const active = tab.isActive(path);
         return (
@@ -42,6 +43,7 @@ export const CashSectionNav = component$(() => {
           </Link>
         );
       })}
+      </div>
     </div>
   );
 });

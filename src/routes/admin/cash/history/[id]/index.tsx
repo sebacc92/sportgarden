@@ -3,6 +3,7 @@ import { routeLoader$, Link } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { cashRegisters, cashMovements, siteSettings } from "~/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { resolveMovementCategories } from "~/lib/admin/cash-settings-defaults";
 
 const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 100];
 
@@ -57,17 +58,7 @@ export const useRegisterDetailData = routeLoader$(async (requestEvent) => {
     byCategory, 
     byMethod, 
     paymentMethods,
-    movementCategories: (settings?.movementCategories || [
-      { id: "BOOKING", name: "Reservas", type: "INCOME", icon: "⚽" },
-      { id: "SCHOOL", name: "Escuelita", type: "INCOME", icon: "🏫" },
-      { id: "KIOSK", name: "Ventas Kiosco", type: "INCOME", icon: "🍿" },
-      { id: "EXTRAS", name: "Alquileres Extra", type: "INCOME", icon: "🎟️" },
-      { id: "OTHER_INCOME", name: "Otros Ingresos", type: "INCOME", icon: "📌" },
-      { id: "MAINTENANCE", name: "Mantenimiento", type: "EXPENSE", icon: "🔧" },
-      { id: "SALARY", name: "Sueldos", type: "EXPENSE", icon: "💼" },
-      { id: "SERVICES", name: "Servicios", type: "EXPENSE", icon: "💡" },
-      { id: "OTHER_EXPENSE", name: "Otros Gastos", type: "EXPENSE", icon: "📌" },
-    ]) as { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }[]
+    movementCategories: resolveMovementCategories(settings?.movementCategories),
   };
 });
 

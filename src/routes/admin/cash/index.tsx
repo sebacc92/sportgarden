@@ -6,6 +6,10 @@ import { eq, desc, inArray } from "drizzle-orm";
 import { Button, Modal } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
+import {
+  resolveMovementCategories,
+  resolvePaymentMethodsForAnalytics,
+} from "~/lib/admin/cash-settings-defaults";
 
 const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 100];
 
@@ -91,20 +95,10 @@ export const useCashData = routeLoader$(async (requestEvent) => {
   const currentBalance = (latestRegister?.openingBalance || 0) + totalIncomes - totalExpenses;
 
   const settings = await db.query.siteSettings.findFirst();
-  const paymentMethods = (settings?.paymentMethods || []) as { id: string, name: string, isActive: boolean }[];
-  
+  const availableMethods = resolvePaymentMethodsForAnalytics(settings?.paymentMethods);
+
   // Desglose por método de pago
   const byMethod: Record<string, { incomes: number; expenses: number }> = {};
-  
-  // Initialize with all available payment methods (from settings or defaults)
-  const availableMethods = paymentMethods.length > 0 
-    ? paymentMethods 
-    : [
-        { id: "CASH", name: "Efectivo", isActive: true },
-        { id: "TRANSFER", name: "Transferencia", isActive: true },
-        { id: "CARD", name: "Tarjeta", isActive: true },
-        { id: "MERCADO_PAGO", name: "Mercado Pago", isActive: true }
-      ];
 
   availableMethods.forEach(pm => {
     byMethod[pm.id] = { incomes: 0, expenses: 0 };
@@ -126,17 +120,7 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     currentBalance,
     byMethod,
     paymentMethods: availableMethods,
-    movementCategories: (settings?.movementCategories || [
-      { id: "BOOKING", name: "Reservas", type: "INCOME", icon: "⚽" },
-      { id: "SCHOOL", name: "Escuelita", type: "INCOME", icon: "🏫" },
-      { id: "KIOSK", name: "Ventas Kiosco", type: "INCOME", icon: "🍿" },
-      { id: "EXTRAS", name: "Alquileres Extra", type: "INCOME", icon: "🎟️" },
-      { id: "OTHER_INCOME", name: "Otros Ingresos", type: "INCOME", icon: "📌" },
-      { id: "MAINTENANCE", name: "Mantenimiento", type: "EXPENSE", icon: "🔧" },
-      { id: "SALARY", name: "Sueldos", type: "EXPENSE", icon: "💼" },
-      { id: "SERVICES", name: "Servicios", type: "EXPENSE", icon: "💡" },
-      { id: "OTHER_EXPENSE", name: "Otros Gastos", type: "EXPENSE", icon: "📌" },
-    ]) as { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }[],
+    movementCategories: resolveMovementCategories(settings?.movementCategories),
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalCount / limit),

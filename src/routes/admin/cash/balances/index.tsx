@@ -4,6 +4,7 @@ import { getDB } from "~/db";
 import { cashMovements, cashRegisters, siteSettings } from "~/db/schema";
 import { and, eq, gte, lte } from "drizzle-orm";
 import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
+import { resolveMovementCategories } from "~/lib/admin/cash-settings-defaults";
 
 export const useBalancesData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -62,17 +63,7 @@ export const useBalancesData = routeLoader$(async (requestEvent) => {
     netBalance: totalIncomes - totalExpenses,
     turnsCount: allRegisters.length,
     paymentMethods,
-    movementCategories: (settings?.movementCategories || [
-      { id: "BOOKING", name: "Reservas", type: "INCOME", icon: "⚽" },
-      { id: "SCHOOL", name: "Escuelita", type: "INCOME", icon: "🏫" },
-      { id: "KIOSK", name: "Ventas Kiosco", type: "INCOME", icon: "🍿" },
-      { id: "EXTRAS", name: "Alquileres Extra", type: "INCOME", icon: "🎟️" },
-      { id: "OTHER_INCOME", name: "Otros Ingresos", type: "INCOME", icon: "📌" },
-      { id: "MAINTENANCE", name: "Mantenimiento", type: "EXPENSE", icon: "🔧" },
-      { id: "SALARY", name: "Sueldos", type: "EXPENSE", icon: "💼" },
-      { id: "SERVICES", name: "Servicios", type: "EXPENSE", icon: "💡" },
-      { id: "OTHER_EXPENSE", name: "Otros Gastos", type: "EXPENSE", icon: "📌" },
-    ]) as { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }[],
+    movementCategories: resolveMovementCategories(settings?.movementCategories),
   };
 });
 

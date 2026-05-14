@@ -6,19 +6,13 @@ import { siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
 import { LuPlus, LuTrash2, LuSave } from "@qwikest/icons/lucide";
 import { cn } from "@qwik-ui/utils";
-import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
+import { resolvePaymentMethodsForSettings } from "~/lib/admin/cash-settings-defaults";
+import { CashAdminPageWrapper } from "~/components/admin/cash/CashAdminPageWrapper";
 
 export const useCashPaymentSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const row = await db.query.siteSettings.findFirst({ where: eq(siteSettings.id, 1) });
-  const paymentMethods = (row?.paymentMethods || []) as { id: string; name: string; isActive: boolean }[];
-  if (paymentMethods.length > 0) return paymentMethods;
-  return [
-    { id: "CASH", name: "Efectivo", isActive: true },
-    { id: "TRANSFER", name: "Transferencia", isActive: true },
-    { id: "MERCADO_PAGO", name: "Mercado Pago", isActive: true },
-    { id: "CURRENT_ACCOUNT", name: "Cuenta Corriente", isActive: true },
-  ];
+  return resolvePaymentMethodsForSettings(row?.paymentMethods);
 });
 
 export const useSavePaymentMethodsAction = routeAction$(
@@ -68,10 +62,7 @@ export default component$(() => {
   });
 
   return (
-    <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans">
-      <div class="max-w-4xl mx-auto space-y-6">
-        <CashSectionNav />
-
+    <CashAdminPageWrapper maxWidthClass="max-w-4xl">
         <div id="medio-de-pago" class="scroll-mt-24 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
           <header class="flex flex-wrap justify-between items-start gap-4 mb-8">
             <div>
@@ -154,8 +145,7 @@ export default component$(() => {
             </div>
           </Form>
         </div>
-      </div>
-    </div>
+    </CashAdminPageWrapper>
   );
 });
 

@@ -5,25 +5,13 @@ import { getDB } from "~/db";
 import { siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
 import { LuPlus, LuTrash2, LuSave } from "@qwikest/icons/lucide";
-import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
-
-const DEFAULT_CATEGORIES = [
-  { id: "BOOKING", name: "Reservas", type: "INCOME" as const, icon: "⚽" },
-  { id: "SCHOOL", name: "Escuelita", type: "INCOME" as const, icon: "🏫" },
-  { id: "KIOSK", name: "Ventas Kiosco", type: "INCOME" as const, icon: "🍿" },
-  { id: "EXTRAS", name: "Alquileres Extra", type: "INCOME" as const, icon: "🎟️" },
-  { id: "OTHER_INCOME", name: "Otros Ingresos", type: "INCOME" as const, icon: "📌" },
-  { id: "MAINTENANCE", name: "Mantenimiento", type: "EXPENSE" as const, icon: "🔧" },
-  { id: "SALARY", name: "Sueldos", type: "EXPENSE" as const, icon: "💼" },
-  { id: "SERVICES", name: "Servicios", type: "EXPENSE" as const, icon: "💡" },
-  { id: "OTHER_EXPENSE", name: "Otros Gastos", type: "EXPENSE" as const, icon: "📌" },
-];
+import { resolveMovementCategories } from "~/lib/admin/cash-settings-defaults";
+import { CashAdminPageWrapper } from "~/components/admin/cash/CashAdminPageWrapper";
 
 export const useCashCategoriesSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const row = await db.query.siteSettings.findFirst({ where: eq(siteSettings.id, 1) });
-  const list = row?.movementCategories as typeof DEFAULT_CATEGORIES | undefined;
-  return Array.isArray(list) && list.length > 0 ? list : DEFAULT_CATEGORIES;
+  return resolveMovementCategories(row?.movementCategories);
 });
 
 export const useSaveMovementCategoriesAction = routeAction$(
@@ -86,10 +74,7 @@ export default component$(() => {
   });
 
   return (
-    <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans">
-      <div class="max-w-5xl mx-auto space-y-6">
-        <CashSectionNav />
-
+    <CashAdminPageWrapper maxWidthClass="max-w-5xl">
         <div id="categorias-movimientos-caja" class="scroll-mt-24 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
           <header class="mb-8">
             <h1 class="text-2xl font-black tracking-tight text-slate-800">Categorías de movimientos (Caja)</h1>
@@ -239,8 +224,7 @@ export default component$(() => {
             </div>
           </Form>
         </div>
-      </div>
-    </div>
+    </CashAdminPageWrapper>
   );
 });
 
