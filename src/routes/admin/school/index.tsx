@@ -1,4 +1,4 @@
-import { component$, useSignal, useComputed$, $ } from "@builder.io/qwik";
+import { component$, useSignal, useComputed$, $, useStore } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, Form, z, zod$, Link, useLocation, useNavigate } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { students, siteSettings, studentSubscriptions, studentPayments, cashRegisters, cashMovements } from "~/db/schema";
@@ -101,11 +101,19 @@ export const useCreateCategoryAction = routeAction$(
     });
 
     const categories = (settings?.schoolCategories as any[]) || [];
+    let parsedSchedules = [];
+    try {
+        if (data.schedules) {
+            parsedSchedules = JSON.parse(data.schedules);
+        }
+    } catch(e) {}
+    
     categories.push({
       id: crypto.randomUUID(),
       name: data.name,
       teacher: data.teacher,
       monthlyFee: data.monthlyFee || 0,
+      schedules: parsedSchedules,
     });
 
     await db.update(siteSettings).set({ schoolCategories: categories }).where(eq(siteSettings.id, 1));
@@ -115,6 +123,7 @@ export const useCreateCategoryAction = routeAction$(
     name: z.string().min(1),
     teacher: z.string().min(1),
     monthlyFee: z.coerce.number().min(0),
+    schedules: z.string().optional(),
   })
 );
 
@@ -126,13 +135,24 @@ export const useUpdateCategoryAction = routeAction$(
     });
 
     const categories = (settings?.schoolCategories as any[]) || [];
+    let parsedSchedules = [];
+    try {
+        if (data.schedules) {
+            parsedSchedules = JSON.parse(data.schedules);
+        }
+    } catch(e) {}
+    
     const idx = categories.findIndex((c: any) => c.id === data.id);
     if (idx !== -1) {
       categories[idx] = {
         ...categories[idx],
         name: data.name,
         teacher: data.teacher,
-        monthlyFee: data.monthlyFee || 0
+        monthlyFee: data.monthlyFee || 0,
+        schedules: parsedSchedules,
+        days: undefined, // Cleanup old fields
+        startTime: undefined,
+        endTime: undefined,
       };
       await db.update(siteSettings).set({ schoolCategories: categories }).where(eq(siteSettings.id, 1));
     }
@@ -143,6 +163,7 @@ export const useUpdateCategoryAction = routeAction$(
     name: z.string().min(1),
     teacher: z.string().min(1),
     monthlyFee: z.coerce.number().min(0),
+    schedules: z.string().optional(),
   })
 );
 
@@ -346,6 +367,7 @@ export default component$(() => {
   const categoryFormName = useSignal("");
   const categoryFormTeacher = useSignal("");
   const categoryFormFee = useSignal(0);
+  const categoryFormSchedules = useStore<Record<number, { startTime: string, endTime: string }>>({});
 
   const isStudentModalOpen = useSignal(false);
 
@@ -402,7 +424,15 @@ export default component$(() => {
                     </button>
                   )}
                 </h2>
-                <Button look="primary" onClick$={() => { editingCategoryId.value = null; categoryFormName.value = ""; categoryFormTeacher.value = ""; categoryFormFee.value = 0; isCategoryModalOpen.value = true; }} class="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold py-2 px-4 text-[11px] uppercase tracking-wider shadow-sm">
+                <Button look="primary" onClick$={() => { 
+                  editingCategoryId.value = null; 
+                  categoryFormName.value = ""; 
+                  categoryFormTeacher.value = ""; 
+                  categoryFormFee.value = 0; 
+                  // Clear schedules
+                  Object.keys(categoryFormSchedules).forEach(key => delete categoryFormSchedules[Number(key)]);
+                  isCategoryModalOpen.value = true; 
+                }} class="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold py-2 px-4 text-[11px] uppercase tracking-wider shadow-sm">
                   + Nueva
                 </Button>
               </div>
@@ -427,6 +457,36 @@ export default component$(() => {
                       >
                         <div class="font-black text-sm text-slate-800">{cat.name}</div>
                         <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 max-w-[80%] truncate">Prof: {cat.teacher}</div>
+                        {(() => {
+                          const schedules = cat.schedules || (cat.days ? cat.days.map((d: number) => ({ day: d, startTime: cat.startTime, endTime: cat.endTime })) : []);
+                          if (!schedules || schedules.length === 0) return null;
+
+                          const groups: Record<string, number[]> = {};
+                          schedules.forEach((s: any) => {
+                            const key = `${s.startTime || '?'}-${s.endTime || '?'}`;
+                            if (!groups[key]) groups[key] = [];
+                            groups[key].push(s.day);
+                          });
+
+                          return (
+                            <div class="mt-2 space-y-1">
+                              {Object.entries(groups).map(([time, days]) => (
+                                <div key={time} class="flex items-center gap-1.5">
+                                  <div class="flex gap-0.5">
+                                    {days.sort((a, b) => a - b).map((d) => (
+                                      <span key={d} class="w-4 h-4 bg-emerald-100 text-emerald-700 rounded-sm flex items-center justify-center text-[9px] font-black uppercase" title={['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][d]}>
+                                        {['D', 'L', 'M', 'M', 'J', 'V', 'S'][d]}
+                                      </span>
+                                    ))}
+                                  </div>
+                                  <div class="text-[8px] font-bold text-slate-400 bg-slate-100 px-1 py-0.5 rounded-sm uppercase tracking-tighter">
+                                    {time.replace('-', ' - ')}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
                         <div class="text-[10px] text-emerald-600 font-black mt-1 uppercase tracking-tighter">${cat.monthlyFee?.toLocaleString("es-AR")} / mes</div>
                       </button>
                       <div class="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -436,6 +496,20 @@ export default component$(() => {
                             categoryFormName.value = cat.name;
                             categoryFormTeacher.value = cat.teacher;
                             categoryFormFee.value = cat.monthlyFee || 0;
+                            
+                            // Clear and load schedules
+                            Object.keys(categoryFormSchedules).forEach(key => delete categoryFormSchedules[Number(key)]);
+                            if (cat.schedules) {
+                              cat.schedules.forEach((s: any) => {
+                                categoryFormSchedules[s.day] = { startTime: s.startTime, endTime: s.endTime };
+                              });
+                            } else if (cat.days) {
+                              // Fallback for old data
+                              cat.days.forEach((d: number) => {
+                                categoryFormSchedules[d] = { startTime: cat.startTime || "", endTime: cat.endTime || "" };
+                              });
+                            }
+                            
                             isCategoryModalOpen.value = true;
                           }}
                           class="p-1.5 bg-white text-slate-400 hover:text-emerald-600 rounded-md border border-slate-200 shadow-sm transition-colors"
@@ -648,6 +722,101 @@ export default component$(() => {
               <div>
                 <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Cuota Mensual ($) *</label>
                 <input type="number" name="monthlyFee" bind:value={categoryFormFee} required placeholder="0.00" class="w-full px-4 py-2 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-bold text-emerald-600" />
+              </div>
+              
+              <div class="border-t border-slate-100 pt-4 mt-2">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="text-sm font-black text-slate-800">Horarios de Entrenamiento</h4>
+                  {Object.keys(categoryFormSchedules).length > 1 && (
+                    <button
+                      type="button"
+                      onClick$={() => {
+                        const firstDay = Object.keys(categoryFormSchedules).map(Number).sort((a, b) => a - b)[0];
+                        if (firstDay !== undefined) {
+                          const { startTime, endTime } = categoryFormSchedules[firstDay];
+                          Object.keys(categoryFormSchedules).forEach(day => {
+                            categoryFormSchedules[Number(day)] = { startTime, endTime };
+                          });
+                        }
+                      }}
+                      class="text-[10px] font-black text-emerald-600 uppercase tracking-widest hover:text-emerald-700 transition-colors bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100"
+                    >
+                      Mismo horario para todos
+                    </button>
+                  )}
+                </div>
+
+                <input
+                  type="hidden"
+                  name="schedules"
+                  value={JSON.stringify(Object.entries(categoryFormSchedules).map(([day, val]) => ({ day: Number(day), ...val })))}
+                />
+
+                <div class="mb-4">
+                  <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Días</label>
+                  <div class="flex flex-wrap gap-2">
+                    {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => {
+                      const isActive = categoryFormSchedules[idx] !== undefined;
+                      return (
+                        <button
+                          type="button"
+                          key={idx}
+                          onClick$={() => {
+                            if (isActive) {
+                              delete categoryFormSchedules[idx];
+                            } else {
+                              categoryFormSchedules[idx] = { startTime: "", endTime: "" };
+                            }
+                          }}
+                          class={cn(
+                            "w-9 h-9 rounded-full flex items-center justify-center text-xs font-black transition-all",
+                            isActive
+                              ? "bg-emerald-500 text-white shadow-md shadow-emerald-200 scale-110"
+                              : "bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                          )}
+                          title={['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][idx]}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div class="space-y-3 max-h-[220px] overflow-y-auto pr-2 pb-2 custom-scrollbar">
+                  {Object.keys(categoryFormSchedules).map(Number).sort((a, b) => a - b).map((dayIdx) => (
+                    <div key={dayIdx} class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 animate-fade-in">
+                      <div class="w-10 text-xs font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 pr-2 mr-1">
+                        {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][dayIdx]}
+                      </div>
+                      <div class="grid grid-cols-2 gap-3 flex-1">
+                        <div>
+                          <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Inicio</label>
+                          <input
+                            type="time"
+                            value={categoryFormSchedules[dayIdx].startTime}
+                            onInput$={(ev) => categoryFormSchedules[dayIdx].startTime = (ev.target as HTMLInputElement).value}
+                            class="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fin</label>
+                          <input
+                            type="time"
+                            value={categoryFormSchedules[dayIdx].endTime}
+                            onInput$={(ev) => categoryFormSchedules[dayIdx].endTime = (ev.target as HTMLInputElement).value}
+                            class="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {Object.keys(categoryFormSchedules).length === 0 && (
+                    <div class="text-center py-6 border-2 border-dashed border-slate-100 rounded-2xl">
+                      <p class="text-[10px] font-black text-slate-300 uppercase tracking-widest">Selecciona días para definir horarios</p>
+                    </div>
+                  )}
+                </div>
               </div>
               <div class="flex justify-end gap-3 pt-4 mt-6 border-t border-slate-100">
                 <Button type="button" onClick$={() => isCategoryModalOpen.value = false} look="ghost" class="font-bold text-slate-500 hover:bg-slate-100 rounded-xl px-4 py-2">

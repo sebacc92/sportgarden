@@ -5,7 +5,6 @@ import { getDB } from "~/db";
 import { siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
 import { LuPlus, LuTrash2, LuSave } from '@qwikest/icons/lucide';
-import { cn } from "@qwik-ui/utils";
 
 export const useSiteSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -51,8 +50,6 @@ export const useSaveClubSettingsAction = routeAction$(
         bankAlias: data.bankAlias,
         operatingHours: JSON.parse(data.operatingHours as string),
         services: JSON.parse(data.services as string),
-        paymentMethods: JSON.parse(data.paymentMethods as string),
-        movementCategories: JSON.parse(data.movementCategories as string),
         updatedAt: new Date()
       })
       .where(eq(siteSettings.id, 1));
@@ -66,8 +63,6 @@ export const useSaveClubSettingsAction = routeAction$(
     bankAlias: z.string().optional(),
     operatingHours: z.string(), // JSON array
     services: z.string(), // JSON array
-    paymentMethods: z.string(), // JSON array
-    movementCategories: z.string() // JSON array
   })
 );
 
@@ -93,24 +88,6 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
     return existing || { day: i, isOpen: true, openTime: "08:00", closeTime: "23:00" };
   });
   const initialServices = Array.isArray(props.settings?.services) ? props.settings.services : [];
-  const initialPaymentMethods = Array.isArray(props.settings?.paymentMethods) ? props.settings.paymentMethods : [
-    { id: "CASH", name: "Efectivo", isActive: true },
-    { id: "TRANSFER", name: "Transferencia", isActive: true },
-    { id: "MERCADO_PAGO", name: "Mercado Pago", isActive: true },
-    { id: "CURRENT_ACCOUNT", name: "Cuenta Corriente", isActive: true },
-  ];
-
-  const initialMovementCategories = Array.isArray(props.settings?.movementCategories) ? props.settings.movementCategories : [
-    { id: "BOOKING", name: "Reservas", type: "INCOME", icon: "⚽" },
-    { id: "SCHOOL", name: "Escuelita", type: "INCOME", icon: "🏫" },
-    { id: "KIOSK", name: "Ventas Kiosco", type: "INCOME", icon: "🍿" },
-    { id: "EXTRAS", name: "Alquileres Extra", type: "INCOME", icon: "🎟️" },
-    { id: "OTHER_INCOME", name: "Otros Ingresos", type: "INCOME", icon: "📌" },
-    { id: "MAINTENANCE", name: "Mantenimiento", type: "EXPENSE", icon: "🔧" },
-    { id: "SALARY", name: "Sueldos", type: "EXPENSE", icon: "💼" },
-    { id: "SERVICES", name: "Servicios", type: "EXPENSE", icon: "💡" },
-    { id: "OTHER_EXPENSE", name: "Otros Gastos", type: "EXPENSE", icon: "📌" },
-  ];
 
   const clubName = useSignal(props.settings?.clubName || "");
   const clubAddress = useSignal(props.settings?.clubAddress || "");
@@ -120,16 +97,9 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
   const store = useStore({
     operatingHours: initialHours,
     services: initialServices as string[],
-    paymentMethods: initialPaymentMethods as { id: string, name: string, isActive: boolean }[],
-    movementCategories: initialMovementCategories as { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }[],
   }, { deep: true });
 
   const newServiceText = useSignal("");
-  const newPaymentMethodText = useSignal("");
-  const newIncomeCategoryText = useSignal("");
-  const newExpenseCategoryText = useSignal("");
-  const newIncomeCategoryIcon = useSignal("💰");
-  const newExpenseCategoryIcon = useSignal("💸");
 
   const toggleDay = $((dayIndex: number) => {
     store.operatingHours[dayIndex].isOpen = !store.operatingHours[dayIndex].isOpen;
@@ -148,55 +118,6 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
 
   const removeService = $((index: number) => {
     store.services = store.services.filter((_, i) => i !== index);
-  });
-
-  const addPaymentMethod = $(() => {
-    if (newPaymentMethodText.value.trim() !== "") {
-      const name = newPaymentMethodText.value.trim();
-      const id = name.toUpperCase().replace(/\s+/g, '_');
-      store.paymentMethods = [...store.paymentMethods, { id, name, isActive: true }];
-      newPaymentMethodText.value = "";
-    }
-  });
-
-  const removePaymentMethod = $((id: string) => {
-    store.paymentMethods = store.paymentMethods.filter(pm => pm.id !== id);
-  });
-
-  const togglePaymentMethod = $((id: string) => {
-    const pm = store.paymentMethods.find(p => p.id === id);
-    if (pm) pm.isActive = !pm.isActive;
-  });
-
-  const addMovementCategory = $((type: 'INCOME' | 'EXPENSE') => {
-    const textSignal = type === 'INCOME' ? newIncomeCategoryText : newExpenseCategoryText;
-    const iconSignal = type === 'INCOME' ? newIncomeCategoryIcon : newExpenseCategoryIcon;
-
-    if (textSignal.value.trim() !== "") {
-      const name = textSignal.value.trim();
-      const id = name.toUpperCase().replace(/\s+/g, '_');
-      store.movementCategories = [...store.movementCategories, {
-        id,
-        name,
-        type,
-        icon: iconSignal.value
-      }];
-      textSignal.value = "";
-    }
-  });
-
-  const removeMovementCategory = $((id: string) => {
-    if (window.confirm("¿Estás seguro de que deseas eliminar esta categoría?")) {
-      store.movementCategories = store.movementCategories.filter(mc => mc.id !== id);
-    }
-  });
-
-  const updateCategory = $((id: string, updates: Partial<{ name: string, icon: string }>) => {
-    const index = store.movementCategories.findIndex(mc => mc.id === id);
-    if (index !== -1) {
-      store.movementCategories[index] = { ...store.movementCategories[index], ...updates };
-      store.movementCategories = [...store.movementCategories]; // Trigger reactivity
-    }
   });
 
   return (
@@ -235,8 +156,6 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
       <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
         <input type="hidden" name="operatingHours" value={JSON.stringify(store.operatingHours)} />
         <input type="hidden" name="services" value={JSON.stringify(store.services)} />
-        <input type="hidden" name="paymentMethods" value={JSON.stringify(store.paymentMethods)} />
-        <input type="hidden" name="movementCategories" value={JSON.stringify(store.movementCategories)} />
 
         <div class="grid grid-cols-1 xl:grid-cols-3 gap-12">
           {/* Basic Data */}
@@ -406,187 +325,6 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
                 </div>
               )}
             </ul>
-          </div>
-        </div>
-
-        {/* Payment Methods */}
-        <div class="mt-12 pt-12 border-t border-slate-100">
-          <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-            <div>
-              <h3 class="text-lg font-bold text-emerald-600 uppercase tracking-wider text-sm">Medios de Pago</h3>
-              <p class="text-xs text-slate-500 mt-1 font-medium">Define qué métodos de pago aceptas en el complejo.</p>
-            </div>
-
-            <div class="flex gap-2 w-full md:w-auto">
-              <input
-                type="text"
-                bind:value={newPaymentMethodText}
-                onKeyDown$={(e) => e.key === 'Enter' && (e.preventDefault(), addPaymentMethod())}
-                placeholder="Ej: Tarjeta, Débito..."
-                class="flex-1 md:w-64 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-sm"
-              />
-              <Button type="button" onClick$={addPaymentMethod} look="primary" class="rounded-xl px-4 flex items-center justify-center">
-                <LuPlus class="w-5 h-5" />
-              </Button>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {store.paymentMethods.map((pm) => (
-              <div
-                key={pm.id}
-                class={cn(
-                  "flex items-center justify-between p-4 rounded-2xl border transition-all",
-                  pm.isActive ? "bg-white border-emerald-100 shadow-sm" : "bg-slate-50 border-slate-200 opacity-60"
-                )}
-              >
-                <div class="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={pm.isActive}
-                    onChange$={() => togglePaymentMethod(pm.id)}
-                    class="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500 border-slate-300"
-                  />
-                  <span class={cn("font-bold text-sm", pm.isActive ? "text-slate-800" : "text-slate-500")}>
-                    {pm.name}
-                  </span>
-                </div>
-
-                {!["CASH", "TRANSFER", "MERCADO_PAGO", "CURRENT_ACCOUNT"].includes(pm.id) && (
-                  <button
-                    type="button"
-                    onClick$={() => removePaymentMethod(pm.id)}
-                    class="text-slate-400 hover:text-red-500 transition-colors p-1"
-                  >
-                    <LuTrash2 class="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {store.paymentMethods.length === 0 && (
-            <div class="text-center text-slate-400 italic text-sm py-12 border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/50">
-              No has definido medios de pago. El sistema usará los valores por defecto.
-            </div>
-          )}
-
-          {/* Movement Categories */}
-          <div class="mt-16 pt-16 border-t border-slate-100 space-y-8">
-            <div>
-              <h3 class="text-lg font-bold text-emerald-600 uppercase tracking-wider text-sm">Categorías de Movimientos (Caja)</h3>
-              <p class="text-xs text-slate-500 mt-1 font-medium">Define las categorías para clasificar tus ingresos y egresos.</p>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
-              {/* Incomes Section */}
-              <div class="space-y-6">
-                <div class="flex items-center justify-between border-b border-emerald-50 pb-2">
-                  <h4 class="text-xs font-black text-emerald-600 uppercase tracking-widest">📈 Ingresos</h4>
-                  <div class="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      bind:value={newIncomeCategoryIcon}
-                      class="w-10 h-10 text-center bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <input
-                      type="text"
-                      bind:value={newIncomeCategoryText}
-                      onKeyDown$={(e) => e.key === 'Enter' && (e.preventDefault(), addMovementCategory('INCOME'))}
-                      placeholder="Nuevo ingreso..."
-                      class="w-40 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-bold"
-                    />
-                    <Button type="button" look="primary" onClick$={() => addMovementCategory('INCOME')} class="p-2 rounded-lg">
-                      <LuPlus class="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-1 gap-3">
-                  {store.movementCategories.filter(mc => mc.type === 'INCOME').map((mc) => (
-                    <div key={mc.id} class="flex items-center justify-between p-4 bg-white border border-emerald-100 rounded-2xl shadow-sm hover:border-emerald-300 transition-all group">
-                      <div class="flex items-center gap-3 flex-1">
-                        <input
-                          type="text"
-                          value={mc.icon}
-                          onInput$={(e) => updateCategory(mc.id, { icon: (e.target as HTMLInputElement).value })}
-                          class="w-8 h-8 text-center bg-transparent border-none focus:bg-slate-50 rounded-lg text-lg outline-none"
-                        />
-                        <input
-                          type="text"
-                          value={mc.name}
-                          onInput$={(e) => updateCategory(mc.id, { name: (e.target as HTMLInputElement).value })}
-                          class="flex-1 bg-transparent border-none focus:bg-slate-50 rounded-lg font-bold text-slate-700 outline-none"
-                        />
-                      </div>
-                      {!["BOOKING", "SCHOOL"].includes(mc.id) && (
-                        <button
-                          type="button"
-                          onClick$={() => removeMovementCategory(mc.id)}
-                          class="text-slate-300 hover:text-red-500 transition-colors p-1"
-                          title="Eliminar categoría"
-                        >
-                          <LuTrash2 class="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Expenses Section */}
-              <div class="space-y-6">
-                <div class="flex items-center justify-between border-b border-red-50 pb-2">
-                  <h4 class="text-xs font-black text-red-600 uppercase tracking-widest">📉 Egresos</h4>
-                  <div class="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      bind:value={newExpenseCategoryIcon}
-                      class="w-10 h-10 text-center bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    />
-                    <input
-                      type="text"
-                      bind:value={newExpenseCategoryText}
-                      onKeyDown$={(e) => e.key === 'Enter' && (e.preventDefault(), addMovementCategory('EXPENSE'))}
-                      placeholder="Nuevo egreso..."
-                      class="w-40 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-bold"
-                    />
-                    <Button type="button" look="primary" onClick$={() => addMovementCategory('EXPENSE')} class="p-2 rounded-lg">
-                      <LuPlus class="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-1 gap-3">
-                  {store.movementCategories.filter(mc => mc.type === 'EXPENSE').map((mc) => (
-                    <div key={mc.id} class="flex items-center justify-between p-4 bg-white border border-red-50 rounded-2xl shadow-sm hover:border-red-300 transition-all group">
-                      <div class="flex items-center gap-3 flex-1">
-                        <input
-                          type="text"
-                          value={mc.icon}
-                          onInput$={(e) => updateCategory(mc.id, { icon: (e.target as HTMLInputElement).value })}
-                          class="w-8 h-8 text-center bg-transparent border-none focus:bg-slate-50 rounded-lg text-lg outline-none"
-                        />
-                        <input
-                          type="text"
-                          value={mc.name}
-                          onInput$={(e) => updateCategory(mc.id, { name: (e.target as HTMLInputElement).value })}
-                          class="flex-1 bg-transparent border-none focus:bg-slate-50 rounded-lg font-bold text-slate-700 outline-none"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick$={() => removeMovementCategory(mc.id)}
-                        class="text-slate-300 hover:text-red-500 transition-colors p-1"
-                        title="Eliminar categoría"
-                      >
-                        <LuTrash2 class="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 

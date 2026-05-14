@@ -746,6 +746,16 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                               </>
                             )}
                           </select>
+                          <p class="mt-2 text-[10px] leading-snug text-slate-400 font-medium">
+                            Podés activar, desactivar o agregar medios de pago en{" "}
+                            <Link
+                              href="/admin/cash/medios-de-pago/"
+                              class="text-emerald-400/90 underline decoration-emerald-500/40 underline-offset-2 hover:text-emerald-300"
+                            >
+                              Caja → Medios de pago
+                            </Link>
+                            .
+                          </p>
                         </div>
                       </div>
 

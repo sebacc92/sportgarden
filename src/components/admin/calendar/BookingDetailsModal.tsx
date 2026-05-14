@@ -1,5 +1,5 @@
 import { component$, type Signal } from "@builder.io/qwik";
-import { Form } from "@builder.io/qwik-city";
+import { Form, Link } from "@builder.io/qwik-city";
 import { Modal, Button } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 
@@ -137,6 +137,16 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
                         )}
                       </select>
                     </div>
+                    <p class="text-[10px] leading-snug text-emerald-900/70 font-medium">
+                      Podés activar, desactivar o agregar medios de pago en{" "}
+                      <Link
+                        href="/admin/cash/medios-de-pago/"
+                        class="text-emerald-800 underline decoration-emerald-600/35 underline-offset-2 hover:text-emerald-950"
+                      >
+                        Caja → Medios de pago
+                      </Link>
+                      .
+                    </p>
                     <button type="submit" disabled={addPaymentAction.isRunning} class="w-full py-3 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50">
                       {addPaymentAction.isRunning ? "Registrando..." : "Confirmar Pago en Caja"}
                     </button>

@@ -20,6 +20,7 @@ import { GallerySection } from "~/components/home/gallery-section";
 import { ContactSection } from "~/components/home/contact-section";
 import { HomeFooter } from "~/components/home/home-footer";
 import { HomeBookingModal } from "~/components/home/home-booking-modal";
+import { SchoolSection } from "~/components/home/school-section";
 
 export { useGuestBookingAction, useUserBookingAction };
 export { usePitchesLoader, useUserLoader, useInstagramFeed, useAISettingsLoader, useGalleryLoader };
@@ -56,6 +57,8 @@ export default component$(() => {
       <HistorySection />
 
       <PitchesGrid pitches={activePitches.value} onReserve={openBookingModal} />
+
+      <SchoolSection categories={aiSettings.value?.schoolCategories || []} />
 
       <GallerySection images={gallery.value} />
 

@@ -3,6 +3,7 @@ import { routeLoader$, Link } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { cashMovements, cashRegisters, siteSettings } from "~/db/schema";
 import { and, eq, gte, lte } from "drizzle-orm";
+import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
 
 export const useBalancesData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -88,12 +89,7 @@ export default component$(() => {
     <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans print:bg-white print:p-0">
       <div class="max-w-5xl mx-auto space-y-5">
 
-        {/* Nav */}
-        <div class="flex gap-1 border-b border-slate-200 pb-4 print:hidden">
-          <a href="/admin/cash/" class="px-4 py-2 font-bold text-sm text-slate-500 hover:text-slate-800 transition-colors">Caja Actual</a>
-          <a href="/admin/cash/history/" class="px-4 py-2 font-bold text-sm text-slate-500 hover:text-slate-800 transition-colors">Historial</a>
-          <a href="/admin/cash/balances/" class="px-4 py-2 font-bold text-sm rounded-t-lg text-emerald-700 bg-white border border-b-white border-slate-200 -mb-px">Balances</a>
-        </div>
+        <CashSectionNav />
 
         <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 print:shadow-none print:border-none print:p-0">
 

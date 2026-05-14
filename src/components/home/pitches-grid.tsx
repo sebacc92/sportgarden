@@ -20,6 +20,9 @@ export const PitchesGrid = component$<PitchesGridProps>(({ pitches: pitchList, o
         </h2>
         <p class="mx-auto max-w-2xl text-lg text-slate-400">
           Selecciona tu cancha ideal, verifica la disponibilidad y reserva tu próximo partido.
+          <span class="mt-2 block text-sm font-medium text-slate-500 italic">
+            * El precio de la reserva puede variar según el día y el horario seleccionado.
+          </span>
         </p>
       </div>
       <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
@@ -108,8 +111,11 @@ export const PitchesGrid = component$<PitchesGridProps>(({ pitches: pitchList, o
                 </div>
                 <div class="mt-8 flex items-end justify-between border-t border-white/5 pt-6">
                   <div>
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">Precio x Hora</div>
-                    <div class="text-2xl font-black text-white">${pitch.pricePerHour}</div>
+                    <div class="mb-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">Desde</div>
+                    <div class="flex items-baseline gap-1.5">
+                      <div class="text-3xl font-black text-white">${pitch.pricePerHour?.toLocaleString("es-AR")}</div>
+                      <div class="text-xs font-bold text-slate-500 uppercase tracking-tighter">/ hora</div>
+                    </div>
                   </div>
                   <Button
                     onClick$={() => onReserve(pitch.id)}

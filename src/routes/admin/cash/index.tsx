@@ -1,10 +1,11 @@
 import { component$, useSignal, useComputed$, useTask$ } from "@builder.io/qwik";
-import { routeLoader$, routeAction$, Form, z, zod$ } from "@builder.io/qwik-city";
+import { routeLoader$, routeAction$, Form, z, zod$, Link } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { cashRegisters, cashMovements, bookings, students } from "~/db/schema";
 import { eq, desc, inArray } from "drizzle-orm";
 import { Button, Modal } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
+import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
 
 const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 100];
 
@@ -265,12 +266,7 @@ export default component$(() => {
           <p class="text-xs text-slate-500 font-bold uppercase">{new Date().toLocaleString("es-AR")}</p>
         </div>
 
-        {/* Nav */}
-        <div class="flex gap-1 border-b border-slate-200 pb-4 print:hidden">
-          <a href="/admin/cash/" class="px-4 py-2 font-bold text-sm rounded-t-lg text-emerald-700 bg-white border border-b-white border-slate-200 -mb-px">Caja Actual</a>
-          <a href="/admin/cash/history/" class="px-4 py-2 font-bold text-sm text-slate-500 hover:text-slate-800 transition-colors">Historial</a>
-          <a href="/admin/cash/balances/" class="px-4 py-2 font-bold text-sm text-slate-500 hover:text-slate-800 transition-colors">Balances</a>
-        </div>
+        <CashSectionNav />
 
         {/* Header */}
         <div class="flex flex-wrap justify-between items-start gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 print:shadow-none print:border-slate-300">
@@ -799,6 +795,17 @@ export default component$(() => {
                 </div>
               </div>
 
+              <p class="text-[10px] leading-snug text-slate-500 font-medium">
+                Podés agregar o editar categorías en{" "}
+                <Link
+                  href="/admin/cash/categorias-movimientos-caja/"
+                  class="font-bold text-emerald-700 underline decoration-emerald-600/30 underline-offset-2 hover:text-emerald-900"
+                >
+                  Caja → Categorías (caja)
+                </Link>
+                .
+              </p>
+
               <div class="space-y-1.5">
                 <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto ($)</label>
                 <div class="relative">
@@ -816,6 +823,17 @@ export default component$(() => {
                   ))}
                 </select>
               </div>
+
+              <p class="text-[10px] leading-snug text-slate-500 font-medium">
+                Activá o agregá medios de pago en{" "}
+                <Link
+                  href="/admin/cash/medios-de-pago/"
+                  class="font-bold text-emerald-700 underline decoration-emerald-600/30 underline-offset-2 hover:text-emerald-900"
+                >
+                  Caja → Medios de pago
+                </Link>
+                .
+              </p>
 
               <div class="space-y-1.5">
                 <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Descripción / Concepto</label>

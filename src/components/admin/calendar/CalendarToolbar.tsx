@@ -74,8 +74,9 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
       {/* Right: Layout toggle + View Switcher + New Reservation */}
       <div class="flex items-center gap-3 shrink-0">
         <button
+          type="button"
           onClick$={() => onNewBooking$()}
-          class="px-4 h-10 text-sm font-black text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-colors flex items-center gap-2"
+          class="cursor-pointer px-4 h-10 text-sm font-black text-white bg-emerald-500 rounded-lg shadow-sm hover:bg-emerald-600 transition-colors flex items-center gap-2"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
           Nueva Reserva
