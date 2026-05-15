@@ -39,8 +39,8 @@ async function seed() {
 
   await db.insert(pitches).values([
     { id: pitch1, name: "Camp Nou Sintético", type: "F5", isCovered: true, pricePerHour: 5000, reservationPercentage: 50, isActive: true },
-    { id: pitch2, name: "Bernabéu Abierto", type: "F7", isCovered: false, pricePerHour: 8000, reservationPercentage: 30, isActive: true },
-    { id: pitch3, name: "La Bombonera", type: "F11", isCovered: false, pricePerHour: 15000, reservationPercentage: 50, isActive: true },
+    { id: pitch2, name: "Bernabéu Abierto", type: "F6", isCovered: false, pricePerHour: 8000, reservationPercentage: 30, isActive: true },
+    { id: pitch3, name: "La Bombonera", type: "F9", isCovered: false, pricePerHour: 15000, reservationPercentage: 50, isActive: true },
     { id: pitch4, name: "Monumental Techado", type: "F9", isCovered: true, pricePerHour: 12000, reservationPercentage: 50, isActive: true },
   ]);
 

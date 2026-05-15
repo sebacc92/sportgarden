@@ -135,9 +135,8 @@ export const PitchFormModal = component$((props: PitchFormModalProps) => {
                   class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-800 focus:border-transparent transition-all font-bold appearance-none"
                 >
                   <option value="F5">Fútbol 5</option>
-                  <option value="F7">Fútbol 7</option>
+                  <option value="F6">Fútbol 6</option>
                   <option value="F9">Fútbol 9</option>
-                  <option value="F11">Fútbol 11</option>
                 </select>
               </div>
               <div class="grid grid-cols-2 gap-4">

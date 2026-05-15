@@ -7,12 +7,13 @@ interface CalendarToolbarProps {
   calendarData: any;
   layoutMode: Signal<'timeline' | 'list' | 'grid'>;
   isCreateModalOpen: Signal<boolean>;
+  isPrintModalOpen: Signal<boolean>;
   onViewChange$: PropFunction<(newView: string) => void>;
   onNewBooking$: PropFunction<() => void>;
 }
 
 export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
-  const { calendarData, layoutMode, onViewChange$, onNewBooking$ } = props;
+  const { calendarData, layoutMode, isPrintModalOpen, onViewChange$, onNewBooking$ } = props;
 
   return (
     <div class="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200 shadow-sm z-10 shrink-0 gap-4">
@@ -81,6 +82,18 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14" /><path d="M12 5v14" /></svg>
           Nueva Reserva
         </button>
+
+        {calendarData.view === 'day' && (
+          <button
+            type="button"
+            onClick$={() => isPrintModalOpen.value = true}
+            class="px-3 h-10 text-slate-600 bg-white border border-slate-200 rounded-lg shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center gap-2 font-bold text-xs"
+            title="Imprimir agenda del día"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            Imprimir
+          </button>
+        )}
 
         {/* Layout Mode Toggle */}
         <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">

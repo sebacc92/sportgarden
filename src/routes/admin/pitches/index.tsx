@@ -52,7 +52,7 @@ export const useCreatePitchAction = routeAction$(
     await db.insert(pitches).values({
       id,
       name: data.name,
-      type: data.type as "F5" | "F7" | "F9" | "F11",
+      type: data.type as "F5" | "F6" | "F9",
       isCovered: data.isCovered === "on",
       isLit: data.isLit === "on",
       pricePerHour: Number(data.pricePerHour),
@@ -68,7 +68,7 @@ export const useCreatePitchAction = routeAction$(
   },
   zod$({
     name: z.string().min(1),
-    type: z.enum(["F5", "F7", "F9", "F11"]),
+    type: z.enum(["F5", "F6", "F9"]),
     isCovered: z.string().optional(),
     isLit: z.string().optional(),
     pricePerHour: z.coerce.number().min(0),
@@ -101,7 +101,7 @@ export const useUpdatePitchAction = routeAction$(
     await db.update(pitches)
       .set({
         name: data.name,
-        type: data.type as "F5" | "F7" | "F9" | "F11",
+        type: data.type as "F5" | "F6" | "F9",
         isCovered: data.isCovered === "on",
         isLit: data.isLit === "on",
         pricePerHour: Number(data.pricePerHour),
@@ -119,7 +119,7 @@ export const useUpdatePitchAction = routeAction$(
   zod$({
     id: z.string(),
     name: z.string().min(1),
-    type: z.enum(["F5", "F7", "F9", "F11"]),
+    type: z.enum(["F5", "F6", "F9"]),
     isCovered: z.string().optional(),
     isLit: z.string().optional(),
     pricePerHour: z.coerce.number().min(0),

@@ -510,18 +510,39 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                               key={pm.id}
                               class="flex-1 min-w-[120px] text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10"
                             >
-                              <input type="radio" name="paymentMethod" value={pm.id} bind:value={paymentMethod} class="hidden" />
+                              <input 
+                                type="radio" 
+                                name="paymentMethod" 
+                                value={pm.id} 
+                                checked={paymentMethod.value === pm.id}
+                                onInput$={() => paymentMethod.value = pm.id}
+                                class="hidden" 
+                              />
                               <span class="text-sm font-bold text-white">{pm.name}</span>
                             </label>
                           ))}
                         {(settings?.paymentMethods || []).filter((pm: any) => pm.isActive).length === 0 && (
                           <>
                             <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                              <input type="radio" name="paymentMethod" value="CASH" bind:value={paymentMethod} class="hidden" />
+                              <input 
+                                type="radio" 
+                                name="paymentMethod" 
+                                value="CASH" 
+                                checked={paymentMethod.value === "CASH"}
+                                onInput$={() => paymentMethod.value = "CASH"}
+                                class="hidden" 
+                              />
                               <span class="text-sm font-bold text-white">Efectivo</span>
                             </label>
                             <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                              <input type="radio" name="paymentMethod" value="TRANSFER" bind:value={paymentMethod} class="hidden" />
+                              <input 
+                                type="radio" 
+                                name="paymentMethod" 
+                                value="TRANSFER" 
+                                checked={paymentMethod.value === "TRANSFER"}
+                                onInput$={() => paymentMethod.value = "TRANSFER"}
+                                class="hidden" 
+                              />
                               <span class="text-sm font-bold text-white">Transferencia</span>
                             </label>
                           </>
@@ -551,19 +572,40 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                       <div class="space-y-2">
                         {paymentMethod.value === "CASH" && (
                           <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                            <input type="radio" name="paymentOption" value="LATER" bind:value={paymentOption} class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                            <input 
+                              type="radio" 
+                              name="paymentOption" 
+                              value="LATER" 
+                              checked={paymentOption.value === "LATER"}
+                              onInput$={() => paymentOption.value = "LATER"}
+                              class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" 
+                            />
                             <span class="text-sm font-medium text-white flex-1">Abonar en el club</span>
                           </label>
                         )}
                         <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                          <input type="radio" name="paymentOption" value="SENA" bind:value={paymentOption} class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                          <input 
+                            type="radio" 
+                            name="paymentOption" 
+                            value="SENA" 
+                            checked={paymentOption.value === "SENA"}
+                            onInput$={() => paymentOption.value = "SENA"}
+                            class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" 
+                          />
                           <div class="flex-1">
                             <span class="text-sm font-medium text-white block">Abonar Seña ({senaLabel.value})</span>
                             <span class="text-xs text-slate-400">Pagas hoy: ${senaAmount.value}</span>
                           </div>
                         </label>
                         <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                          <input type="radio" name="paymentOption" value="TOTAL" bind:value={paymentOption} class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" />
+                          <input 
+                            type="radio" 
+                            name="paymentOption" 
+                            value="TOTAL" 
+                            checked={paymentOption.value === "TOTAL"}
+                            onInput$={() => paymentOption.value = "TOTAL"}
+                            class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" 
+                          />
                           <div class="flex-1">
                             <span class="text-sm font-medium text-white block">Abonar Total</span>
                             <span class="text-xs text-slate-400">Pagas hoy: ${totalPrice.value}</span>

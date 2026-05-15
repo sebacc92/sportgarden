@@ -59,8 +59,8 @@ export async function seedDemoData(requestEvent: any) {
     console.log("No pitches found, creating some...");
     await db.insert(pitches).values([
       { id: "p1", name: "Cancha 1", type: "F5", pricePerHour: 8000, isActive: true, sport: "Fútbol", surface: "Sintético" },
-      { id: "p2", name: "Cancha 2", type: "F5", pricePerHour: 8000, isActive: true, sport: "Fútbol", surface: "Sintético" },
-      { id: "p3", name: "Estadio F7", type: "F7", pricePerHour: 12000, isActive: true, sport: "Fútbol", surface: "Sintético" },
+      { id: "p2", name: "Cancha 2", type: "F6", pricePerHour: 8000, isActive: true, sport: "Fútbol", surface: "Sintético" },
+      { id: "p3", name: "Estadio F9", type: "F9", pricePerHour: 12000, isActive: true, sport: "Fútbol", surface: "Sintético" },
     ]);
   }
   const allPitches = await db.select().from(pitches);

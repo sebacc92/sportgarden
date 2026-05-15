@@ -1,4 +1,4 @@
-import { component$, useSignal, useVisibleTask$, $, useComputed$, useStore } from "@builder.io/qwik";
+import { component$, useSignal, useVisibleTask$, $, useComputed$, useStore, useStyles$ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, useNavigate, server$ } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { bookings, pitches, users, guestRequests, cashRegisters, cashMovements } from "~/db/schema";
@@ -8,6 +8,7 @@ import { BookingTimelineView } from "~/components/admin/booking-timeline-view";
 import { cn } from "@qwik-ui/utils";
 
 // New Components
+import { Modal, Button } from "~/components/ui";
 import { CalendarToolbar } from "~/components/admin/calendar/CalendarToolbar";
 import { CalendarWeekView } from "~/components/admin/calendar/CalendarWeekView";
 import { CalendarMonthView } from "~/components/admin/calendar/CalendarMonthView";
@@ -26,6 +27,101 @@ import {
 export const useUpdateBookingStatusAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
+
+    // Fetch current booking
+    const booking = await db.query.bookings.findFirst({
+      where: eq(bookings.id, data.bookingId),
+    });
+
+    if (!booking) {
+      return { success: false, message: "Reserva no encontrada." };
+    }
+
+    // Handle Transfer Logic
+    if (data.cancellationOption === "TRANSFER_NEXT_WEEK" || data.cancellationOption === "TRANSFER_CUSTOM") {
+      let newStart: Date;
+      let newEnd: Date;
+
+      if (data.cancellationOption === "TRANSFER_NEXT_WEEK") {
+        newStart = new Date(booking.startTime);
+        newStart.setDate(newStart.getDate() + 7);
+        newEnd = new Date(booking.endTime);
+        newEnd.setDate(newEnd.getDate() + 7);
+      } else {
+        // TRANSFER_CUSTOM
+        if (!data.newDate || !data.newStartTime || !data.newEndTime) {
+          return { success: false, message: "Datos de transferencia incompletos." };
+        }
+        // Assuming date is in YYYY-MM-DD format
+        newStart = new Date(`${data.newDate}T${data.newStartTime}:00`);
+        newEnd = new Date(`${data.newDate}T${data.newEndTime}:00`);
+      }
+
+      // Check conflict
+      const conflicts = await db.select().from(bookings).where(
+        and(
+          eq(bookings.pitchId, booking.pitchId),
+          inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"] as any),
+          and(
+            lt(bookings.startTime, newEnd),
+            gte(bookings.endTime, newStart)
+          )
+        )
+      );
+
+      const realConflict = conflicts.find(c => c.id !== booking.id);
+      if (realConflict) {
+        return { success: false, message: "El horario seleccionado ya está ocupado en la nueva fecha." };
+      }
+
+      await db.update(bookings)
+        .set({
+          startTime: newStart,
+          endTime: newEnd,
+          status: "CONFIRMED"
+        })
+        .where(eq(bookings.id, booking.id));
+
+      return { success: true, message: "Reserva transferida con éxito." };
+    }
+
+    // Handle Cancellation with Refund
+    if (data.status === "CANCELLED" && data.cancellationOption === "RETURN") {
+      if (booking.paidAmount > 0) {
+        const openRegister = await db.query.cashRegisters.findFirst({
+          where: eq(cashRegisters.status, "OPEN"),
+        });
+
+        if (!openRegister) {
+          return { success: false, message: "No hay una caja abierta para realizar la devolución." };
+        }
+
+        // Record expense in cash register
+        await db.insert(cashMovements).values({
+          id: crypto.randomUUID(),
+          registerId: openRegister.id,
+          type: "EXPENSE",
+          category: "CANCELACION",
+          amount: booking.paidAmount,
+          description: `Devolución seña reserva anulada: ${booking.id.slice(0, 8)}`,
+          paymentMethod: booking.paymentMethod as any,
+          referenceId: booking.id,
+        });
+
+        // Mark as cancelled and reset paid amount
+        await db.update(bookings)
+          .set({
+            status: "CANCELLED",
+            paidAmount: 0,
+            paymentStatus: "PENDING"
+          })
+          .where(eq(bookings.id, booking.id));
+
+        return { success: true, message: "Reserva anulada y seña devuelta en caja." };
+      }
+    }
+
+    // Standard status update
     await db
       .update(bookings)
       .set({ status: data.status as any })
@@ -36,6 +132,10 @@ export const useUpdateBookingStatusAction = routeAction$(
   zod$({
     bookingId: z.string(),
     status: z.enum(["PENDING_APPROVAL", "CONFIRMED", "CANCELLED", "COMPLETED"]),
+    cancellationOption: z.enum(["RETURN", "KEEP", "TRANSFER_NEXT_WEEK", "TRANSFER_CUSTOM"]).optional(),
+    newDate: z.string().optional(),
+    newStartTime: z.string().optional(),
+    newEndTime: z.string().optional(),
   })
 );
 
@@ -534,6 +634,22 @@ export default component$(() => {
   const addPaymentAction = useAddBookingPaymentAction();
   const nav = useNavigate();
 
+  useStyles$(`
+    @media print {
+      body * { visibility: hidden; }
+      .print-area, .print-area * { visibility: visible; }
+      .print-area { 
+        position: absolute; 
+        left: 0; 
+        top: 0; 
+        width: 100%; 
+        border: none !important;
+        shadow: none !important;
+      }
+      .no-print { display: none !important; }
+    }
+  `);
+
   // Layout mode: 'timeline' (pitches×time) | 'list' (table)
   const layoutMode = useSignal<'timeline' | 'list'>('timeline');
 
@@ -569,6 +685,7 @@ export default component$(() => {
   const isModalOpen = useSignal(false);
   const selectedBookingId = useSignal("");
   const isCreateModalOpen = useSignal(false);
+  const isPrintModalOpen = useSignal(false);
 
   // Admin create form state
   const adminFormPitchId = useSignal("");
@@ -737,6 +854,7 @@ export default component$(() => {
         calendarData={calendarData.value}
         layoutMode={layoutMode}
         isCreateModalOpen={isCreateModalOpen}
+        isPrintModalOpen={isPrintModalOpen}
         onViewChange$={handleViewChange}
         onNewBooking$={handleNewBooking}
       />
@@ -825,6 +943,97 @@ export default component$(() => {
         addPaymentAction={addPaymentAction}
         updateStatusAction={updateStatusAction}
       />
+
+      {/* Modal para Imprimir Agenda */}
+      <Modal.Root bind:show={isPrintModalOpen}>
+        <Modal.Panel class="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-auto relative overflow-hidden">
+          <div class="p-8">
+            <div class="flex justify-between items-center mb-6 no-print">
+              <h3 class="text-xl font-black text-slate-800 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Imprimir Agenda del Día
+              </h3>
+              <button onClick$={() => isPrintModalOpen.value = false} class="p-2 text-slate-400 hover:text-slate-600">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            <div class="print-area border rounded-2xl overflow-hidden shadow-sm">
+              <div class="bg-slate-900 text-white p-6 flex justify-between items-center">
+                <div>
+                  <h1 class="text-2xl font-black uppercase tracking-tight">Agenda de Reservas</h1>
+                  <p class="text-emerald-400 font-bold uppercase tracking-widest text-[10px]">{calendarData.value.settings?.clubName || 'SportGarden Futbol'}</p>
+                </div>
+                <div class="text-right">
+                  <div class="text-xl font-black">{new Date(calendarData.value.selectedDateStr + "T12:00:00").toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}</div>
+                  <div class="text-[10px] text-slate-400 font-bold uppercase">Reporte Generado: {new Date().toLocaleTimeString()}</div>
+                </div>
+              </div>
+
+              <div class="p-0">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr class="bg-slate-100 border-b border-slate-200">
+                      <th class="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Hora</th>
+                      <th class="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Cancha</th>
+                      <th class="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Cliente / Contacto</th>
+                      <th class="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                      {calendarData.value.bookings
+                        .sort((a: any, b: any) => new Date(a.booking.startTime).getTime() - new Date(b.booking.startTime).getTime())
+                      .map((b: any) => (
+                        <tr key={b.booking.id} class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                          <td class="px-4 py-4">
+                            <div class="font-black text-slate-800 text-sm whitespace-nowrap">
+                              {new Date(b.booking.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(b.booking.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
+                          <td class="px-4 py-4">
+                            <div class="font-bold text-slate-600 text-xs">
+                              {calendarData.value.pitches.find((p: any) => p.id === b.booking.pitchId)?.name || 'Cancha'}
+                            </div>
+                          </td>
+                          <td class="px-4 py-4">
+                            <div class="font-black text-slate-800 text-sm">{b.user?.name || b.guest?.name || 'S/N'}</div>
+                            <div class="text-[10px] text-slate-500 font-bold">{b.user?.phone || b.guest?.phone || '-'}</div>
+                          </td>
+                          <td class="px-4 py-4 text-right">
+                            <div class={cn(
+                              "inline-block px-2 py-1 rounded text-[10px] font-black uppercase tracking-tighter",
+                              b.booking.paymentStatus === 'PAID' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                            )}>
+                              {b.booking.paymentStatus === 'PAID' ? 'PAGADO' : `RESTA $${(b.booking.totalPrice - b.booking.paidAmount).toLocaleString()}`}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {calendarData.value.bookings.length === 0 && (
+                      <tr>
+                        <td colSpan={4} class="px-4 py-12 text-center text-slate-400 font-bold italic">No hay reservas para este día.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3 no-print">
+              <Button onClick$={() => isPrintModalOpen.value = false} look="ghost" class="font-bold text-slate-500">
+                Cancelar
+              </Button>
+              <Button 
+                onClick$={() => { window.print(); isPrintModalOpen.value = false; }} 
+                class="bg-slate-800 text-white font-black px-8 py-3 rounded-xl shadow-lg hover:bg-slate-900 transition-all flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Imprimir Ahora
+              </Button>
+            </div>
+          </div>
+        </Modal.Panel>
+      </Modal.Root>
 
       <CreateBookingModal
         isCreateModalOpen={isCreateModalOpen}

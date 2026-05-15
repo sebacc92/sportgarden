@@ -1,4 +1,4 @@
-import { component$, type Signal } from "@builder.io/qwik";
+import { component$, type Signal, useSignal, useTask$ } from "@builder.io/qwik";
 import { Form, Link } from "@builder.io/qwik-city";
 import { Modal, Button } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
@@ -13,6 +13,21 @@ interface BookingDetailsModalProps {
 
 export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) => {
   const { isModalOpen, selectedBookingDetails, calendarData, addPaymentAction, updateStatusAction } = props;
+
+  const showCancelOptions = useSignal(false);
+  const selectedCancelOption = useSignal<"RETURN" | "KEEP" | "TRANSFER_NEXT_WEEK" | "TRANSFER_CUSTOM" | "">("");
+  const newDate = useSignal("");
+  const newStartTime = useSignal("");
+  const newEndTime = useSignal("");
+
+  useTask$(({ track }) => {
+    track(() => selectedBookingDetails?.booking.id);
+    showCancelOptions.value = false;
+    selectedCancelOption.value = "";
+    newDate.value = "";
+    newStartTime.value = "";
+    newEndTime.value = "";
+  });
 
   return (
     <Modal.Root bind:show={isModalOpen}>
@@ -155,6 +170,138 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
               </div>
             )}
 
+            {/* Opciones de Cancelación */}
+            {showCancelOptions.value && (
+              <div class="bg-red-50 p-6 rounded-2xl border border-red-100 space-y-4 animate-in fade-in slide-in-from-top-4">
+                <div class="flex justify-between items-center mb-2">
+                  <div class="text-[10px] font-black text-red-600 uppercase tracking-widest flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                    Opciones de Anulación
+                  </div>
+                  <button onClick$={() => showCancelOptions.value = false} class="text-red-400 hover:text-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                  </button>
+                </div>
+                
+                <p class="text-xs font-bold text-red-900/70 leading-relaxed">
+                  Esta reserva tiene una seña de <span class="text-red-600 font-black">${Math.round(selectedBookingDetails.booking.paidAmount)}</span>. ¿Qué deseás hacer?
+                </p>
+
+                <div class="grid grid-cols-1 gap-2">
+                  <button 
+                    type="button"
+                    onClick$={() => selectedCancelOption.value = "TRANSFER_NEXT_WEEK"}
+                    class={cn("flex items-center justify-between p-3 rounded-xl border text-left transition-all", selectedCancelOption.value === "TRANSFER_NEXT_WEEK" ? "bg-white border-red-500 shadow-md ring-1 ring-red-500" : "bg-white/50 border-red-100 hover:border-red-300")}
+                  >
+                    <div class="space-y-0.5">
+                      <div class="text-[10px] font-black uppercase text-red-700">Traspasar</div>
+                      <div class="text-xs font-bold text-red-900">A la siguiente semana (fijo)</div>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick$={() => selectedCancelOption.value = "TRANSFER_CUSTOM"}
+                    class={cn("flex items-center justify-between p-3 rounded-xl border text-left transition-all", selectedCancelOption.value === "TRANSFER_CUSTOM" ? "bg-white border-red-500 shadow-md ring-1 ring-red-500" : "bg-white/50 border-red-100 hover:border-red-300")}
+                  >
+                    <div class="space-y-0.5">
+                      <div class="text-[10px] font-black uppercase text-red-700">Traspasar</div>
+                      <div class="text-xs font-bold text-red-900">Nueva fecha y hora personalizada</div>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick$={() => selectedCancelOption.value = "RETURN"}
+                    class={cn("flex items-center justify-between p-3 rounded-xl border text-left transition-all", selectedCancelOption.value === "RETURN" ? "bg-white border-red-500 shadow-md ring-1 ring-red-500" : "bg-white/50 border-red-100 hover:border-red-300")}
+                  >
+                    <div class="space-y-0.5">
+                      <div class="text-[10px] font-black uppercase text-red-700">Eliminar</div>
+                      <div class="text-xs font-bold text-red-900">Se devuelve la seña al cliente</div>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick$={() => selectedCancelOption.value = "KEEP"}
+                    class={cn("flex items-center justify-between p-3 rounded-xl border text-left transition-all", selectedCancelOption.value === "KEEP" ? "bg-white border-red-500 shadow-md ring-1 ring-red-500" : "bg-white/50 border-red-100 hover:border-red-300")}
+                  >
+                    <div class="space-y-0.5">
+                      <div class="text-[10px] font-black uppercase text-red-700">Cobrar</div>
+                      <div class="text-xs font-bold text-red-900">El cliente perdió la seña</div>
+                    </div>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  </button>
+                </div>
+
+                {selectedCancelOption.value === "TRANSFER_CUSTOM" && (
+                  <div class="space-y-3 pt-2 bg-white/40 p-4 rounded-xl border border-red-100">
+                    <div class="grid grid-cols-1 gap-3">
+                      <div class="space-y-1">
+                        <label class="text-[10px] font-black uppercase text-red-700 ml-1">Nueva Fecha</label>
+                        <input 
+                          type="date" 
+                          bind:value={newDate}
+                          class="w-full px-3 py-2.5 rounded-xl border border-red-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500/20" 
+                        />
+                      </div>
+                      <div class="grid grid-cols-2 gap-2">
+                        <div class="space-y-1">
+                           <label class="text-[10px] font-black uppercase text-red-700 ml-1">Hora Inicio</label>
+                           <input 
+                             type="time" 
+                             bind:value={newStartTime}
+                             class="w-full px-3 py-2.5 rounded-xl border border-red-200 text-xs font-black focus:outline-none focus:ring-2 focus:ring-red-500/20" 
+                           />
+                        </div>
+                        <div class="space-y-1">
+                           <label class="text-[10px] font-black uppercase text-red-700 ml-1">Hora Fin</label>
+                           <input 
+                             type="time" 
+                             bind:value={newEndTime}
+                             class="w-full px-3 py-2.5 rounded-xl border border-red-200 text-xs font-black focus:outline-none focus:ring-2 focus:ring-red-500/20" 
+                           />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedCancelOption.value === "RETURN" && !calendarData.openRegister && (
+                  <div class="text-[10px] font-bold text-amber-700 bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                    Caja cerrada. Abrí la caja para poder devolver el dinero.
+                  </div>
+                )}
+
+                <Form action={updateStatusAction} class="pt-2">
+                   <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
+                   <input type="hidden" name="status" value={selectedCancelOption.value.startsWith("TRANSFER") ? "CONFIRMED" : "CANCELLED"} />
+                   <input type="hidden" name="cancellationOption" value={selectedCancelOption.value} />
+                   {selectedCancelOption.value === "TRANSFER_CUSTOM" && (
+                     <>
+                        <input type="hidden" name="newDate" value={newDate.value} />
+                        <input type="hidden" name="newStartTime" value={newStartTime.value} />
+                        <input type="hidden" name="newEndTime" value={newEndTime.value} />
+                     </>
+                   )}
+                   <button 
+                     type="submit" 
+                     disabled={!selectedCancelOption.value || (selectedCancelOption.value === "RETURN" && !calendarData.openRegister) || updateStatusAction.isRunning}
+                     class="w-full py-3 bg-red-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-600/20 disabled:opacity-50"
+                   >
+                     {updateStatusAction.isRunning ? "Procesando..." : "Confirmar Acción"}
+                   </button>
+                   {updateStatusAction.value?.failed && (
+                     <p class="text-[10px] font-bold text-red-600 mt-2 text-center">{updateStatusAction.value.message}</p>
+                   )}
+                </Form>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div class="space-y-4 pt-4 border-t border-slate-100">
               <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gestión de Reserva</div>
@@ -168,22 +315,37 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>((props) 
                   if (isCurrent && s.value !== "CANCELLED") return null;
 
                   return (
-                    <Form action={updateStatusAction} key={s.value} class="flex-1 min-w-[140px]">
-                      <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
-                      <input type="hidden" name="status" value={s.value} />
-                      <button
-                        type="submit"
-                        disabled={updateStatusAction.isRunning}
-                        class={cn(
-                          "w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
-                          s.color === "emerald" ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-500 hover:text-white" :
-                            s.color === "red" ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-500 hover:text-white" :
-                              "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-700 hover:text-white"
-                        )}
-                      >
-                        {s.label}
-                      </button>
-                    </Form>
+                    <div key={s.value} class="flex-1 min-w-[140px]">
+                      {s.value === "CANCELLED" && selectedBookingDetails.booking.paidAmount > 0 ? (
+                        <button
+                          type="button"
+                          onClick$={() => showCancelOptions.value = true}
+                          class={cn(
+                            "w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                            "bg-red-50 text-red-700 border-red-200 hover:bg-red-500 hover:text-white"
+                          )}
+                        >
+                          {s.label}
+                        </button>
+                      ) : (
+                        <Form action={updateStatusAction}>
+                          <input type="hidden" name="bookingId" value={selectedBookingDetails.booking.id} />
+                          <input type="hidden" name="status" value={s.value} />
+                          <button
+                            type="submit"
+                            disabled={updateStatusAction.isRunning}
+                            class={cn(
+                              "w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border",
+                              s.color === "emerald" ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-500 hover:text-white" :
+                                s.color === "red" ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-500 hover:text-white" :
+                                  "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-700 hover:text-white"
+                            )}
+                          >
+                            {s.label}
+                          </button>
+                        </Form>
+                      )}
+                    </div>
                   );
                 })}
               </div>

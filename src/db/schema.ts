@@ -23,7 +23,7 @@ export const users = sqliteTable("users", {
 export const pitches = sqliteTable("pitches", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  type: text("type", { enum: ["F5", "F7", "F9", "F11"] }).notNull(),
+  type: text("type", { enum: ["F5", "F6", "F9"] }).notNull(),
   isCovered: integer("is_covered", { mode: "boolean" }).notNull().default(false),
   isLit: integer("is_lit", { mode: "boolean" }).notNull().default(false),
   pricePerHour: real("price_per_hour").notNull(),

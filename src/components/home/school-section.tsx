@@ -1,5 +1,4 @@
 import { component$ } from "@builder.io/qwik";
-import { cn } from "@qwik-ui/utils";
 
 interface SchoolCategory {
   id: string;
@@ -61,7 +60,7 @@ export const SchoolSection = component$<SchoolSectionProps>(({ categories }) => 
               <div class="space-y-4 mb-6">
                 <div class="flex items-center gap-3 text-slate-300">
                   <div class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>
                   </div>
                   <div>
                     <div class="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Profesor</div>
@@ -86,7 +85,7 @@ export const SchoolSection = component$<SchoolSectionProps>(({ categories }) => 
                       {Object.entries(groups).map(([time, days]) => (
                         <div key={time} class="flex gap-3 text-slate-300">
                           <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
                           </div>
                           <div>
                             <div class="flex flex-wrap gap-1 mb-1">

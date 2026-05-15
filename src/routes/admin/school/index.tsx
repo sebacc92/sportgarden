@@ -1,4 +1,4 @@
-import { component$, useSignal, useComputed$, $, useStore } from "@builder.io/qwik";
+import { component$, useSignal, useComputed$, $, useStore, useStyles$ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, Form, z, zod$, Link, useLocation, useNavigate } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { students, siteSettings, studentSubscriptions, studentPayments, cashRegisters, cashMovements } from "~/db/schema";
@@ -373,6 +373,28 @@ export default component$(() => {
   const categoryFormFee = useSignal(0);
   const categoryFormSchedules = useStore<Record<number, { startTime: string, endTime: string }>>({});
 
+   const isPrintModalOpen = useSignal(false);
+  const printableDay = useSignal(new Date().getDay() === 0 ? 0 : new Date().getDay()); // 0-6
+  
+  const isMonthlyReportModalOpen = useSignal(false);
+  const reportCategory = useSignal<string | null>(null);
+  const reportMonth = useSignal(new Date().getMonth() + 1);
+  const reportYear = useSignal(new Date().getFullYear());
+
+  useStyles$(`
+    @media print {
+      body * { visibility: hidden; }
+      .print-area, .print-area * { visibility: visible; }
+      .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 0px; }
+      .no-print { display: none !important; }
+      
+      @page {
+        size: auto;
+        margin: 10mm;
+      }
+    }
+  `);
+
   const isStudentModalOpen = useSignal(false);
 
   const selectedCategory = useSignal<string | null>(null);
@@ -428,17 +450,36 @@ export default component$(() => {
                     </button>
                   )}
                 </h2>
-                <Button look="primary" onClick$={() => { 
-                  editingCategoryId.value = null; 
-                  categoryFormName.value = ""; 
-                  categoryFormTeacher.value = ""; 
-                  categoryFormFee.value = 0; 
-                  // Clear schedules
-                  Object.keys(categoryFormSchedules).forEach(key => delete categoryFormSchedules[Number(key)]);
-                  isCategoryModalOpen.value = true; 
-                }} class="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold py-2 px-4 text-[11px] uppercase tracking-wider shadow-sm">
-                  + Nueva
-                </Button>
+                <div class="flex items-center gap-2">
+                    <button
+                    onClick$={() => {
+                        reportCategory.value = selectedCategory.value;
+                        isMonthlyReportModalOpen.value = true;
+                    }}
+                    class="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white hover:bg-slate-900 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-sm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    Reporte Mensual
+                  </button>
+                  <button
+                    onClick$={() => isPrintModalOpen.value = true}
+                    class="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    Horarios
+                  </button>
+                  <Button look="primary" onClick$={() => { 
+                    editingCategoryId.value = null; 
+                    categoryFormName.value = ""; 
+                    categoryFormTeacher.value = ""; 
+                    categoryFormFee.value = 0; 
+                    // Clear schedules
+                    Object.keys(categoryFormSchedules).forEach(key => delete categoryFormSchedules[Number(key)]);
+                    isCategoryModalOpen.value = true; 
+                  }} class="bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl font-bold py-2 px-4 text-[11px] uppercase tracking-wider shadow-sm">
+                    + Nueva
+                  </Button>
+                </div>
               </div>
 
               {studentsData.value.categories.length === 0 ? (
@@ -567,7 +608,14 @@ export default component$(() => {
                           <div class="font-black text-slate-800">{s.name}</div>
                         </td>
                         <td class="p-4">
-                          <span class="px-2 py-1 bg-slate-100 rounded-md text-xs font-bold text-slate-600">{s.category || "Sin asignar"}</span>
+                          <span class={cn(
+                            "px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-tighter shadow-sm",
+                            s.category?.includes("Sub") ? "bg-blue-100 text-blue-700 border border-blue-200" : 
+                            s.category?.includes("Papi") ? "bg-indigo-100 text-indigo-700 border border-indigo-200" :
+                            "bg-slate-100 text-slate-700 border border-slate-200"
+                          )}>
+                            {s.category || "Sin asignar"}
+                          </span>
                         </td>
                         <td class="p-4">
                           <div class="font-black text-slate-800">${s.monthlyFee?.toLocaleString("es-AR")}</div>
@@ -903,6 +951,190 @@ export default component$(() => {
                 </Button>
               </div>
             </Form>
+          </div>
+        </Modal.Panel>
+      </Modal.Root>
+
+      {/* Modal Reporte Mensual */}
+      <Modal.Root bind:show={isMonthlyReportModalOpen}>
+        <Modal.Panel class="bg-white rounded-2xl shadow-xl w-full max-w-4xl mx-auto relative overflow-hidden">
+          <div class="p-8">
+            <div class="flex justify-between items-center mb-6 no-print">
+              <h3 class="text-xl font-black text-slate-800">Generar Reporte Mensual</h3>
+              <div class="flex items-center gap-3">
+                <select 
+                  value={reportCategory.value || ""} 
+                  onInput$={(e) => reportCategory.value = (e.target as HTMLSelectElement).value || null}
+                  class="px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold bg-slate-50"
+                >
+                  <option value="">Todas las Categorías</option>
+                  {studentsData.value.categories.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+                <select 
+                  value={reportMonth.value} 
+                  onInput$={(e) => reportMonth.value = Number((e.target as HTMLSelectElement).value)}
+                  class="px-3 py-2 border border-slate-200 rounded-xl text-sm font-bold bg-slate-50"
+                >
+                  {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m, i) => (
+                    <option key={i+1} value={i+1} selected={reportMonth.value === i+1}>{m}</option>
+                  ))}
+                </select>
+                <button onClick$={() => isMonthlyReportModalOpen.value = false} class="p-2 text-slate-400 hover:text-slate-600">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="print-area border rounded-2xl overflow-hidden shadow-sm bg-white">
+              <div class="bg-slate-900 text-white p-6 flex justify-between items-center">
+                <div>
+                  <h1 class="text-2xl font-black uppercase tracking-tight">Planilla de Escuelita</h1>
+                  <p class="text-emerald-400 font-bold uppercase tracking-widest text-[10px]">
+                    {reportCategory.value ? `Categoría: ${reportCategory.value}` : "Todas las Categorías"} - {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"][reportMonth.value - 1]} {reportYear.value}
+                  </p>
+                </div>
+                <div class="text-right">
+                  <div class="text-xl font-black">GardenClubFutbol</div>
+                  <div class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Control de Asistencia y Cobros</div>
+                </div>
+              </div>
+
+              <div class="p-0">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr class="bg-slate-100 border-b border-slate-200">
+                      <th class="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest border-r">Alumno</th>
+                      <th class="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest border-r text-center">Estado Pago</th>
+                      <th colSpan={4} class="px-4 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Asistencia (Clase 1 a 4)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {studentsData.value.students
+                      .filter(s => !reportCategory.value || s.category === reportCategory.value)
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map((s) => (
+                        <tr key={s.id} class="border-b border-slate-100 h-12">
+                          <td class="px-4 py-2 border-r">
+                            <div class="font-black text-slate-800 text-sm">{s.name}</div>
+                            <div class="text-[9px] text-slate-400 font-bold uppercase">{s.category}</div>
+                          </td>
+                          <td class="px-4 py-2 border-r text-center">
+                            <div class="w-24 mx-auto border border-slate-200 rounded h-6 flex items-center justify-center text-[10px] font-bold">
+                                {s.subscriptions?.[0]?.month === reportMonth.value && s.subscriptions?.[0]?.status === 'PAID' ? 'PAGADO' : ''}
+                            </div>
+                          </td>
+                          <td class="border-r w-12"></td>
+                          <td class="border-r w-12"></td>
+                          <td class="border-r w-12"></td>
+                          <td class="w-12"></td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="mt-8 flex justify-end gap-3 no-print">
+              <Button type="button" onClick$={() => isMonthlyReportModalOpen.value = false} look="ghost" class="font-bold text-slate-500">
+                Cancelar
+              </Button>
+              <Button 
+                onClick$={() => { window.print(); }} 
+                class="bg-emerald-500 text-white font-black px-8 py-3 rounded-xl shadow-lg hover:bg-emerald-600 transition-all flex items-center gap-2"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                Imprimir Reporte
+              </Button>
+            </div>
+          </div>
+        </Modal.Panel>
+      </Modal.Root>
+
+      {/* Modal para Imprimir Cronograma */}
+      <Modal.Root bind:show={isPrintModalOpen}>
+        <Modal.Panel class="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-auto relative overflow-hidden">
+          <div class="p-6">
+            <h3 class="text-xl font-black text-slate-800 mb-4 flex items-center gap-2">
+              Imprimir Cronograma del Día
+            </h3>
+            
+            <div class="mb-6">
+              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Selecciona el Día</label>
+              <div class="grid grid-cols-7 gap-1">
+                {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, idx) => (
+                  <button
+                    key={idx}
+                    onClick$={() => printableDay.value = idx}
+                    class={cn(
+                      "h-10 rounded-lg font-black text-xs transition-all",
+                      printableDay.value === idx 
+                        ? "bg-emerald-500 text-white shadow-md shadow-emerald-200" 
+                        : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                    )}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div class="border rounded-xl p-4 bg-slate-50 mb-6 max-h-[300px] overflow-y-auto custom-scrollbar print-area">
+              <div class="mb-4 text-center border-b pb-2">
+                <h4 class="font-black text-slate-800 uppercase tracking-tight text-lg">Cronograma: {['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][printableDay.value]}</h4>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">SportGarden Futbol - Escuelita</p>
+              </div>
+
+              <div class="space-y-3">
+                {studentsData.value.categories
+                  .filter((cat: any) => {
+                    const schedules = cat.schedules || (cat.days ? cat.days.map((d: number) => ({ day: d, startTime: cat.startTime, endTime: cat.endTime })) : []);
+                    return schedules.some((s: any) => s.day === printableDay.value);
+                  })
+                  .map((cat: any) => {
+                    const sched = (cat.schedules || (cat.days ? cat.days.map((d: number) => ({ day: d, startTime: cat.startTime, endTime: cat.endTime })) : []))
+                      .find((s: any) => s.day === printableDay.value);
+                    return { ...cat, startTime: sched?.startTime, endTime: sched?.endTime };
+                  })
+                  .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+                  .map((cat: any) => (
+                    <div key={cat.id} class="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                      <div class="flex items-center gap-3">
+                        <div class="bg-emerald-500 text-white text-[10px] font-black px-2 py-1 rounded shadow-sm">
+                          {cat.startTime} - {cat.endTime}
+                        </div>
+                        <div>
+                          <div class="font-black text-sm text-slate-800">{cat.name}</div>
+                          <div class="text-[10px] text-slate-500 font-bold uppercase">Prof: {cat.teacher}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                
+                {studentsData.value.categories.filter((cat: any) => {
+                    const schedules = cat.schedules || (cat.days ? cat.days.map((d: number) => ({ day: d, startTime: cat.startTime, endTime: cat.endTime })) : []);
+                    return schedules.some((s: any) => s.day === printableDay.value);
+                  }).length === 0 && (
+                  <div class="text-center py-8 text-slate-400 font-bold italic text-sm">No hay clases programadas para este día.</div>
+                )}
+              </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+              <Button type="button" onClick$={() => isPrintModalOpen.value = false} look="ghost" class="font-bold text-slate-500 hover:bg-slate-100 rounded-xl px-4 py-2">
+                Cancelar
+              </Button>
+              <Button 
+                onClick$={() => {
+                  window.print();
+                  isPrintModalOpen.value = false;
+                }}
+                class="font-bold bg-slate-800 text-white hover:bg-slate-900 rounded-xl px-6 py-2 shadow-lg"
+              >
+                Imprimir Ahora
+              </Button>
+            </div>
           </div>
         </Modal.Panel>
       </Modal.Root>
