@@ -1,18 +1,14 @@
 import { component$, $, useSignal } from "@builder.io/qwik";
-import { routeAction$, routeLoader$, zod$, z } from "@builder.io/qwik-city";
+import { routeAction$, routeLoader$, zod$, z, useNavigate } from "@builder.io/qwik-city";
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
-import { pitches, pitchPricingRules, siteSettings } from "~/db/schema";
+import { pitches, siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
-import { put } from '@vercel/blob';
-import imageCompression from 'browser-image-compression';
 
 // Import modular components
-import { PitchPricingModal } from "~/components/admin/pitches/PitchPricingModal";
 import { GlobalExtraServicesModal } from "~/components/admin/pitches/GlobalExtraServicesModal";
 import { PitchCard } from "~/components/admin/pitches/PitchCard";
 import { PitchTableView } from "~/components/admin/pitches/PitchTableView";
-import { PitchFormModal } from "~/components/admin/pitches/PitchFormModal";
 import { PitchSelectionModal } from "~/components/admin/pitches/PitchSelectionModal";
 import { PitchDeleteConfirmModal } from "~/components/admin/pitches/PitchDeleteConfirmModal";
 
@@ -21,7 +17,11 @@ export const usePitchesData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   return db.query.pitches.findMany({
     orderBy: (pitches, { asc }) => [asc(pitches.name)],
-    with: { pricingRules: true },
+    with: { 
+      pricingRules: true,
+      overlaps: true,
+      overlappedBy: true,
+    },
   });
 });
 
@@ -31,108 +31,7 @@ export const useSiteSettingsData = routeLoader$(async (requestEvent) => {
   return settings;
 });
 
-// 2. Actions
-export const useCreatePitchAction = routeAction$(
-  async (data, requestEvent) => {
-    const db = getDB(requestEvent);
-    const id = Math.random().toString(36).substring(2, 11);
-
-    let uploadedImageUrl = data.imageUrl || null;
-
-    if (data.image && typeof data.image === 'object' && (data.image as Blob).size > 0) {
-      const file = data.image as File;
-      const fileName = `pitch-${id}-${Date.now()}.webp`;
-      const { url } = await put(fileName, file, {
-        access: 'public',
-        token: requestEvent.env.get('BLOB_READ_WRITE_TOKEN'),
-      });
-      uploadedImageUrl = url;
-    }
-
-    await db.insert(pitches).values({
-      id,
-      name: data.name,
-      type: data.type as "F5" | "F6" | "F9",
-      isCovered: data.isCovered === "on",
-      isLit: data.isLit === "on",
-      pricePerHour: Number(data.pricePerHour),
-      depositType: (data.depositType as "PERCENTAGE" | "FIXED") || "PERCENTAGE",
-      depositAmount: Number(data.depositAmount) || 0,
-      notes: data.notes || null,
-      isActive: true,
-      imageUrl: uploadedImageUrl,
-      sport: data.sport || "Fútbol",
-      surface: data.surface || "Sintético",
-    });
-    return { success: true };
-  },
-  zod$({
-    name: z.string().min(1),
-    type: z.enum(["F5", "F6", "F9"]),
-    isCovered: z.string().optional(),
-    isLit: z.string().optional(),
-    pricePerHour: z.coerce.number().min(0),
-    depositType: z.string().optional(),
-    depositAmount: z.coerce.number().optional(),
-    notes: z.string().optional(),
-    imageUrl: z.string().optional(),
-    image: z.any().optional(),
-    sport: z.string().optional().default("Fútbol"),
-    surface: z.string().optional().default("Sintético"),
-  })
-);
-
-export const useUpdatePitchAction = routeAction$(
-  async (data, requestEvent) => {
-    const db = getDB(requestEvent);
-
-    let uploadedImageUrl = data.imageUrl || null;
-
-    if (data.image && typeof data.image === 'object' && (data.image as Blob).size > 0) {
-      const file = data.image as File;
-      const fileName = `pitch-${data.id}-${Date.now()}.webp`;
-      const { url } = await put(fileName, file, {
-        access: 'public',
-        token: requestEvent.env.get('BLOB_READ_WRITE_TOKEN'),
-      });
-      uploadedImageUrl = url;
-    }
-
-    await db.update(pitches)
-      .set({
-        name: data.name,
-        type: data.type as "F5" | "F6" | "F9",
-        isCovered: data.isCovered === "on",
-        isLit: data.isLit === "on",
-        pricePerHour: Number(data.pricePerHour),
-        depositType: (data.depositType as "PERCENTAGE" | "FIXED") || "PERCENTAGE",
-        depositAmount: Number(data.depositAmount) || 0,
-        notes: data.notes || null,
-        imageUrl: uploadedImageUrl,
-        sport: data.sport || "Fútbol",
-        surface: data.surface || "Sintético",
-      })
-      .where(eq(pitches.id, data.id));
-
-    return { success: true };
-  },
-  zod$({
-    id: z.string(),
-    name: z.string().min(1),
-    type: z.enum(["F5", "F6", "F9"]),
-    isCovered: z.string().optional(),
-    isLit: z.string().optional(),
-    pricePerHour: z.coerce.number().min(0),
-    depositType: z.string().optional(),
-    depositAmount: z.coerce.number().optional(),
-    notes: z.string().optional(),
-    imageUrl: z.string().optional(),
-    image: z.any().optional(),
-    sport: z.string().optional().default("Fútbol"),
-    surface: z.string().optional().default("Sintético"),
-  })
-);
-
+// 2. Actions (Only the ones needed on the main view)
 export const useTogglePitchStatusAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
@@ -172,35 +71,6 @@ export const useDeletePitchAction = routeAction$(
   })
 );
 
-export const useSavePricingRulesAction = routeAction$(
-  async (data, requestEvent) => {
-    const db = getDB(requestEvent);
-    const rules = JSON.parse(data.rulesJson as string) as any[];
-
-    // Delete existing rules for this pitch
-    await db.delete(pitchPricingRules).where(eq(pitchPricingRules.pitchId, data.pitchId));
-
-    // Insert new rules
-    if (rules.length > 0) {
-      const rulesToInsert = rules.map(rule => ({
-        id: Math.random().toString(36).substring(2, 11),
-        pitchId: data.pitchId,
-        dayOfWeek: Number(rule.dayOfWeek),
-        startTime: rule.startTime,
-        endTime: rule.endTime,
-        price: Number(rule.price),
-      }));
-      await db.insert(pitchPricingRules).values(rulesToInsert);
-    }
-
-    return { success: true };
-  },
-  zod$({
-    pitchId: z.string(),
-    rulesJson: z.string(), // We send it as a JSON string to simplify Qwik Forms nested arrays
-  })
-);
-
 export const useUpdateExtraServicesAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
@@ -217,125 +87,19 @@ export const useUpdateExtraServicesAction = routeAction$(
 export default component$(() => {
   const pitchesData = usePitchesData();
   const siteSettingsData = useSiteSettingsData();
-  const createPitchAction = useCreatePitchAction();
-  const updatePitchAction = useUpdatePitchAction();
   const toggleStatusAction = useTogglePitchStatusAction();
   const deleteAction = useDeletePitchAction();
+  const nav = useNavigate();
 
   const isSelectionModalOpen = useSignal(false);
   const isDeleteConfirmModalOpen = useSignal(false);
   const pitchToDelete = useSignal<{ id: string; name: string } | null>(null);
-
-  const isPricingModalOpen = useSignal(false);
-  const selectedPitchForPricing = useSignal<{ id: string; name: string; rules: any[] } | null>(null);
-
   const isExtrasModalOpen = useSignal(false);
-
-  // Single atomic signal: null = modal closed, object = modal open with data
-  type EditModalState = {
-    id: string | null;
-    name: string;
-    type: string;
-    sport: string;
-    surface: string;
-    pricePerHour: number;
-    depositType: string;
-    depositAmount: number;
-    isCovered: boolean;
-    isLit: boolean;
-    notes: string;
-    imageUrl: string | null;
-    previewUrl: string | null;
-  };
-  const editModalState = useSignal<EditModalState | null>(null);
-
-  const isCompressing = useSignal(false);
   const viewMode = useSignal<"grid" | "list">("grid");
 
-  const handleFileChange = $((event: Event) => {
-    const element = event.target as HTMLInputElement;
-    if (!element.files || element.files.length === 0) return;
-    const file = element.files[0];
-    if (editModalState.value) {
-      editModalState.value = { ...editModalState.value, previewUrl: URL.createObjectURL(file), imageUrl: null };
-    }
+  const openEditPage = $((pitch: any) => {
+    nav(`/admin/pitches/${pitch.id}`);
   });
-
-  const handleSubmit = $(async (e: Event, currentTarget: HTMLFormElement) => {
-    if (isCompressing.value || createPitchAction.isRunning || updatePitchAction.isRunning) return;
-
-    isCompressing.value = true;
-    try {
-      const formData = new FormData(currentTarget);
-      const imageFile = formData.get('image') as File | null;
-
-      if (imageFile && imageFile.size > 0 && imageFile.name) {
-        const options = {
-          maxWidthOrHeight: 1200,
-          useWebWorker: true,
-          fileType: 'image/webp',
-          initialQuality: 0.8,
-        };
-        const compressedBlob = await imageCompression(imageFile, options);
-        const newFileName = imageFile.name.replace(/\.[^/.]+$/, "") + ".webp";
-        const compressedFile = new File([compressedBlob], newFileName, { type: 'image/webp' });
-        formData.set('image', compressedFile);
-      }
-
-      const isEditing = !!editModalState.value?.id;
-      if (isEditing) {
-        await updatePitchAction.submit(formData);
-      } else {
-        await createPitchAction.submit(formData);
-      }
-
-      if (updatePitchAction.value?.success || createPitchAction.value?.success) {
-        editModalState.value = null;
-      }
-    } catch (error) {
-      console.error('Error al comprimir/subir imagen:', error);
-    } finally {
-      isCompressing.value = false;
-    }
-  });
-
-  const openCreateModal = $(() => {
-    editModalState.value = {
-      id: null,
-      name: "",
-      type: "F5",
-      sport: "Fútbol",
-      surface: "Sintético",
-      pricePerHour: 0,
-      depositType: "PERCENTAGE",
-      depositAmount: 0,
-      isCovered: false,
-      isLit: false,
-      notes: "",
-      imageUrl: null,
-      previewUrl: null,
-    };
-  });
-
-  const openEditModal = $((pitch: any) => {
-    editModalState.value = {
-      id: pitch.id,
-      name: pitch.name,
-      type: pitch.type,
-      sport: pitch.sport || "Fútbol",
-      surface: pitch.surface || "Sintético",
-      pricePerHour: pitch.pricePerHour,
-      depositType: pitch.depositType || "PERCENTAGE",
-      depositAmount: pitch.depositAmount || 0,
-      isCovered: pitch.isCovered,
-      isLit: pitch.isLit || false,
-      notes: pitch.notes || "",
-      imageUrl: pitch.imageUrl,
-      previewUrl: null,
-    };
-    selectedPitchForPricing.value = { id: pitch.id, name: pitch.name, rules: pitch.pricingRules || [] };
-  });
-
 
   const selectForDeletion = $((pitch: any) => {
     pitchToDelete.value = { id: pitch.id, name: pitch.name };
@@ -343,7 +107,6 @@ export default component$(() => {
     isDeleteConfirmModalOpen.value = true;
   });
 
-  const savePricingRulesAction = useSavePricingRulesAction();
   const updateExtraServicesAction = useUpdateExtraServicesAction();
 
   return (
@@ -370,7 +133,7 @@ export default component$(() => {
             Borrar Cancha
           </Button>
           <Button
-            onClick$={openCreateModal}
+            onClick$={() => nav('/admin/pitches/new')}
             look="primary"
             class="bg-slate-800 text-white hover:bg-slate-900 px-6 py-2 rounded-xl font-bold shadow-sm transition-all hover:shadow-md"
           >
@@ -411,7 +174,7 @@ export default component$(() => {
                 key={pitch.id}
                 pitch={pitch}
                 index={index}
-                onEdit$={openEditModal}
+                onEdit$={openEditPage}
                 toggleStatusAction={toggleStatusAction}
               />
             ))}
@@ -419,7 +182,7 @@ export default component$(() => {
         ) : (
           <PitchTableView
             pitches={pitchesData.value}
-            onEdit$={openEditModal}
+            onEdit$={openEditPage}
             toggleStatusAction={toggleStatusAction}
           />
         )}
@@ -430,21 +193,10 @@ export default component$(() => {
               <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-7l-2-2"></path><path d="M12 22v-7l2-2"></path><path d="M22 10a9 9 0 0 0-18 0c0 4 3 6 8 11.5 5-5.5 8-7.5 8-11.5z"></path><circle cx="12" cy="10" r="3"></circle></svg>
             </div>
             <p class="text-slate-500 font-bold text-lg mb-6">Aún no hay canchas configuradas.</p>
-            <Button onClick$={openCreateModal} look="primary" class="bg-slate-800 text-white px-8 py-3 rounded-2xl font-black uppercase tracking-wider">Crear mi primera cancha</Button>
+            <Button onClick$={() => nav('/admin/pitches/new')} look="primary" class="bg-slate-800 text-white px-8 py-3 rounded-2xl font-black uppercase tracking-wider">Crear mi primera cancha</Button>
           </div>
         )}
       </div>
-
-      <PitchFormModal
-        editModalState={editModalState}
-        isCompressing={isCompressing}
-        createAction={createPitchAction}
-        updateAction={updatePitchAction}
-        onPricingClick$={$(() => isPricingModalOpen.value = true)}
-        selectedPitchForPricing={selectedPitchForPricing}
-        onSubmit$={handleSubmit}
-        onFileChange$={handleFileChange}
-      />
 
       <PitchSelectionModal
         showSignal={isSelectionModalOpen}
@@ -458,24 +210,11 @@ export default component$(() => {
         deleteAction={deleteAction}
       />
 
-      <PitchPricingModal
-        showSignal={isPricingModalOpen}
-        pitchId={selectedPitchForPricing.value?.id || ""}
-        pitchName={selectedPitchForPricing.value?.name || ""}
-        initialRules={selectedPitchForPricing.value?.rules || []}
-        saveAction={savePricingRulesAction}
-      />
-
       <GlobalExtraServicesModal
         showSignal={isExtrasModalOpen}
         initialExtras={(siteSettingsData.value?.extraServices as any[]) || []}
         saveAction={updateExtraServicesAction}
       />
-
     </div>
   );
 });
-
-export const head = {
-  title: "Configuración de Canchas - Admin",
-};

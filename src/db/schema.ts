@@ -37,6 +37,11 @@ export const pitches = sqliteTable("pitches", {
   sport: text("sport").notNull().default("Fútbol"),
   surface: text("surface").notNull().default("Sintético"),
 });
+export const pitchOverlaps = sqliteTable("pitch_overlaps", {
+  id: text("id").primaryKey(),
+  pitchId: text("pitch_id").notNull().references(() => pitches.id, { onDelete: "cascade" }),
+  overlapPitchId: text("overlap_pitch_id").notNull().references(() => pitches.id, { onDelete: "cascade" }),
+});
 
 // --- Bookings (Reservas) ---
 export const bookings = sqliteTable("bookings", {
@@ -273,6 +278,21 @@ export const pitchesRelations = relations(pitches, ({ many }) => ({
   pricingRules: many(pitchPricingRules),
   bookings: many(bookings),
   subscriptions: many(pitchSubscriptions),
+  overlaps: many(pitchOverlaps, { relationName: "pitch_overlaps_pitchId" }),
+  overlappedBy: many(pitchOverlaps, { relationName: "pitch_overlaps_overlapPitchId" }),
+}));
+
+export const pitchOverlapsRelations = relations(pitchOverlaps, ({ one }) => ({
+  pitch: one(pitches, {
+    fields: [pitchOverlaps.pitchId],
+    references: [pitches.id],
+    relationName: "pitch_overlaps_pitchId",
+  }),
+  overlapPitch: one(pitches, {
+    fields: [pitchOverlaps.overlapPitchId],
+    references: [pitches.id],
+    relationName: "pitch_overlaps_overlapPitchId",
+  }),
 }));
 
 export const pitchPricingRulesRelations = relations(pitchPricingRules, ({ one }) => ({

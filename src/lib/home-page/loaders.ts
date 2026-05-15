@@ -1,7 +1,7 @@
 import { routeLoader$, server$, type RequestEventBase } from "@builder.io/qwik-city";
 import { eq, and, gte, lt, inArray, desc } from "drizzle-orm";
 import { getDB } from "~/db";
-import { pitches, bookings, instagramPosts, siteSettings } from "~/db/schema";
+import { pitches, bookings, instagramPosts, siteSettings, pitchOverlaps } from "~/db/schema";
 import { MOCK_INSTAGRAM_POSTS } from "~/components/ui/social-feed";
 
 export const usePitchesLoader = routeLoader$(async (requestEvent) => {
@@ -67,9 +67,19 @@ export const getDailyBookings = server$(async function (this: RequestEventBase, 
   const startOfDay = new Date(`${dateStr}T00:00:00`);
   const endOfDay = new Date(`${dateStr}T23:59:59`);
 
+  // Get related pitch IDs (bidirectional)
+  const { or } = await import("drizzle-orm");
+  const overlaps = await db.select().from(pitchOverlaps).where(
+    or(
+      eq(pitchOverlaps.pitchId, pitchId),
+      eq(pitchOverlaps.overlapPitchId, pitchId)
+    )
+  );
+  const relatedIds = [pitchId, ...overlaps.map((o: any) => o.pitchId === pitchId ? o.overlapPitchId : o.pitchId)];
+
   const dailyBookings = await db.query.bookings.findMany({
     where: and(
-      eq(bookings.pitchId, pitchId),
+      inArray(bookings.pitchId, relatedIds),
       gte(bookings.startTime, startOfDay),
       lt(bookings.startTime, endOfDay),
       inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"]),

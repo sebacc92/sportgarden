@@ -262,6 +262,47 @@ export const BookingTimelineView = component$<Props>(
                           })}
 
                           {/* Bookings Overlay Layer */}
+                          {/* Bookings Overlay Layer (Overlapping Pitches) */}
+                          {(() => {
+                            // Find bookings that affect THIS pitch (bidirectional overlaps)
+                            const affectingBookings = visibleBookings.value.filter(b => {
+                              if (b.booking.pitchId === pitch.id) return false; // Handled by standard logic
+                              // This is a bit complex without the actual overlap map here,
+                              // but we can assume if a booking is for another pitch, and it's in the list,
+                              // it's because it's an overlapping one (as per our updated loader).
+                              return true;
+                            });
+
+                            return affectingBookings.map(({ booking }) => {
+                              const s = new Date(booking.startTime);
+                              const e = new Date(booking.endTime);
+                              const bStart = s.getHours() * 60 + s.getMinutes();
+                              const bEnd = e.getHours() * 60 + e.getMinutes();
+                              const timelineStart = startHour * 60;
+                              const left = ((bStart - timelineStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+                              const width = ((bEnd - bStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+
+                              return (
+                                <div
+                                  key={`blocked-${booking.id}`}
+                                  style={{
+                                    left: `${left}px`,
+                                    width: `${width}px`,
+                                    top: '12px',
+                                    height: 'calc(100% - 24px)'
+                                  }}
+                                  class="absolute z-15 rounded-lg border-2 border-dashed border-slate-300 bg-slate-100/50 flex items-center justify-center overflow-hidden group shadow-inner pointer-events-none"
+                                >
+                                  <div class="flex items-center gap-2 px-3 py-1 bg-white/80 rounded-full border border-slate-200 shadow-sm opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                                    <span class="text-[9px] font-black text-slate-500 uppercase tracking-tighter whitespace-nowrap">Bloqueado por solapamiento</span>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+
+                          {/* Standard Bookings Layer */}
                           {pitchBookings.map(({ booking, user, guest }) => {
                             const s = new Date(booking.startTime);
                             const e = new Date(booking.endTime);

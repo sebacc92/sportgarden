@@ -1,8 +1,9 @@
 import { component$, useSignal, useVisibleTask$, $, useComputed$, useStore, useStyles$ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, useNavigate, server$ } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { bookings, pitches, users, guestRequests, cashRegisters, cashMovements } from "~/db/schema";
+import { bookings, pitches, users, guestRequests, cashRegisters, cashMovements, pitchOverlaps } from "~/db/schema";
 import { eq, and, gte, lte, lt, inArray } from "drizzle-orm";
+import { isPitchAvailable } from "~/utils/availability";
 import { BookingListView } from "~/components/admin/booking-list-view";
 import { BookingTimelineView } from "~/components/admin/booking-timeline-view";
 import { cn } from "@qwik-ui/utils";
@@ -57,21 +58,16 @@ export const useUpdateBookingStatusAction = routeAction$(
         newEnd = new Date(`${data.newDate}T${data.newEndTime}:00`);
       }
 
-      // Check conflict
-      const conflicts = await db.select().from(bookings).where(
-        and(
-          eq(bookings.pitchId, booking.pitchId),
-          inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"] as any),
-          and(
-            lt(bookings.startTime, newEnd),
-            gte(bookings.endTime, newStart)
-          )
-        )
-      );
+      // Check conflict including overlaps
+      const { available } = await isPitchAvailable(db, {
+        pitchId: booking.pitchId,
+        startTime: newStart,
+        endTime: newEnd,
+        excludeBookingId: booking.id
+      });
 
-      const realConflict = conflicts.find(c => c.id !== booking.id);
-      if (realConflict) {
-        return { success: false, message: "El horario seleccionado ya está ocupado en la nueva fecha." };
+      if (!available) {
+        return { success: false, message: "El horario seleccionado ya está ocupado (o solapado) en la nueva fecha." };
       }
 
       await db.update(bookings)
@@ -265,23 +261,16 @@ export const useCreateAdminBookingAction = routeAction$(
         const endDateTime = new Date(`${item.date}T${item.endTime}:00`);
         const bookingId = i === 0 ? firstBookingId : crypto.randomUUID();
 
-        // In-memory conflict check
-        const hasConflict = allExistingBookings.some(existing => {
-          if (existing.pitchId !== item.pitchId) return false;
-
-          const exStart = existing.startTime.getTime();
-          const exEnd = existing.endTime.getTime();
-          const itStart = startDateTime.getTime();
-          const itEnd = endDateTime.getTime();
-
-          return (
-            (itStart >= exStart && itStart < exEnd) ||
-            (itEnd > exStart && itEnd <= exEnd) ||
-            (exStart >= itStart && exStart < itEnd)
-          );
+        // Check conflict including overlaps
+        const { available, conflicts } = await isPitchAvailable(tx, {
+          pitchId: item.pitchId,
+          startTime: startDateTime,
+          endTime: endDateTime
         });
 
-        if (hasConflict) continue;
+        if (!available) {
+          throw new Error(`Conflicto de horario: ${item.date} ${item.startTime} - ${item.endTime} en ${conflicts[0].pitch.name}.`);
+        }
 
         bookingsToInsert.push({
           id: bookingId,
@@ -595,10 +584,20 @@ export const getAdminDailyBookings = server$(async function (pitchId: string, da
   if (!pitchId || !dateStr) return [];
   const startOfDay = new Date(`${dateStr}T00:00:00`);
   const endOfDay = new Date(`${dateStr}T23:59:59`);
-  const { inArray, lt } = await import("drizzle-orm");
+  const { inArray, lt, or } = await import("drizzle-orm");
+
+  // Get related pitch IDs (bidirectional)
+  const overlaps = await db.select().from(pitchOverlaps).where(
+    or(
+      eq(pitchOverlaps.pitchId, pitchId),
+      eq(pitchOverlaps.overlapPitchId, pitchId)
+    )
+  );
+  const relatedIds = [pitchId, ...overlaps.map((o: any) => o.pitchId === pitchId ? o.overlapPitchId : o.pitchId)];
+
   const daily = await db.query.bookings.findMany({
     where: and(
-      eq(bookings.pitchId, pitchId),
+      inArray(bookings.pitchId, relatedIds),
       gte(bookings.startTime, startOfDay),
       lt(bookings.startTime, endOfDay),
       inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"] as any)
@@ -981,8 +980,8 @@ export default component$(() => {
                     </tr>
                   </thead>
                   <tbody>
-                      {calendarData.value.bookings
-                        .sort((a: any, b: any) => new Date(a.booking.startTime).getTime() - new Date(b.booking.startTime).getTime())
+                    {calendarData.value.bookings
+                      .sort((a: any, b: any) => new Date(a.booking.startTime).getTime() - new Date(b.booking.startTime).getTime())
                       .map((b: any) => (
                         <tr key={b.booking.id} class="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                           <td class="px-4 py-4">
@@ -1023,8 +1022,8 @@ export default component$(() => {
               <Button onClick$={() => isPrintModalOpen.value = false} look="ghost" class="font-bold text-slate-500">
                 Cancelar
               </Button>
-              <Button 
-                onClick$={() => { window.print(); isPrintModalOpen.value = false; }} 
+              <Button
+                onClick$={() => { window.print(); isPrintModalOpen.value = false; }}
                 class="bg-slate-800 text-white font-black px-8 py-3 rounded-xl shadow-lg hover:bg-slate-900 transition-all flex items-center gap-2"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
