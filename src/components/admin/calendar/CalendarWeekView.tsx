@@ -66,17 +66,21 @@ export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
       >
         {/* Time Column */}
         <div class="w-20 shrink-0 border-r border-slate-200 relative bg-slate-50/80 backdrop-blur-sm z-20">
-          {hours.map((hour) => (
-            <div
-              key={hour}
-              class="absolute w-full text-right pr-3 text-xs font-bold text-slate-400 -mt-2"
-              style={{
-                top: `${(hour - calendarStartHour) * pixelsPerHour}px`,
-              }}
-            >
-              {String(hour).padStart(2, "0")}:00
-            </div>
-          ))}
+          {hours.map((hour) => {
+            const h = Math.floor(hour);
+            const m = Math.round((hour % 1) * 60);
+            return (
+              <div
+                key={hour}
+                class="absolute w-full text-right pr-3 text-xs font-bold text-slate-400 -mt-2"
+                style={{
+                  top: `${(hour - calendarStartHour) * pixelsPerHour}px`,
+                }}
+              >
+                {String(h).padStart(2, "0")}:{String(m).padStart(2, "0")}
+              </div>
+            );
+          })}
         </div>
 
         {/* Main Grid and Columns */}

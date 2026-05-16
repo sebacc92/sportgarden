@@ -6,7 +6,10 @@ import { MOCK_INSTAGRAM_POSTS } from "~/components/ui/social-feed";
 
 export const usePitchesLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  return await db.select().from(pitches).where(eq(pitches.isActive, true));
+  return await db.query.pitches.findMany({
+    where: eq(pitches.isActive, true),
+    with: { pricingRules: true }
+  });
 });
 
 export const useUserLoader = routeLoader$((requestEvent) => {

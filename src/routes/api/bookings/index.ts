@@ -8,37 +8,7 @@ const parseDateTime = (dateStr: string, timeStr: string) => {
   return new Date(`${dateStr}T${timeStr}:00`);
 };
 
-export const calculateDynamicPrice = (
-  startTimeDate: Date,
-  durationMins: number,
-  pricePerHour: number,
-  peakHourStart: string | null,
-  peakPricePerHour: number | null
-) => {
-  if (!peakHourStart || !peakPricePerHour) {
-    return pricePerHour * (durationMins / 60);
-  }
-
-  const startHour = startTimeDate.getHours() + startTimeDate.getMinutes() / 60;
-
-  const [peakH, peakM] = peakHourStart.split(":").map(Number);
-  const peakStartHour = peakH + peakM / 60;
-
-  let normalHours = 0;
-  let peakHours = 0;
-
-  // We loop over each 30 minute block
-  for (let i = 0; i < durationMins; i += 30) {
-    const currentBlockStart = startHour + (i / 60);
-    if (currentBlockStart >= peakStartHour) {
-      peakHours += 0.5;
-    } else {
-      normalHours += 0.5;
-    }
-  }
-
-  return (normalHours * pricePerHour) + (peakHours * peakPricePerHour);
-};
+import { calculateProportionalPrice } from "~/utils/pricing";
 
 // Action for Guest Users
 export const useGuestBookingAction = routeAction$(
@@ -51,6 +21,7 @@ export const useGuestBookingAction = routeAction$(
     // Check if pitch exists to calculate price
     const pitch = await db.query.pitches.findFirst({
       where: eq(pitches.id, data.pitchId),
+      with: { pricingRules: true }
     });
 
     if (!pitch) {
@@ -72,12 +43,12 @@ export const useGuestBookingAction = routeAction$(
       });
     }
 
-    const totalPrice = calculateDynamicPrice(
-      startTimeDate,
+    const totalPrice = calculateProportionalPrice(
+      data.date,
+      data.time,
       data.duration,
       pitch.pricePerHour,
-      pitch.peakHourStart,
-      pitch.peakPricePerHour
+      pitch.pricingRules
     );
 
     const bookingId = crypto.randomUUID();
@@ -148,6 +119,7 @@ export const useUserBookingAction = routeAction$(
 
     const pitch = await db.query.pitches.findFirst({
       where: eq(pitches.id, data.pitchId),
+      with: { pricingRules: true }
     });
 
     if (!pitch) {
@@ -156,12 +128,12 @@ export const useUserBookingAction = routeAction$(
       });
     }
 
-    const totalPrice = calculateDynamicPrice(
-      startTimeDate,
+    const totalPrice = calculateProportionalPrice(
+      data.date,
+      data.time,
       data.duration,
       pitch.pricePerHour,
-      pitch.peakHourStart,
-      pitch.peakPricePerHour
+      pitch.pricingRules
     );
 
     // Calculate paid amount based on preference

@@ -1,7 +1,7 @@
 import { component$, $, useSignal, useComputed$, useVisibleTask$, type PropFunction } from "@builder.io/qwik";
 import { cn } from "@qwik-ui/utils";
 
-type Pitch = { id: string; name: string; type: string };
+type Pitch = { id: string; name: string; type: string; overlapPitchIds?: string[] };
 
 type BookingEntry = {
   booking: {
@@ -267,10 +267,10 @@ export const BookingTimelineView = component$<Props>(
                             // Find bookings that affect THIS pitch (bidirectional overlaps)
                             const affectingBookings = visibleBookings.value.filter(b => {
                               if (b.booking.pitchId === pitch.id) return false; // Handled by standard logic
-                              // This is a bit complex without the actual overlap map here,
-                              // but we can assume if a booking is for another pitch, and it's in the list,
-                              // it's because it's an overlapping one (as per our updated loader).
-                              return true;
+                              if (pitch.overlapPitchIds && pitch.overlapPitchIds.includes(b.booking.pitchId)) {
+                                return true;
+                              }
+                              return false;
                             });
 
                             return affectingBookings.map(({ booking }) => {

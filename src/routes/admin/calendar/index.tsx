@@ -241,6 +241,15 @@ export const useCreateAdminBookingAction = routeAction$(
       }
     }
 
+    const settings = await db.query.siteSettings.findFirst();
+    const operatingHours = (() => {
+      try {
+        if (typeof settings?.operatingHours === 'string') return JSON.parse(settings.operatingHours);
+        if (Array.isArray(settings?.operatingHours)) return settings.operatingHours;
+        return [];
+      } catch { return []; }
+    })();
+
     const results = await db.transaction(async (tx) => {
       // Fetch all existing bookings for the relevant period to check conflicts in-memory
       const allExistingBookings = await tx.select().from(bookings).where(
@@ -260,6 +269,29 @@ export const useCreateAdminBookingAction = routeAction$(
         const startDateTime = new Date(`${item.date}T${item.startTime}:00`);
         const endDateTime = new Date(`${item.date}T${item.endTime}:00`);
         const bookingId = i === 0 ? firstBookingId : crypto.randomUUID();
+
+        // Validate operating hours
+        const dayOfWeek = startDateTime.getDay();
+        const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+
+        if (!schedule || schedule.isClosed) {
+          throw new Error(`El club está cerrado el día seleccionado (${item.date}).`);
+        }
+
+        const startMins = startDateTime.getHours() * 60 + startDateTime.getMinutes();
+        let endMins = endDateTime.getHours() * 60 + endDateTime.getMinutes();
+        if (endMins === 0 && startMins > 0) endMins = 24 * 60;
+
+        const [openH, openM] = schedule.openTime ? schedule.openTime.split(':').map(Number) : [8, 0];
+        const [closeH, closeM] = schedule.closeTime ? schedule.closeTime.split(':').map(Number) : [23, 0];
+        
+        const openMins = openH * 60 + (openM || 0);
+        let closeMins = closeH * 60 + (closeM || 0);
+        if (closeMins === 0) closeMins = 24 * 60;
+
+        if (startMins < openMins || endMins > closeMins) {
+           throw new Error(`El horario seleccionado (${item.startTime} - ${item.endTime}) está fuera del horario de atención del club para el día ${item.date}.`);
+        }
 
         // Check conflict including overlaps
         const { available, conflicts } = await isPitchAvailable(tx, {
@@ -467,9 +499,20 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     endDate = new Date(`${dateStr}T23:59:59-03:00`);
   }
 
-  const allPitches = await db.query.pitches.findMany({
+  const allPitchesData = await db.query.pitches.findMany({
     where: eq(pitches.isActive, true),
     orderBy: (pitches, { asc }) => [asc(pitches.name)],
+    with: { pricingRules: true, overlaps: true, overlappedBy: true }
+  });
+
+  const allPitches = allPitchesData.map((p) => {
+    const overlapIds = new Set<string>();
+    if (p.overlaps) p.overlaps.forEach((o: any) => overlapIds.add(o.overlapPitchId));
+    if (p.overlappedBy) p.overlappedBy.forEach((o: any) => overlapIds.add(o.pitchId));
+    return {
+      ...p,
+      overlapPitchIds: Array.from(overlapIds)
+    };
   });
 
   let dailyBookings: any = [];
@@ -666,12 +709,16 @@ export default component$(() => {
 
   const todaySchedule = operatingHours.find((h: any) => h.day === dayOfWeek);
 
-  const CALENDAR_START_HOUR = todaySchedule?.openTime ? parseInt(todaySchedule.openTime.split(":")[0], 10) : 8;
-  const CALENDAR_END_HOUR = todaySchedule?.closeTime ? parseInt(todaySchedule.closeTime.split(":")[0], 10) : 23;
+  const CALENDAR_START_HOUR = todaySchedule?.openTime 
+    ? parseInt(todaySchedule.openTime.split(":")[0], 10) + (parseInt(todaySchedule.openTime.split(":")[1] || "0", 10) / 60)
+    : 8;
+  const CALENDAR_END_HOUR = todaySchedule?.closeTime 
+    ? parseInt(todaySchedule.closeTime.split(":")[0], 10) + (parseInt(todaySchedule.closeTime.split(":")[1] || "0", 10) / 60)
+    : 23;
   const PIXELS_PER_HOUR = 140;
 
   const hours = Array.from(
-    { length: CALENDAR_END_HOUR - CALENDAR_START_HOUR },
+    { length: Math.ceil(CALENDAR_END_HOUR - CALENDAR_START_HOUR) },
     (_, i) => CALENDAR_START_HOUR + i
   );
 

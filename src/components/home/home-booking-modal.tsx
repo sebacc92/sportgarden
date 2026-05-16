@@ -4,7 +4,7 @@ import { Form, Link } from "@builder.io/qwik-city";
 import type { InferSelectModel } from "drizzle-orm";
 import { pitches } from "~/db/schema";
 import { Button, Modal, Alert } from "~/components/ui";
-import { calculateDynamicPrice } from "~/routes/api/bookings/index";
+import { calculateProportionalPrice } from "~/utils/pricing";
 import { getDailyBookings } from "~/lib/home-page/loaders";
 import { TIME_SLOT_OPTIONS } from "~/lib/home-page/constants";
 import type { HomeNavbarUser } from "./home-navbar";
@@ -116,15 +116,14 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     const dynamicPrice = useComputed$(() => {
       const sp = selectedPitch.value;
       if (!sp || !dateStr.value || !timeStr.value) return 0;
-      const start = new Date(`${dateStr.value}T${timeStr.value}:00`);
       const durationMins = parseInt(durationStr.value, 10);
 
-      return calculateDynamicPrice(
-        start,
+      return calculateProportionalPrice(
+        dateStr.value,
+        timeStr.value,
         durationMins,
         sp.pricePerHour,
-        sp.peakHourStart,
-        sp.peakPricePerHour,
+        (sp as any).pricingRules || []
       );
     });
 
@@ -510,13 +509,13 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                               key={pm.id}
                               class="flex-1 min-w-[120px] text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10"
                             >
-                              <input 
-                                type="radio" 
-                                name="paymentMethod" 
-                                value={pm.id} 
+                              <input
+                                type="radio"
+                                name="paymentMethod"
+                                value={pm.id}
                                 checked={paymentMethod.value === pm.id}
                                 onInput$={() => paymentMethod.value = pm.id}
-                                class="hidden" 
+                                class="hidden"
                               />
                               <span class="text-sm font-bold text-white">{pm.name}</span>
                             </label>
@@ -524,24 +523,24 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                         {(settings?.paymentMethods || []).filter((pm: any) => pm.isActive).length === 0 && (
                           <>
                             <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                              <input 
-                                type="radio" 
-                                name="paymentMethod" 
-                                value="CASH" 
+                              <input
+                                type="radio"
+                                name="paymentMethod"
+                                value="CASH"
                                 checked={paymentMethod.value === "CASH"}
                                 onInput$={() => paymentMethod.value = "CASH"}
-                                class="hidden" 
+                                class="hidden"
                               />
                               <span class="text-sm font-bold text-white">Efectivo</span>
                             </label>
                             <label class="flex-1 text-center p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                              <input 
-                                type="radio" 
-                                name="paymentMethod" 
-                                value="TRANSFER" 
+                              <input
+                                type="radio"
+                                name="paymentMethod"
+                                value="TRANSFER"
                                 checked={paymentMethod.value === "TRANSFER"}
                                 onInput$={() => paymentMethod.value = "TRANSFER"}
-                                class="hidden" 
+                                class="hidden"
                               />
                               <span class="text-sm font-bold text-white">Transferencia</span>
                             </label>
@@ -572,25 +571,25 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                       <div class="space-y-2">
                         {paymentMethod.value === "CASH" && (
                           <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                            <input 
-                              type="radio" 
-                              name="paymentOption" 
-                              value="LATER" 
+                            <input
+                              type="radio"
+                              name="paymentOption"
+                              value="LATER"
                               checked={paymentOption.value === "LATER"}
                               onInput$={() => paymentOption.value = "LATER"}
-                              class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" 
+                              class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20"
                             />
                             <span class="text-sm font-medium text-white flex-1">Abonar en el club</span>
                           </label>
                         )}
                         <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                          <input 
-                            type="radio" 
-                            name="paymentOption" 
-                            value="SENA" 
+                          <input
+                            type="radio"
+                            name="paymentOption"
+                            value="SENA"
                             checked={paymentOption.value === "SENA"}
                             onInput$={() => paymentOption.value = "SENA"}
-                            class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" 
+                            class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20"
                           />
                           <div class="flex-1">
                             <span class="text-sm font-medium text-white block">Abonar Seña ({senaLabel.value})</span>
@@ -598,13 +597,13 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                           </div>
                         </label>
                         <label class="flex items-center gap-3 p-3 rounded-lg border border-white/10 hover:bg-slate-800 cursor-pointer transition-colors has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-500/10">
-                          <input 
-                            type="radio" 
-                            name="paymentOption" 
-                            value="TOTAL" 
+                          <input
+                            type="radio"
+                            name="paymentOption"
+                            value="TOTAL"
                             checked={paymentOption.value === "TOTAL"}
                             onInput$={() => paymentOption.value = "TOTAL"}
-                            class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20" 
+                            class="text-emerald-400 focus:ring-emerald-500 bg-slate-900 border-white/20"
                           />
                           <div class="flex-1">
                             <span class="text-sm font-medium text-white block">Abonar Total</span>

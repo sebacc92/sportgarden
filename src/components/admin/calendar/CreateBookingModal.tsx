@@ -3,6 +3,7 @@ import { Form, Link } from "@builder.io/qwik-city";
 import { Modal, Button } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { searchUsersServer, getAdminDailyBookings } from "~/routes/admin/calendar";
+import { calculateProportionalPrice } from "~/utils/pricing";
 
 interface CreateBookingModalProps {
   isCreateModalOpen: Signal<boolean>;
@@ -94,11 +95,51 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
     return JSON.stringify(schedules);
   });
 
-  const adminTimeOptions: string[] = [];
-  for (let h = 8; h <= 23; h++) {
-    adminTimeOptions.push(`${String(h).padStart(2, "0")}:00`);
-    adminTimeOptions.push(`${String(h).padStart(2, "0")}:30`);
-  }
+  const adminTimeOptions = useComputed$(() => {
+    let startHour = 8;
+    let endHour = 23;
+    let startMin = 0;
+    
+    if (adminFormDate.value && calendarData.settings?.operatingHours) {
+      const selectedDate = new Date(`${adminFormDate.value}T12:00:00`);
+      const dayOfWeek = selectedDate.getDay();
+      
+      let operatingHours = [];
+      try {
+        if (typeof calendarData.settings.operatingHours === 'string') {
+          operatingHours = JSON.parse(calendarData.settings.operatingHours);
+        } else if (Array.isArray(calendarData.settings.operatingHours)) {
+          operatingHours = calendarData.settings.operatingHours;
+        }
+      } catch (e) {}
+
+      const todaySchedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+      if (todaySchedule && !todaySchedule.isClosed) {
+         if (todaySchedule.openTime) {
+            const [h, m] = todaySchedule.openTime.split(':').map(Number);
+            startHour = h;
+            startMin = m || 0;
+         }
+         if (todaySchedule.closeTime) {
+            endHour = parseInt(todaySchedule.closeTime.split(':')[0], 10);
+         }
+      }
+    }
+
+    const options: string[] = [];
+    for (let h = 0; h <= 23; h++) {
+       if (h < startHour || h > endHour) continue;
+       
+       if (h === startHour) {
+         if (startMin <= 0) options.push(`${String(h).padStart(2, "0")}:00`);
+         if (startMin <= 30) options.push(`${String(h).padStart(2, "0")}:30`);
+       } else {
+         options.push(`${String(h).padStart(2, "0")}:00`);
+         options.push(`${String(h).padStart(2, "0")}:30`);
+       }
+    }
+    return options;
+  });
 
   const adminEndTime = useComputed$(() => {
     if (!adminFormTime.value) return "";
@@ -161,8 +202,14 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
             if (adminIsSubscription.value) {
               const schedules = JSON.parse(subscriptionSchedulesJSON.value);
               basePrice = schedules.reduce((acc: number, s: any) => acc + s.price, 0);
-            } else {
-              basePrice = pitch ? pitch.pricePerHour * (parseInt(adminFormDuration.value) / 60) : 0;
+            } else if (pitch) {
+              basePrice = calculateProportionalPrice(
+                dateStr,
+                adminFormTime.value,
+                parseInt(adminFormDuration.value),
+                pitch.pricePerHour,
+                pitch.pricingRules || []
+              );
             }
 
             const extrasCost = adminSelectedExtras.value.reduce((acc, name) => {
@@ -424,7 +471,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                               required={!adminIsSubscription.value}
                             >
                               <option value="">--:-- hs</option>
-                              {adminTimeOptions.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
+                              {adminTimeOptions.value.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
                             </select>
                           </div>
                           <div>
@@ -538,7 +585,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                                         value={slot.startTime}
                                         onChange$={(_, el) => slot.startTime = el.value}
                                       >
-                                        {adminTimeOptions.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
+                                        {adminTimeOptions.value.map(t => <option key={t} value={t}>{`${t} hs`}</option>)}
                                       </select>
                                     </div>
                                     <div class="col-span-6">
