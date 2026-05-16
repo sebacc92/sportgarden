@@ -174,8 +174,8 @@ export const BookingTimelineView = component$<Props>(
         </div>
 
         {/* ── Timeline grid ── */}
-        <div ref={scrollRef} class="overflow-auto flex-1">
-          <div class="relative" style={`min-width: ${PITCH_COL_WIDTH_PX + slots.length * SLOT_MIN_WIDTH_PX}px`}>
+        <div ref={scrollRef} class="overflow-auto flex-1 bg-slate-50">
+          <div class="relative" style={`width: ${PITCH_COL_WIDTH_PX + slots.length * SLOT_MIN_WIDTH_PX}px`}>
 
             {/* Current-time vertical line */}
             {currentTimePx.value !== null && (
@@ -188,7 +188,7 @@ export const BookingTimelineView = component$<Props>(
               </div>
             )}
 
-            <table class="border-collapse w-full select-none">
+            <table class="border-collapse w-full select-none" style="table-layout: fixed;">
               <thead class="sticky top-0 z-50">
                 <tr>
                   <th

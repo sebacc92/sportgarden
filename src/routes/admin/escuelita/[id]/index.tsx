@@ -14,7 +14,7 @@ export const useStudentDetailsData = routeLoader$(async (requestEvent) => {
   });
 
   if (!student) {
-    throw requestEvent.redirect(302, "/admin/school/");
+    throw requestEvent.redirect(302, "/admin/escuelita/");
   }
 
   const subscriptions = await db.query.studentSubscriptions.findMany({
@@ -131,7 +131,7 @@ export default component$(() => {
 
         {/* Header */}
         <div class="flex items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <Link href="/admin/school/" class="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 rounded-full transition-colors">
+          <Link href="/admin/escuelita/" class="p-2 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 rounded-full transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>
           </Link>
           <div class="flex-1">

@@ -38,9 +38,15 @@ export const useStudentsData = routeLoader$(async (event) => {
 
   const paymentMethods = (settings?.paymentMethods || []) as { id: string, name: string, isActive: boolean }[];
 
+  const pitches = await db.query.pitches.findMany({
+    where: (p) => eq(p.isActive, true),
+    orderBy: (p) => [p.name],
+  });
+
   return {
     students: paginatedStudents,
     categories,
+    pitches,
     paymentMethods: paymentMethods.length > 0 ? paymentMethods : [
       { id: "CASH", name: "Efectivo", isActive: true },
       { id: "TRANSFER", name: "Transferencia", isActive: true },
@@ -371,7 +377,15 @@ export default component$(() => {
   const categoryFormName = useSignal("");
   const categoryFormTeacher = useSignal("");
   const categoryFormFee = useSignal(0);
-  const categoryFormSchedules = useStore<Record<number, { startTime: string, endTime: string }>>({});
+  const categoryFormSchedules = useStore<Record<number, { startTime: string, endTime: string, pitchId?: string }>>({});
+
+  const adminTimeOptions = useComputed$(() => {
+    return Array.from({ length: 32 }, (_, i) => {
+      const hours = Math.floor(i / 2) + 8;
+      const minutes = i % 2 === 0 ? "00" : "30";
+      return `${hours.toString().padStart(2, "0")}:${minutes}`;
+    });
+  });
 
    const isPrintModalOpen = useSignal(false);
   const printableDay = useSignal(new Date().getDay() === 0 ? 0 : new Date().getDay()); // 0-6
@@ -500,8 +514,8 @@ export default component$(() => {
                         onClick$={() => selectedCategory.value = cat.name}
                         class="text-left w-full focus:outline-none"
                       >
-                        <div class="font-black text-sm text-slate-800">{cat.name}</div>
-                        <div class="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5 max-w-[80%] truncate">Prof: {cat.teacher}</div>
+                        <div class="font-black text-lg text-slate-800">{cat.name}</div>
+                        <div class="text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5 max-w-[90%] truncate">Prof: {cat.teacher}</div>
                         {(() => {
                           const schedules = cat.schedules || (cat.days ? cat.days.map((d: number) => ({ day: d, startTime: cat.startTime, endTime: cat.endTime })) : []);
                           if (!schedules || schedules.length === 0) return null;
@@ -517,14 +531,14 @@ export default component$(() => {
                             <div class="mt-2 space-y-1">
                               {Object.entries(groups).map(([time, days]) => (
                                 <div key={time} class="flex items-center gap-1.5">
-                                  <div class="flex gap-0.5">
+                                  <div class="flex gap-1">
                                     {days.sort((a, b) => a - b).map((d) => (
-                                      <span key={d} class="w-4 h-4 bg-emerald-100 text-emerald-700 rounded-sm flex items-center justify-center text-[9px] font-black uppercase" title={['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][d]}>
+                                      <span key={d} class="w-6 h-6 bg-emerald-100 text-emerald-700 rounded-md flex items-center justify-center text-xs font-black uppercase" title={['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][d]}>
                                         {['D', 'L', 'M', 'M', 'J', 'V', 'S'][d]}
                                       </span>
                                     ))}
                                   </div>
-                                  <div class="text-[8px] font-bold text-slate-400 bg-slate-100 px-1 py-0.5 rounded-sm uppercase tracking-tighter">
+                                  <div class="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md uppercase tracking-tight">
                                     {time.replace('-', ' - ')}
                                   </div>
                                 </div>
@@ -532,7 +546,7 @@ export default component$(() => {
                             </div>
                           );
                         })()}
-                        <div class="text-[10px] text-emerald-600 font-black mt-1 uppercase tracking-tighter">${cat.monthlyFee?.toLocaleString("es-AR")} / mes</div>
+                        <div class="text-sm text-emerald-600 font-black mt-2 uppercase tracking-tight">${cat.monthlyFee?.toLocaleString("es-AR")} / mes</div>
                       </button>
                       <div class="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
@@ -546,7 +560,7 @@ export default component$(() => {
                             Object.keys(categoryFormSchedules).forEach(key => delete categoryFormSchedules[Number(key)]);
                             if (cat.schedules) {
                               cat.schedules.forEach((s: any) => {
-                                categoryFormSchedules[s.day] = { startTime: s.startTime, endTime: s.endTime };
+                                categoryFormSchedules[s.day] = { startTime: s.startTime, endTime: s.endTime, pitchId: s.pitchId };
                               });
                             } else if (cat.days) {
                               // Fallback for old data
@@ -673,7 +687,7 @@ export default component$(() => {
                                 );
                               }
                               return (
-                                <Link href={`/admin/school/${s.id}/`} class="text-emerald-600 hover:text-emerald-700 font-bold text-xs uppercase tracking-wider bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors">
+                                <Link href={`/admin/escuelita/${s.id}/`} class="text-emerald-600 hover:text-emerald-700 font-bold text-xs uppercase tracking-wider bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors">
                                   Ficha
                                 </Link>
                               );
@@ -747,7 +761,7 @@ export default component$(() => {
 
       {/* Modal para Crear/Editar Categoría */}
       <Modal.Root bind:show={isCategoryModalOpen}>
-        <Modal.Panel class="bg-white rounded-2xl shadow-xl w-full max-w-md mx-auto relative overflow-hidden">
+        <Modal.Panel class="bg-white rounded-2xl shadow-xl w-full max-w-xl mx-auto relative overflow-hidden">
           <div class="p-6">
             <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">
               {editingCategoryId.value ? "Editar Categoría" : "Nueva Categoría"}
@@ -785,9 +799,9 @@ export default component$(() => {
                       onClick$={() => {
                         const firstDay = Object.keys(categoryFormSchedules).map(Number).sort((a, b) => a - b)[0];
                         if (firstDay !== undefined) {
-                          const { startTime, endTime } = categoryFormSchedules[firstDay];
+                          const { startTime, endTime, pitchId } = categoryFormSchedules[firstDay];
                           Object.keys(categoryFormSchedules).forEach(day => {
-                            categoryFormSchedules[Number(day)] = { startTime, endTime };
+                            categoryFormSchedules[Number(day)] = { startTime, endTime, pitchId };
                           });
                         }
                       }}
@@ -841,24 +855,45 @@ export default component$(() => {
                       <div class="w-10 text-xs font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 pr-2 mr-1">
                         {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][dayIdx]}
                       </div>
-                      <div class="grid grid-cols-2 gap-3 flex-1">
+                      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
+                        <div>
+                          <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cancha</label>
+                          <select
+                            value={categoryFormSchedules[dayIdx].pitchId || ""}
+                            onInput$={(ev) => categoryFormSchedules[dayIdx].pitchId = (ev.target as HTMLSelectElement).value}
+                            class="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
+                          >
+                            <option value="">Seleccionar...</option>
+                            {studentsData.value.pitches.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
                         <div>
                           <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Inicio</label>
-                          <input
-                            type="time"
+                          <select
                             value={categoryFormSchedules[dayIdx].startTime}
-                            onInput$={(ev) => categoryFormSchedules[dayIdx].startTime = (ev.target as HTMLInputElement).value}
+                            onInput$={(ev) => categoryFormSchedules[dayIdx].startTime = (ev.target as HTMLSelectElement).value}
                             class="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
-                          />
+                          >
+                            <option value="">--:--</option>
+                            {adminTimeOptions.value.map((time) => (
+                              <option key={`start-${dayIdx}-${time}`} value={time}>{`${time} hs`}</option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                           <label class="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Fin</label>
-                          <input
-                            type="time"
+                          <select
                             value={categoryFormSchedules[dayIdx].endTime}
-                            onInput$={(ev) => categoryFormSchedules[dayIdx].endTime = (ev.target as HTMLInputElement).value}
+                            onInput$={(ev) => categoryFormSchedules[dayIdx].endTime = (ev.target as HTMLSelectElement).value}
                             class="w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-500 text-xs font-bold"
-                          />
+                          >
+                            <option value="">--:--</option>
+                            {adminTimeOptions.value.map((time) => (
+                              <option key={`end-${dayIdx}-${time}`} value={time}>{`${time} hs`}</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
                     </div>

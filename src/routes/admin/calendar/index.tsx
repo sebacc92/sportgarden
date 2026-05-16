@@ -284,13 +284,13 @@ export const useCreateAdminBookingAction = routeAction$(
 
         const [openH, openM] = schedule.openTime ? schedule.openTime.split(':').map(Number) : [8, 0];
         const [closeH, closeM] = schedule.closeTime ? schedule.closeTime.split(':').map(Number) : [23, 0];
-        
+
         const openMins = openH * 60 + (openM || 0);
         let closeMins = closeH * 60 + (closeM || 0);
         if (closeMins === 0) closeMins = 24 * 60;
 
         if (startMins < openMins || endMins > closeMins) {
-           throw new Error(`El horario seleccionado (${item.startTime} - ${item.endTime}) está fuera del horario de atención del club para el día ${item.date}.`);
+          throw new Error(`El horario seleccionado (${item.startTime} - ${item.endTime}) está fuera del horario de atención del club para el día ${item.date}.`);
         }
 
         // Check conflict including overlaps
@@ -574,6 +574,61 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
       );
   }
 
+  // Inject School Classes (Virtual Bookings)
+  if (settings && settings.schoolCategories) {
+    const schoolCategories = settings.schoolCategories as any[];
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dayOfWeek = currentDate.getDay();
+      const dateStr = getBAFormatDate(currentDate);
+
+      for (const cat of schoolCategories) {
+        if (cat.schedules) {
+          for (const sched of cat.schedules) {
+            if (sched.day === dayOfWeek && sched.pitchId && sched.startTime && sched.endTime) {
+              if (viewStr === "month") {
+                monthCounts[dateStr] = (monthCounts[dateStr] || 0) + 1;
+              } else {
+                const [sH, sM] = sched.startTime.split(':');
+                const [eH, eM] = sched.endTime.split(':');
+
+                // Keep BA offset semantics
+                const startDateTime = new Date(`${dateStr}T00:00:00-03:00`);
+                startDateTime.setHours(Number(sH), Number(sM), 0, 0);
+
+                const endDateTime = new Date(`${dateStr}T00:00:00-03:00`);
+                endDateTime.setHours(Number(eH), Number(eM), 0, 0);
+
+                dailyBookings.push({
+                  booking: {
+                    id: `school-${cat.id}-${dateStr}`,
+                    pitchId: sched.pitchId,
+                    startTime: startDateTime,
+                    endTime: endDateTime,
+                    status: "CONFIRMED",
+                    totalPrice: 0,
+                    paidAmount: 0,
+                    paymentStatus: "PAID",
+                    isSubscription: true,
+                    isSchool: true, // Identify as school for UI
+                  },
+                  user: {
+                    id: "school",
+                    name: `Esc. ${cat.name}`,
+                    phone: null,
+                  },
+                  guest: null,
+                });
+              }
+            }
+          }
+        }
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+  }
+
+
   const prevDate = new Date(selectedDate);
   const nextDate = new Date(selectedDate);
 
@@ -709,10 +764,10 @@ export default component$(() => {
 
   const todaySchedule = operatingHours.find((h: any) => h.day === dayOfWeek);
 
-  const CALENDAR_START_HOUR = todaySchedule?.openTime 
+  const CALENDAR_START_HOUR = todaySchedule?.openTime
     ? parseInt(todaySchedule.openTime.split(":")[0], 10) + (parseInt(todaySchedule.openTime.split(":")[1] || "0", 10) / 60)
     : 8;
-  const CALENDAR_END_HOUR = todaySchedule?.closeTime 
+  const CALENDAR_END_HOUR = todaySchedule?.closeTime
     ? parseInt(todaySchedule.closeTime.split(":")[0], 10) + (parseInt(todaySchedule.closeTime.split(":")[1] || "0", 10) / 60)
     : 23;
   const PIXELS_PER_HOUR = 140;
