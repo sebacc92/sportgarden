@@ -13,7 +13,13 @@ export const usePitchesLoader = routeLoader$(async (requestEvent) => {
 });
 
 export const useUserLoader = routeLoader$((requestEvent) => {
-  return requestEvent.sharedMap.get("user") as { userId: string; role: string } | undefined;
+  return requestEvent.sharedMap.get("user") as {
+    userId: string;
+    role: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+  } | undefined;
 });
 
 export const useInstagramFeed = routeLoader$(async (requestEvent) => {
@@ -50,6 +56,7 @@ export const useAISettingsLoader = routeLoader$(async (requestEvent) => {
     operatingHours: (settings?.operatingHours || []) as any[],
     services: (settings?.services || []) as string[],
     schoolCategories: (settings?.schoolCategories || []) as { id: string; name: string; teacher: string; monthlyFee: number; schedules?: { day: number; startTime: string; endTime: string }[] }[],
+    holidays: (settings?.holidays || []) as { date: string; name: string }[],
   };
 });
 

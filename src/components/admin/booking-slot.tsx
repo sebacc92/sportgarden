@@ -10,6 +10,7 @@ export type BookingSlotProps = {
   customerPhone?: string | null;
   pitchName?: string;
   isSubscription?: boolean;
+  bookingType?: "EVENTUAL" | "FIXED" | "BIRTHDAY" | "TOURNAMENT" | "SCHOOL";
   calendarStartHour: number;
   pixelsPerHour: number;
   onClick$?: PropFunction<(id: string) => void>;
@@ -23,6 +24,14 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
   const top = (startHour - props.calendarStartHour) * props.pixelsPerHour;
   const height = (endHour - startHour) * props.pixelsPerHour;
 
+  const typeColors: Record<string, string> = {
+    EVENTUAL: "bg-blue-50 border-blue-200 text-blue-900 shadow-blue-900/5",
+    FIXED: "bg-emerald-50 border-emerald-200 text-emerald-900 shadow-emerald-900/5",
+    BIRTHDAY: "bg-violet-50 border-violet-200 text-violet-900 shadow-violet-900/5",
+    TOURNAMENT: "bg-pink-50 border-pink-200 text-pink-900 shadow-pink-900/5",
+    SCHOOL: "bg-orange-50 border-orange-200 text-orange-900 shadow-orange-900/5",
+  };
+
   const statusColors = {
     PENDING_APPROVAL: "bg-amber-50 border-amber-200 text-amber-900 shadow-amber-900/5",
     CONFIRMED: "bg-emerald-50 border-emerald-200 text-emerald-900 shadow-emerald-900/5",
@@ -30,6 +39,8 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
     COMPLETED: "bg-slate-50 border-slate-200 text-slate-900 shadow-slate-900/5",
   };
 
+  const effectiveColorClass = props.bookingType ? typeColors[props.bookingType] : statusColors[props.status];
+  
   const statusBadgeColors = {
     PENDING_APPROVAL: "bg-amber-100 text-amber-700",
     CONFIRMED: "bg-emerald-100 text-emerald-700",
@@ -37,12 +48,23 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
     COMPLETED: "bg-slate-200 text-slate-700",
   };
 
+  // Border color indicator (accent)
+  const accentColors: Record<string, string> = {
+    EVENTUAL: "border-l-blue-500",
+    FIXED: "border-l-emerald-500",
+    BIRTHDAY: "border-l-violet-500",
+    TOURNAMENT: "border-l-pink-500",
+    SCHOOL: "border-l-orange-500",
+  };
+  const effectiveAccentClass = props.bookingType ? accentColors[props.bookingType] : "";
+
   return (
     <div
       onClick$={() => props.onClick$ && props.onClick$(props.id)}
       class={[
         "absolute left-1 right-1 rounded-xl border p-2 text-sm shadow-sm overflow-hidden flex flex-col transition-all hover:z-20 hover:shadow-md hover:scale-[1.01] cursor-pointer",
-        statusColors[props.status],
+        effectiveColorClass,
+        effectiveAccentClass
       ]}
       style={{
         top: `${Math.max(0, top)}px`,

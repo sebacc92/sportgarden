@@ -14,7 +14,8 @@ export const calculateProportionalPrice = (
   timeStr: string, // "HH:MM"
   durationMins: number,
   basePrice: number,
-  rules: PricingRule[]
+  rules: PricingRule[],
+  holidays: string[] = []
 ): number => {
   if (!rules || rules.length === 0) {
     return Math.round(basePrice * (durationMins / 60));
@@ -29,7 +30,13 @@ export const calculateProportionalPrice = (
   let totalPrice = 0;
   
   for (let i = 0; i < durationMins; i++) {
-    const currentDayOfWeek = current.getDay();
+    const yStr = current.getFullYear();
+    const mStr = (current.getMonth() + 1).toString().padStart(2, '0');
+    const dStr = current.getDate().toString().padStart(2, '0');
+    const currentDateStr = `${yStr}-${mStr}-${dStr}`;
+    
+    const isHoliday = holidays.includes(currentDateStr);
+    const currentDayOfWeek = isHoliday ? 7 : current.getDay();
     const currentHour = current.getHours();
     const currentMin = current.getMinutes();
     
@@ -38,8 +45,6 @@ export const calculateProportionalPrice = (
     let applicablePrice = basePrice;
     
     for (const rule of rules) {
-      // 7 is reserved for "Feriados" in the UI. Currently we do not have a holiday calendar,
-      // so it will not automatically apply.
       if (rule.dayOfWeek === currentDayOfWeek) {
         if (rule.startTime <= rule.endTime) {
           if (timeFormat >= rule.startTime && timeFormat < rule.endTime) {

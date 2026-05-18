@@ -43,12 +43,16 @@ export const useGuestBookingAction = routeAction$(
       });
     }
 
+    const settings = await db.query.siteSettings.findFirst();
+    const holidays = (settings?.holidays as any[])?.map((h: any) => h.date) || [];
+
     const totalPrice = calculateProportionalPrice(
       data.date,
       data.time,
       data.duration,
       pitch.pricePerHour,
-      pitch.pricingRules
+      pitch.pricingRules,
+      holidays
     );
 
     const bookingId = crypto.randomUUID();
@@ -128,12 +132,16 @@ export const useUserBookingAction = routeAction$(
       });
     }
 
+    const settings = await db.query.siteSettings.findFirst();
+    const holidays = (settings?.holidays as any[])?.map((h: any) => h.date) || [];
+
     const totalPrice = calculateProportionalPrice(
       data.date,
       data.time,
       data.duration,
       pitch.pricePerHour,
-      pitch.pricingRules
+      pitch.pricingRules,
+      holidays
     );
 
     // Calculate paid amount based on preference

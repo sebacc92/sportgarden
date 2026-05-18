@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
 import { siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
-import { LuPlus, LuTrash2, LuSave } from '@qwikest/icons/lucide';
+import { LuPlus, LuTrash2, LuSave, LuCalendar } from '@qwikest/icons/lucide';
 
 export const useSiteSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -28,7 +28,8 @@ export const useSiteSettings = routeLoader$(async (requestEvent) => {
       id: 1,
       clubName: "GardenClubFutbol",
       operatingHours: defaultHours,
-      services: ["Wi-Fi", "Vestuario", "Estacionamiento"]
+      services: ["Wi-Fi", "Vestuario", "Estacionamiento"],
+      holidays: []
     });
     settings = await db.query.siteSettings.findFirst({
       where: eq(siteSettings.id, 1)
@@ -50,6 +51,7 @@ export const useSaveClubSettingsAction = routeAction$(
         bankAlias: data.bankAlias,
         operatingHours: JSON.parse(data.operatingHours as string),
         services: JSON.parse(data.services as string),
+        holidays: JSON.parse(data.holidays as string),
         updatedAt: new Date()
       })
       .where(eq(siteSettings.id, 1));
@@ -63,6 +65,7 @@ export const useSaveClubSettingsAction = routeAction$(
     bankAlias: z.string().optional(),
     operatingHours: z.string(), // JSON array
     services: z.string(), // JSON array
+    holidays: z.string(), // JSON array
   })
 );
 
@@ -88,6 +91,7 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
     return existing || { day: i, isOpen: true, openTime: "08:00", closeTime: "23:00" };
   });
   const initialServices = Array.isArray(props.settings?.services) ? props.settings.services : [];
+  const initialHolidays = Array.isArray(props.settings?.holidays) ? props.settings.holidays : [];
 
   const clubName = useSignal(props.settings?.clubName || "");
   const clubAddress = useSignal(props.settings?.clubAddress || "");
@@ -97,9 +101,12 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
   const store = useStore({
     operatingHours: initialHours,
     services: initialServices as string[],
+    holidays: initialHolidays as { date: string; name: string }[],
   }, { deep: true });
 
   const newServiceText = useSignal("");
+  const newHolidayDate = useSignal("");
+  const newHolidayName = useSignal("");
 
   const toggleDay = $((dayIndex: number) => {
     store.operatingHours[dayIndex].isOpen = !store.operatingHours[dayIndex].isOpen;
@@ -120,12 +127,45 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
     store.services = store.services.filter((_, i) => i !== index);
   });
 
+  const addHoliday = $(() => {
+    if (newHolidayDate.value.trim() !== "" && newHolidayName.value.trim() !== "") {
+      const exists = store.holidays.some((h) => h.date === newHolidayDate.value);
+      if (exists) return;
+
+      store.holidays = [...store.holidays, {
+        date: newHolidayDate.value,
+        name: newHolidayName.value.trim(),
+      }].sort((a, b) => a.date.localeCompare(b.date));
+
+      newHolidayDate.value = "";
+      newHolidayName.value = "";
+    }
+  });
+
+  const removeHoliday = $((dateToRemove: string) => {
+    store.holidays = store.holidays.filter((h) => h.date !== dateToRemove);
+  });
+
+  const formatHolidayDate = $((dateStr: string) => {
+    try {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      return new Intl.DateTimeFormat('es-AR', {
+        day: '2-digit',
+        month: 'short',
+        weekday: 'short'
+      }).format(date);
+    } catch {
+      return dateStr;
+    }
+  });
+
   return (
     <Form action={saveAction} class="space-y-8">
       <header class="flex flex-wrap justify-between items-center gap-4 mb-2">
         <div>
           <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Perfil del Complejo</h1>
-          <p class="text-slate-500 mt-1 font-medium">Administra la información básica y horarios de atención.</p>
+          <p class="text-slate-500 mt-1 font-medium">Administra la información básica, horarios y feriados del complejo.</p>
         </div>
         <Button
           type="submit"
@@ -156,8 +196,9 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
       <div class="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
         <input type="hidden" name="operatingHours" value={JSON.stringify(store.operatingHours)} />
         <input type="hidden" name="services" value={JSON.stringify(store.services)} />
+        <input type="hidden" name="holidays" value={JSON.stringify(store.holidays)} />
 
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-12">
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-8">
           {/* Basic Data */}
           <div class="space-y-6">
             <h3 class="text-lg font-bold text-emerald-600 mb-4 uppercase tracking-wider text-sm">Datos Básicos</h3>
@@ -322,6 +363,68 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
               {store.services.length === 0 && (
                 <div class="text-center text-slate-400 italic text-sm py-8 border-2 border-dashed border-slate-100 rounded-2xl">
                   No hay servicios añadidos aún.
+                </div>
+              )}
+            </ul>
+          </div>
+
+          {/* Holidays */}
+          <div class="space-y-6 flex flex-col h-full">
+            <h3 class="text-lg font-bold text-emerald-600 mb-4 uppercase tracking-wider text-sm">Feriados del Año</h3>
+            <p class="text-xs text-slate-500 mb-4 font-medium">Registra días festivos no laborables para aplicar automáticamente las tarifas y horarios de feriados.</p>
+
+            <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <div>
+                <label class="block text-xs font-black text-slate-700 mb-1">Fecha del Feriado</label>
+                <input
+                  type="date"
+                  bind:value={newHolidayDate}
+                  class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-black text-slate-700 mb-1">Nombre / Descripción</label>
+                <input
+                  type="text"
+                  bind:value={newHolidayName}
+                  onKeyDown$={(e) => e.key === 'Enter' && (e.preventDefault(), addHoliday())}
+                  placeholder="Ej: Día de la Independencia"
+                  class="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-sm"
+                />
+              </div>
+              <Button
+                type="button"
+                onClick$={addHoliday}
+                look="primary"
+                class="w-full rounded-xl py-2.5 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+              >
+                <LuPlus class="w-4 h-4" />
+                Agregar Feriado
+              </Button>
+            </div>
+
+            <ul class="space-y-2 mt-4 max-h-[360px] overflow-y-auto pr-2 flex-1">
+              {store.holidays.map((h, index) => (
+                <li key={index} class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-start justify-between gap-2 transition-all hover:border-emerald-200">
+                  <div class="space-y-1">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 uppercase tracking-wider">
+                      <LuCalendar class="w-3.5 h-3.5" />
+                      {formatHolidayDate(h.date)}
+                    </span>
+                    <h4 class="font-bold text-slate-700 text-sm leading-tight pt-1">{h.name}</h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick$={() => removeHoliday(h.date)}
+                    class="text-slate-400 hover:text-red-500 transition-colors p-1 self-center"
+                  >
+                    <LuTrash2 class="w-4 h-4" />
+                  </button>
+                </li>
+              ))}
+              {store.holidays.length === 0 && (
+                <div class="text-center text-slate-400 italic text-sm py-8 border-2 border-dashed border-slate-100 rounded-2xl">
+                  No hay feriados registrados aún.
                 </div>
               )}
             </ul>

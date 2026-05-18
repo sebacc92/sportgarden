@@ -59,6 +59,9 @@ export const bookings = sqliteTable("bookings", {
   })
     .notNull()
     .default("PENDING_APPROVAL"),
+  bookingType: text("booking_type", { 
+    enum: ["EVENTUAL", "FIXED", "BIRTHDAY", "TOURNAMENT", "SCHOOL"] 
+  }).notNull().default("EVENTUAL"),
   totalPrice: real("total_price").notNull(),
   paidAmount: real("paid_amount").notNull().default(0),
   paymentStatus: text("payment_status", {
@@ -128,6 +131,7 @@ export const siteSettings = sqliteTable('site_settings', {
   schoolCategories: text('school_categories', { mode: 'json' }), // array of { id: string, name: string, teacher: string }
   paymentMethods: text('payment_methods', { mode: 'json' }), // array of { id: string, name: string, isActive: boolean }
   movementCategories: text('movement_categories', { mode: 'json' }), // array of { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }
+  holidays: text('holidays', { mode: 'json' }), // array of { date: string, name: string }
   
   updatedAt: integer('updated_at', { mode: 'timestamp' }),
 });

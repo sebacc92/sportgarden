@@ -14,6 +14,7 @@ type BookingEntry = {
     paidAmount: number;
     paymentStatus: string;
     isSubscription: boolean;
+    bookingType?: string;
   };
   user: { id: string; name: string; phone: string | null } | null;
   guest: { id: string; name: string; phone: string } | null;
@@ -29,6 +30,14 @@ type Props = {
   onEmptySlotDragEnd$?: PropFunction<(pitchId: string, time: string, durationMin: number) => void>;
 };
 
+const ALL_TYPES = [
+  { key: "EVENTUAL", label: "Eventual", dot: "bg-blue-500", chip: "bg-blue-50 text-blue-800 border-blue-200", active: "bg-blue-500 text-white border-blue-600" },
+  { key: "FIXED", label: "Fijo", dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-800 border-emerald-200", active: "bg-emerald-500 text-white border-emerald-600" },
+  { key: "BIRTHDAY", label: "Cumpleaños", dot: "bg-violet-500", chip: "bg-violet-50 text-violet-800 border-violet-200", active: "bg-violet-500 text-white border-violet-600" },
+  { key: "SCHOOL", label: "Escuelita", dot: "bg-orange-500", chip: "bg-orange-50 text-orange-800 border-orange-200", active: "bg-orange-500 text-white border-orange-600" },
+  { key: "TOURNAMENT", label: "Torneo", dot: "bg-pink-500", chip: "bg-pink-50 text-pink-800 border-pink-200", active: "bg-pink-500 text-white border-pink-600" },
+] as const;
+
 const ALL_STATUSES = [
   { key: "CONFIRMED", label: "Confirmado", dot: "bg-emerald-500", chip: "bg-emerald-100 text-emerald-800 border-emerald-300", active: "bg-emerald-500 text-white border-emerald-600" },
   { key: "PENDING_APPROVAL", label: "Pendiente", dot: "bg-amber-400", chip: "bg-amber-100 text-amber-800 border-amber-300", active: "bg-amber-400 text-white border-amber-500" },
@@ -36,17 +45,26 @@ const ALL_STATUSES = [
   { key: "COMPLETED", label: "Completado", dot: "bg-slate-400", chip: "bg-slate-100 text-slate-700 border-slate-300", active: "bg-slate-600 text-white border-slate-700" },
 ] as const;
 
-const STATUS_CARD: Record<string, string> = {
-  PENDING_APPROVAL: "bg-amber-50 border-amber-200 text-amber-900",
-  CONFIRMED: "bg-emerald-50 border-emerald-200 text-emerald-900",
-  CANCELLED: "bg-red-50 border-red-200 text-red-900",
-  COMPLETED: "bg-slate-50 border-slate-200 text-slate-700",
+const STATUS_ACTIVE_STYLE: Record<string, { bg: string; text: string; border: string }> = {
+  CONFIRMED: { bg: "#10b981", text: "#fff", border: "#059669" },
+  PENDING_APPROVAL: { bg: "#fbbf24", text: "#fff", border: "#f59e0b" },
+  CANCELLED: { bg: "#ef4444", text: "#fff", border: "#dc2626" },
+  COMPLETED: { bg: "#475569", text: "#fff", border: "#334155" },
 };
-const STATUS_LABEL: Record<string, string> = {
-  PENDING_APPROVAL: "Pendiente",
-  CONFIRMED: "Confirmado",
-  CANCELLED: "Cancelado",
-  COMPLETED: "Completado",
+
+const TYPE_CARD: Record<string, string> = {
+  EVENTUAL: "bg-blue-50 border-l-blue-500 border-y-blue-200 border-r-blue-200 text-blue-900 shadow-blue-900/5",
+  FIXED: "bg-emerald-50 border-l-emerald-500 border-y-emerald-200 border-r-emerald-200 text-emerald-900 shadow-emerald-900/5",
+  BIRTHDAY: "bg-violet-50 border-l-violet-500 border-y-violet-200 border-r-violet-200 text-violet-900 shadow-violet-900/5",
+  TOURNAMENT: "bg-pink-50 border-l-pink-500 border-y-pink-200 border-r-pink-200 text-pink-900 shadow-pink-900/5",
+  SCHOOL: "bg-orange-50 border-l-orange-500 border-y-orange-200 border-r-orange-200 text-orange-900 shadow-orange-900/5",
+};
+
+const STATUS_CARD: Record<string, string> = {
+  PENDING_APPROVAL: "bg-amber-50 border-l-amber-500 border-y-amber-200 border-r-amber-200 text-amber-900",
+  CONFIRMED: "bg-emerald-50 border-l-emerald-500 border-y-emerald-200 border-r-emerald-200 text-emerald-900",
+  CANCELLED: "bg-red-50 border-l-red-500 border-y-red-200 border-r-red-200 text-red-900",
+  COMPLETED: "bg-slate-50 border-l-slate-500 border-y-slate-200 border-r-slate-200 text-slate-700",
 };
 
 const SLOT_MIN_WIDTH_PX = 110;
@@ -55,6 +73,7 @@ const PITCH_COL_WIDTH_PX = 148;
 export const BookingTimelineView = component$<Props>(
   ({ pitches, bookings, startHour = 7, endHour = 23, slotMinutes = 60, onBookingClick$, onEmptySlotDragEnd$ }) => {
 
+    const activeTypes = useSignal<Set<string>>(new Set(ALL_TYPES.map(s => s.key)));
     const activeStatuses = useSignal<Set<string>>(new Set(ALL_STATUSES.map(s => s.key)));
     const currentTimePx = useSignal<number | null>(null);
     const scrollRef = useSignal<HTMLElement>();
@@ -97,7 +116,19 @@ export const BookingTimelineView = component$<Props>(
       cleanup(() => clearInterval(id));
     });
 
-    // Toggle a status filter
+    // Toggle a type filter
+    const toggleType = $((key: string) => {
+      const next = new Set(activeTypes.value);
+      if (next.has(key) && next.size === 1) {
+        ALL_TYPES.forEach(s => next.add(s.key));
+      } else if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      activeTypes.value = next;
+    });
+
     const toggleStatus = $((key: string) => {
       const next = new Set(activeStatuses.value);
       if (next.has(key) && next.size === 1) {
@@ -112,7 +143,10 @@ export const BookingTimelineView = component$<Props>(
 
     // Filtered bookings
     const visibleBookings = useComputed$(() =>
-      bookings.filter(b => activeStatuses.value.has(b.booking.status))
+      bookings.filter(b => {
+        const type = b.booking.bookingType || (b.booking.isSubscription ? "FIXED" : "EVENTUAL");
+        return activeTypes.value.has(type) && activeStatuses.value.has(b.booking.status);
+      })
     );
 
     const fmt = (d: Date) =>
@@ -134,42 +168,68 @@ export const BookingTimelineView = component$<Props>(
         }}
       >
 
-        {/* ── Status filter chips ── */}
+        {/* ── Type filter chips ── */}
         <div class="flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50 shrink-0 flex-wrap">
-          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Filtrar:</span>
+          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Reservas:</span>
 
           <button
-            onClick$={() => { activeStatuses.value = new Set(ALL_STATUSES.map(s => s.key)); }}
+            onClick$={() => { activeTypes.value = new Set(ALL_TYPES.map(s => s.key)); }}
             class={[
               "px-3 py-1 rounded-full text-[11px] font-black border transition-all",
-              activeStatuses.value.size === ALL_STATUSES.length
+              activeTypes.value.size === ALL_TYPES.length
                 ? "bg-slate-800 text-white border-slate-900"
                 : "bg-white text-slate-500 border-slate-300 hover:border-slate-500",
             ]}
           >
-            Todos
+            Todas
           </button>
 
+          {ALL_TYPES.map(t => {
+            const isActive = activeTypes.value.has(t.key);
+            return (
+              <button
+                key={t.key}
+                onClick$={() => toggleType(t.key)}
+                class={[
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black border transition-all",
+                  isActive ? t.active : t.chip,
+                  isActive ? "" : "opacity-50",
+                ]}
+              >
+                <span class={["w-2 h-2 rounded-full shrink-0", isActive ? "bg-white/80" : t.dot]} />
+                {t.label}
+              </button>
+            );
+          })}
+
+          <div class="h-4 w-px bg-slate-200 mx-2"></div>
+
+          <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1">Estados:</span>
           {ALL_STATUSES.map(s => {
             const isActive = activeStatuses.value.has(s.key);
+            const activeStyle = STATUS_ACTIVE_STYLE[s.key];
             return (
               <button
                 key={s.key}
                 onClick$={() => toggleStatus(s.key)}
-                class={[
+                class={cn(
                   "flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-black border transition-all",
-                  isActive ? s.active : s.chip,
-                  isActive ? "" : "opacity-50",
-                ]}
+                  !isActive && s.chip,
+                  !isActive && "opacity-60",
+                )}
+                style={isActive ? { backgroundColor: activeStyle.bg, color: activeStyle.text, borderColor: activeStyle.border } : undefined}
               >
-                <span class={["w-2 h-2 rounded-full shrink-0", isActive ? "bg-white/80" : s.dot]} />
+                <span
+                  class={cn("w-2 h-2 rounded-full shrink-0", !isActive && s.dot)}
+                  style={isActive ? { backgroundColor: "rgba(255,255,255,0.7)" } : undefined}
+                />
                 {s.label}
               </button>
             );
           })}
 
           <div class="ml-auto text-xs text-slate-400 font-bold">
-            <span class="text-slate-700 font-black">{visibleBookings.value.length}</span> de {bookings.length} reservas
+            <span class="text-slate-700 font-black">{visibleBookings.value.length}</span> de {bookings.length}
           </div>
         </div>
 
@@ -329,8 +389,8 @@ export const BookingTimelineView = component$<Props>(
                                   height: 'calc(100% - 16px)'
                                 }}
                                 class={[
-                                  "absolute z-20 rounded-xl border-l-4 px-3 py-2 cursor-pointer transition-all overflow-hidden flex flex-col justify-between group shadow-sm hover:z-30 hover:scale-[1.02] hover:shadow-xl",
-                                  STATUS_CARD[booking.status] || "bg-white border-slate-200"
+                                  "absolute z-20 rounded-xl border-l-4 border-y border-r px-3 py-2 cursor-pointer transition-all overflow-hidden flex flex-col justify-between group shadow-sm hover:z-30 hover:scale-[1.02] hover:shadow-xl",
+                                  booking.bookingType ? TYPE_CARD[booking.bookingType] : (isSubscription ? TYPE_CARD["FIXED"] : (STATUS_CARD[booking.status] || "bg-white border-slate-200"))
                                 ]}
                               >
                                 <div class="flex flex-col gap-0.5">
@@ -349,9 +409,15 @@ export const BookingTimelineView = component$<Props>(
                                 </div>
 
                                 <div class="flex items-end justify-between mt-auto pt-1 gap-2">
-                                  <div class="text-[9px] font-black opacity-40 uppercase tracking-widest px-1.5 py-0.5 bg-black/5 rounded">
-                                    {STATUS_LABEL[booking.status]}
-                                  </div>
+                                  {(() => {
+                                    const st = ALL_STATUSES.find(s => s.key === booking.status);
+                                    return st ? (
+                                      <div class={["flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-black uppercase tracking-widest", st.chip]}>
+                                        <span class={["w-1.5 h-1.5 rounded-full shrink-0", st.dot]} />
+                                        {st.label}
+                                      </div>
+                                    ) : null;
+                                  })()}
                                   <div class="text-xs font-black text-right shrink-0 text-slate-800">
                                     ${booking.totalPrice.toLocaleString('es-AR')}
                                   </div>

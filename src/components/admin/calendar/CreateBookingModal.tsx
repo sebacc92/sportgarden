@@ -15,6 +15,7 @@ interface CreateBookingModalProps {
   adminFormTime: Signal<string>;
   adminFormDuration: Signal<string>;
   adminIsSubscription: Signal<boolean>;
+  adminBookingType: Signal<"EVENTUAL" | "FIXED" | "BIRTHDAY" | "TOURNAMENT" | "SCHOOL">;
   adminEndDate: Signal<string>;
   adminNotes: Signal<string>;
   adminOccupiedSlots: Signal<{ startTime: string; endTime: string }[]>;
@@ -45,6 +46,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
     adminFormTime,
     adminFormDuration,
     adminIsSubscription,
+    adminBookingType,
     adminEndDate,
     adminNotes,
     adminOccupiedSlots,
@@ -102,7 +104,9 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
     
     if (adminFormDate.value && calendarData.settings?.operatingHours) {
       const selectedDate = new Date(`${adminFormDate.value}T12:00:00`);
-      const dayOfWeek = selectedDate.getDay();
+      const holidays = (calendarData.settings?.holidays as any[]) || [];
+      const isHoliday = holidays.some((h: any) => h.date === adminFormDate.value);
+      const dayOfWeek = isHoliday ? 7 : selectedDate.getDay();
       
       let operatingHours = [];
       try {
@@ -111,7 +115,9 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
         } else if (Array.isArray(calendarData.settings.operatingHours)) {
           operatingHours = calendarData.settings.operatingHours;
         }
-      } catch (e) {}
+      } catch {
+        // Safe fallback
+      }
 
       const todaySchedule = operatingHours.find((h: any) => h.day === dayOfWeek);
       if (todaySchedule && !todaySchedule.isClosed) {
@@ -203,12 +209,14 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
               const schedules = JSON.parse(subscriptionSchedulesJSON.value);
               basePrice = schedules.reduce((acc: number, s: any) => acc + s.price, 0);
             } else if (pitch) {
+              const holidays = (calendarData.settings?.holidays as any[])?.map((h: any) => h.date) || [];
               basePrice = calculateProportionalPrice(
                 dateStr,
                 adminFormTime.value,
                 parseInt(adminFormDuration.value),
                 pitch.pricePerHour,
-                pitch.pricingRules || []
+                pitch.pricingRules || [],
+                holidays
               );
             }
 
@@ -404,18 +412,35 @@ export const CreateBookingModal = component$<CreateBookingModalProps>((props) =>
                       </h3>
 
                       <div class="pt-2">
-                        <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Tipo de Turno</label>
-                        <div class="flex gap-4">
-                          <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 transition-colors">
-                            <input type="radio" name="isSubscriptionDisplay" checked={!adminIsSubscription.value} onChange$={() => adminIsSubscription.value = false} class="w-4 h-4 accent-blue-600 cursor-pointer" />
-                            <span class="text-sm font-bold text-slate-700">Turno Eventual</span>
-                          </label>
-                          <label class="flex-1 flex items-center gap-2 cursor-pointer bg-slate-50 px-4 py-3 rounded-xl border border-slate-200 hover:bg-blue-50 hover:border-blue-200 transition-colors">
-                            <input type="radio" name="isSubscriptionDisplay" checked={adminIsSubscription.value} onChange$={() => adminIsSubscription.value = true} class="w-4 h-4 accent-blue-600 cursor-pointer" />
-                            <span class="text-sm font-bold text-slate-700">Turno Fijo</span>
-                          </label>
-                          <input type="hidden" name="isSubscription" value={adminIsSubscription.value ? "true" : "false"} />
+                        <label class="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Categoría de Reserva</label>
+                        <div class="flex flex-wrap gap-2">
+                          {[
+                            { id: "EVENTUAL", label: "Eventual", color: "blue", class: "bg-blue-500 border-blue-500 shadow-blue-500/20" },
+                            { id: "FIXED", label: "Fijo", color: "emerald", class: "bg-emerald-500 border-emerald-500 shadow-emerald-500/20" },
+                            { id: "BIRTHDAY", label: "Cumple", color: "violet", class: "bg-violet-500 border-violet-500 shadow-violet-500/20" },
+                            { id: "SCHOOL", label: "Escuelita", color: "orange", class: "bg-orange-500 border-orange-500 shadow-orange-500/20" },
+                            { id: "TOURNAMENT", label: "Torneo", color: "pink", class: "bg-pink-500 border-pink-500 shadow-pink-500/20" },
+                          ].map((type) => (
+                            <button
+                              key={type.id}
+                              type="button"
+                              onClick$={() => {
+                                adminBookingType.value = type.id as any;
+                                adminIsSubscription.value = type.id === "FIXED" || type.id === "SCHOOL";
+                              }}
+                              class={cn(
+                                "px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
+                                adminBookingType.value === type.id
+                                  ? `text-white ${type.class} shadow-lg`
+                                  : "bg-white text-slate-400 border-slate-200 hover:border-slate-300"
+                              )}
+                            >
+                              {type.label}
+                            </button>
+                          ))}
                         </div>
+                        <input type="hidden" name="bookingType" value={adminBookingType.value} />
+                        <input type="hidden" name="isSubscription" value={adminIsSubscription.value ? "true" : "false"} />
                       </div>
 
                       {!adminIsSubscription.value && (

@@ -271,7 +271,9 @@ export const useCreateAdminBookingAction = routeAction$(
         const bookingId = i === 0 ? firstBookingId : crypto.randomUUID();
 
         // Validate operating hours
-        const dayOfWeek = startDateTime.getDay();
+        const holidaysList = (settings?.holidays as any[]) || [];
+        const isHoliday = holidaysList.some((h: any) => h.date === item.date);
+        const dayOfWeek = isHoliday ? 7 : startDateTime.getDay();
         const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
 
         if (!schedule || schedule.isClosed) {
@@ -316,6 +318,7 @@ export const useCreateAdminBookingAction = routeAction$(
           paymentStatus: i === 0 ? (data.paymentStatus || ((Number(data.paidAmount) || 0) >= Number(data.price) ? "PAID" : (Number(data.paidAmount) || 0) > 0 ? "PARTIAL" : "PENDING")) : "PENDING",
           paymentMethod: data.paymentMethod as any,
           isSubscription: data.isSubscription,
+          bookingType: data.bookingType || (data.isSubscription ? "FIXED" : "EVENTUAL"),
           notes: data.notes || null,
           extras: data.extras ? JSON.parse(data.extras) : null,
         });
@@ -393,6 +396,7 @@ export const useCreateAdminBookingAction = routeAction$(
     notes: z.string().optional(),
     extras: z.string().optional(),
     isSubscription: z.coerce.boolean().optional(),
+    bookingType: z.enum(["EVENTUAL", "FIXED", "BIRTHDAY", "TOURNAMENT", "SCHOOL"]).optional(),
     subscriptionSchedules: z.string().optional(),
     endDate: z.string().optional(),
   })
@@ -551,6 +555,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
           paidAmount: bookings.paidAmount,
           paymentStatus: bookings.paymentStatus,
           isSubscription: bookings.isSubscription,
+          bookingType: bookings.bookingType,
         },
         user: {
           id: users.id,
@@ -610,6 +615,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
                     paidAmount: 0,
                     paymentStatus: "PAID",
                     isSubscription: true,
+                    bookingType: "SCHOOL",
                     isSchool: true, // Identify as school for UI
                   },
                   user: {
@@ -669,6 +675,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
       galleryImages: (settings.galleryImages || []) as string[],
       schoolCategories: (settings.schoolCategories || []) as any[],
       paymentMethods: (settings.paymentMethods || []) as { id: string, name: string, isActive: boolean }[],
+      holidays: (settings.holidays || []) as any[],
     } : null,
     openRegister: openRegister ? {
       id: openRegister.id,
@@ -752,7 +759,6 @@ export default component$(() => {
 
   const clubSettings = calendarData.value.settings;
   const selectedDateBA = new Date(calendarData.value.selectedDateStr + "T12:00:00");
-  const dayOfWeek = selectedDateBA.getDay();
 
   const operatingHours = (() => {
     try {
@@ -761,6 +767,9 @@ export default component$(() => {
       return [];
     } catch { return []; }
   })();
+
+  const isHoliday = (clubSettings as any)?.holidays?.some((h: any) => h.date === calendarData.value.selectedDateStr);
+  const dayOfWeek = isHoliday ? 7 : selectedDateBA.getDay();
 
   const todaySchedule = operatingHours.find((h: any) => h.day === dayOfWeek);
 
@@ -794,6 +803,7 @@ export default component$(() => {
   const adminFormTime = useSignal("");
   const adminFormDuration = useSignal("60");
   const adminIsSubscription = useSignal(false);
+  const adminBookingType = useSignal<"EVENTUAL" | "FIXED" | "BIRTHDAY" | "TOURNAMENT" | "SCHOOL">("EVENTUAL");
   const adminEndDate = useSignal("");
   const adminNotes = useSignal("");
   const adminOccupiedSlots = useSignal<{ startTime: string; endTime: string }[]>([]);
@@ -1145,6 +1155,7 @@ export default component$(() => {
         adminFormTime={adminFormTime}
         adminFormDuration={adminFormDuration}
         adminIsSubscription={adminIsSubscription}
+        adminBookingType={adminBookingType}
         adminEndDate={adminEndDate}
         adminNotes={adminNotes}
         adminOccupiedSlots={adminOccupiedSlots}

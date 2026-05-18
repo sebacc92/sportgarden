@@ -152,6 +152,7 @@ export const CalendarWeekView = component$<CalendarWeekViewProps>((props) => {
                       customerPhone={customerPhone}
                       pitchName={pitchName}
                       isSubscription={booking.isSubscription}
+                      bookingType={booking.bookingType}
                       calendarStartHour={calendarStartHour}
                       pixelsPerHour={pixelsPerHour}
                       onClick$={onBookingClick$}
