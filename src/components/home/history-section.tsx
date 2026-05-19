@@ -1,10 +1,13 @@
 import { component$ } from "@builder.io/qwik";
+import gardenLogo from "~/media/garden-logo-transparente.png";
 
 export const HistorySection = component$(() => {
+  const yearsOfPassion = new Date().getFullYear() - 1997;
+
   return (
-    <section id="historia" class="relative z-20 bg-slate-950 py-24">
+    <section id="historia" class="relative z-20 bg-[#001407] py-24">
       <div class="mx-auto max-w-7xl px-6 lg:px-8">
-        <div class="grid items-center gap-16 lg:grid-cols-2">
+        <div class="grid items-start gap-16 lg:grid-cols-2">
           <div class="space-y-8">
             <h2 class="text-4xl font-black tracking-tighter text-white uppercase md:text-5xl">
               Nuestra <span class="text-emerald-400">Historia</span>
@@ -32,24 +35,31 @@ export const HistorySection = component$(() => {
                 </div>
               </div>
               <div>
-                <div class="mb-2 text-4xl font-black text-emerald-400">5</div>
+                <div class="mb-2 text-4xl font-black text-emerald-400">
+                  {yearsOfPassion}
+                </div>
                 <div class="text-sm font-bold tracking-widest text-slate-500 uppercase">
                   Años de Pasión
                 </div>
               </div>
             </div>
           </div>
-          <div class="relative">
-            <div class="relative z-10 aspect-square overflow-hidden rounded-3xl border border-white/10 bg-slate-900">
-              <img
-                src="/slider1.png"
-                alt="GardenClubFutbol Historia"
-                width={600}
-                height={600}
-                class="h-full w-full object-cover mix-blend-luminosity transition-all duration-700 hover:mix-blend-normal"
-              />
+          <div class="flex flex-col items-center justify-center pt-2 md:pt-4">
+            <div class="mb-8 text-center text-base font-light tracking-[0.25em] text-[#F5F2EB] uppercase sm:text-lg md:text-xl lg:text-2xl select-none">
+              BARRIO <span class="text-[#F5F2EB]/40 font-extralight mx-3 md:mx-4">|</span> FÚTBOL <span class="text-[#F5F2EB]/40 font-extralight mx-3 md:mx-4">|</span> AMIGOS
             </div>
-            <div class="absolute -inset-4 -z-10 rounded-full bg-emerald-500/20 blur-3xl" />
+            <div class="relative flex items-center justify-center">
+              <div class="relative z-10 w-full max-w-[420px]">
+                <img
+                  src={gardenLogo}
+                  alt="GardenClubFutbol Logo"
+                  width={420}
+                  height={420}
+                  class="h-auto w-full object-contain rounded-3xl transition-transform duration-700 hover:scale-102"
+                />
+              </div>
+              <div class="absolute -inset-4 -z-10 rounded-full bg-emerald-500/10 blur-3xl animate-pulse" />
+            </div>
           </div>
         </div>
       </div>

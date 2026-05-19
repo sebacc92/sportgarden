@@ -59,7 +59,7 @@ export default component$(() => {
   });
 
   return (
-    <div class="min-h-screen bg-slate-950 pb-20 font-sans text-white selection:bg-emerald-500 selection:text-white">
+    <div class="min-h-screen bg-slate-950 pb-0 font-sans text-white selection:bg-emerald-500 selection:text-white">
       <HomeNavbar
         user={user.value}
         showGalleryLink={gallery.value.length > 0}
@@ -70,16 +70,11 @@ export default component$(() => {
 
       <HistorySection />
 
-      <SectionDivider topColor="bg-slate-950" bottomColor="bg-[#F5F2EB]" />
+      <SectionDivider topColor="bg-[#001407]" bottomColor="bg-[#F5F2EB]" />
 
       <PitchesGrid
         pitches={activePitches.value}
         onReserve={openBookingModal}
-        theme="light"
-      />
-
-      <SchoolSection
-        categories={aiSettings.value?.schoolCategories || []}
         theme="light"
       />
 
@@ -88,6 +83,11 @@ export default component$(() => {
         bottomColor="bg-slate-950"
         flip={true}
         invert={true}
+      />
+
+      <SchoolSection
+        categories={aiSettings.value?.schoolCategories || []}
+        theme="dark"
       />
 
       <GallerySection images={gallery.value} />
@@ -112,7 +112,7 @@ export default component$(() => {
       )}
 
       <WhatsAppButton
-        phone={aiSettings.value?.whatsappNumber || "5491112345678"}
+        phone={aiSettings.value?.clubPhone || aiSettings.value?.whatsappNumber || "5491112345678"}
       />
 
       <HomeBookingModal
@@ -126,7 +126,7 @@ export default component$(() => {
         userAction={userAction}
       />
 
-      <HomeFooter />
+      <HomeFooter settings={aiSettings.value ?? {}} />
     </div>
   );
 });

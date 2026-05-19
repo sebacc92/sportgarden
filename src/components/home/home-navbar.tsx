@@ -1,5 +1,8 @@
-import { component$ } from "@builder.io/qwik";
+import { component$, useSignal, useStylesScoped$ } from "@builder.io/qwik";
 import { Link } from "@builder.io/qwik-city";
+
+import logoMobile from "~/media/logo-mobile.png";
+import logoDesktop from "~/media/logo.png";
 
 export type HomeNavbarUser =
   | {
@@ -19,18 +22,46 @@ type HomeNavbarProps = {
 
 export const HomeNavbar = component$<HomeNavbarProps>(
   ({ user, showGalleryLink, showSchoolLink }) => {
+    const isMobileMenuOpen = useSignal(false);
+
+    useStylesScoped$(`
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .animate-fade-in-down {
+        animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+    `);
+
     return (
       <nav class="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#001407]">
         <div class="mx-auto flex h-28 max-w-7xl items-center justify-between px-6 lg:px-8">
           <Link href="/" class="group flex shrink-0 items-center py-1">
-            <div class="text-2xl font-black tracking-tighter text-white uppercase transition-colors group-hover:text-emerald-400 sm:text-3xl">
-              Sport
-              <span class="text-emerald-400 transition-colors group-hover:text-white">
-                Garden
-              </span>
-            </div>
+            <img
+              src={logoMobile}
+              alt="Sport Garden"
+              width={160}
+              height={160}
+              class="h-16 w-auto object-contain transition-all duration-300 hover:scale-105 lg:hidden"
+            />
+            <img
+              src={logoDesktop}
+              alt="Sport Garden"
+              width={260}
+              height={80}
+              class="hidden h-20 w-auto object-contain transition-all duration-300 hover:scale-105 lg:block"
+            />
           </Link>
-          <div class="hidden min-w-0 items-center gap-8 text-sm font-medium text-slate-200 md:flex">
+          
+          {/* Desktop Menu */}
+          <div class="hidden min-w-0 items-center gap-10 text-[16px] font-bold tracking-wide text-slate-200 lg:flex">
             <a
               href="#historia"
               class="transition-colors hover:text-emerald-400"
@@ -174,7 +205,149 @@ export const HomeNavbar = component$<HomeNavbarProps>(
               Reservar
             </a>
           </div>
+
+          {/* Hamburger button (Mobile Only) */}
+          <button
+            onClick$={() => {
+              isMobileMenuOpen.value = !isMobileMenuOpen.value;
+            }}
+            class="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-200 transition-all hover:bg-white/10 hover:text-white active:scale-95 lg:hidden"
+            aria-label="Abrir menú"
+          >
+            {isMobileMenuOpen.value ? (
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
         </div>
+
+        {/* Mobile Menu Dropdown (Glassmorphism Slide Down) */}
+        {isMobileMenuOpen.value && (
+          <div class="animate-fade-in-down fixed inset-x-0 top-28 z-40 h-[calc(100vh-7rem)] overflow-y-auto border-t border-white/10 bg-[#001407]/95 backdrop-blur-xl lg:hidden">
+            <div class="flex flex-col gap-5 px-6 py-8">
+              <a
+                href="#historia"
+                onClick$={() => {
+                  isMobileMenuOpen.value = false;
+                }}
+                class="rounded-xl px-4 py-3 text-lg font-bold tracking-wider text-slate-200 transition-colors hover:bg-white/5 hover:text-emerald-400 border-b border-white/5"
+              >
+                Historia
+              </a>
+              <a
+                href="#canchas"
+                onClick$={() => {
+                  isMobileMenuOpen.value = false;
+                }}
+                class="rounded-xl px-4 py-3 text-lg font-bold tracking-wider text-slate-200 transition-colors hover:bg-white/5 hover:text-emerald-400 border-b border-white/5"
+              >
+                Canchas
+              </a>
+              {showSchoolLink && (
+                <a
+                  href="#escuelita"
+                  onClick$={() => {
+                    isMobileMenuOpen.value = false;
+                  }}
+                  class="rounded-xl px-4 py-3 text-lg font-bold tracking-wider text-slate-200 transition-colors hover:bg-white/5 hover:text-emerald-400 border-b border-white/5"
+                >
+                  Escuelita
+                </a>
+              )}
+              {showGalleryLink && (
+                <a
+                  href="#galeria"
+                  onClick$={() => {
+                    isMobileMenuOpen.value = false;
+                  }}
+                  class="rounded-xl px-4 py-3 text-lg font-bold tracking-wider text-slate-200 transition-colors hover:bg-white/5 hover:text-emerald-400 border-b border-white/5"
+                >
+                  Galería
+                </a>
+              )}
+              <a
+                href="#contacto"
+                onClick$={() => {
+                  isMobileMenuOpen.value = false;
+                }}
+                class="rounded-xl px-4 py-3 text-lg font-bold tracking-wider text-slate-200 transition-colors hover:bg-white/5 hover:text-emerald-400 border-b border-white/5"
+              >
+                Contacto
+              </a>
+
+              {(user?.role === "DEV" ||
+                user?.role === "OWNER" ||
+                user?.role === "MANAGER" ||
+                user?.role === "EMPLOYEE") && (
+                <a
+                  href="/admin/calendar"
+                  onClick$={() => {
+                    isMobileMenuOpen.value = false;
+                  }}
+                  class="mx-auto flex w-full max-w-xs items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/30 px-6 py-3 text-base font-bold text-emerald-400 transition-all hover:bg-emerald-500/30"
+                >
+                  Panel Admin
+                </a>
+              )}
+
+              {user ? (
+                <div class="flex flex-col gap-4 border-t border-white/10 pt-6">
+                  <div class="px-4 text-center">
+                    <p class="text-xs font-bold tracking-widest text-slate-400 uppercase">
+                      Sesión activa
+                    </p>
+                    <p class="truncate text-sm font-bold text-white">{user.name}</p>
+                  </div>
+                  <Link
+                    href="/cuenta"
+                    onClick$={() => {
+                      isMobileMenuOpen.value = false;
+                    }}
+                    class="mx-auto flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-6 py-3 text-base font-bold text-white transition-all hover:bg-white/10"
+                  >
+                    Mis Reservas
+                  </Link>
+                  <form method="POST" action="/api/auth/logout" class="mx-auto w-full max-w-xs">
+                    <button
+                      type="submit"
+                      onClick$={() => {
+                        isMobileMenuOpen.value = false;
+                      }}
+                      class="flex w-full items-center justify-center gap-2 rounded-full bg-red-500/10 border border-red-500/30 px-6 py-3 text-base font-bold text-red-400 transition-all hover:bg-red-500/20"
+                    >
+                      Cerrar sesión
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  onClick$={() => {
+                    isMobileMenuOpen.value = false;
+                  }}
+                  class="mx-auto flex w-full max-w-xs items-center justify-center rounded-full border border-white/20 bg-white/5 px-6 py-3 text-base font-bold text-white transition-all hover:bg-white/10"
+                >
+                  Iniciar Sesión
+                </Link>
+              )}
+
+              <a
+                href="#canchas"
+                onClick$={() => {
+                  isMobileMenuOpen.value = false;
+                }}
+                class="mx-auto mt-4 flex w-full max-w-xs items-center justify-center rounded-full bg-white px-8 py-3.5 text-base font-black tracking-widest text-[#001407] uppercase shadow-lg shadow-black/25 transition-all hover:bg-slate-100 hover:shadow-black/35"
+              >
+                Reservar Cancha
+              </a>
+            </div>
+          </div>
+        )}
       </nav>
     );
   },

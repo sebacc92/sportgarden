@@ -14,7 +14,13 @@ export const WhatsAppButton = component$<WhatsAppButtonProps>(
       return null;
     }
 
-    const cleanPhone = phone.replace(/\D/g, "");
+    let cleanPhone = phone.replace(/\D/g, "");
+    if (cleanPhone.length === 10) {
+      cleanPhone = "549" + cleanPhone;
+    } else if (cleanPhone.length === 11 && cleanPhone.startsWith("11")) {
+      cleanPhone = "549" + cleanPhone;
+    }
+    
     const encodedMessage = message
       ? `&text=${encodeURIComponent(message)}`
       : "";
