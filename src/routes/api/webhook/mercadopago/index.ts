@@ -19,6 +19,17 @@ if (typeof process === "undefined") {
   }
 }
 
+// Polyfill global Headers prototype for compatibility with node-fetch's raw() method
+if (typeof globalThis.Headers !== "undefined" && !(globalThis.Headers.prototype as any).raw) {
+  (globalThis.Headers.prototype as any).raw = function () {
+    const rawHeaders: Record<string, string[]> = {};
+    this.forEach((value: string, name: string) => {
+      rawHeaders[name] = value.split(",").map((v) => v.trim());
+    });
+    return rawHeaders;
+  };
+}
+
 import type { RequestHandler } from "@builder.io/qwik-city";
 import { MercadoPagoConfig, Payment } from "mercadopago";
 import { getDB } from "~/db";
