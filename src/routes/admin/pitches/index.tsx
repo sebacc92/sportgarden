@@ -1,5 +1,11 @@
 import { component$, $, useSignal } from "@builder.io/qwik";
-import { routeAction$, routeLoader$, zod$, z, useNavigate } from "@builder.io/qwik-city";
+import {
+  routeAction$,
+  routeLoader$,
+  zod$,
+  z,
+  useNavigate,
+} from "@builder.io/qwik-city";
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
 import { pitches, siteSettings } from "~/db/schema";
@@ -17,7 +23,7 @@ export const usePitchesData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   return db.query.pitches.findMany({
     orderBy: (pitches, { asc }) => [asc(pitches.name)],
-    with: { 
+    with: {
       pricingRules: true,
       overlaps: true,
       overlappedBy: true,
@@ -27,7 +33,11 @@ export const usePitchesData = routeLoader$(async (requestEvent) => {
 
 export const useSiteSettingsData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+  const [settings] = await db
+    .select()
+    .from(siteSettings)
+    .where(eq(siteSettings.id, 1))
+    .limit(1);
   return settings;
 });
 
@@ -37,11 +47,12 @@ export const useTogglePitchStatusAction = routeAction$(
     const db = getDB(requestEvent);
 
     const pitch = await db.query.pitches.findFirst({
-      where: eq(pitches.id, data.id)
+      where: eq(pitches.id, data.id),
     });
 
     if (pitch) {
-      await db.update(pitches)
+      await db
+        .update(pitches)
         .set({ isActive: !pitch.isActive })
         .where(eq(pitches.id, data.id));
     }
@@ -49,8 +60,8 @@ export const useTogglePitchStatusAction = routeAction$(
     return { success: true };
   },
   zod$({
-    id: z.string()
-  })
+    id: z.string(),
+  }),
 );
 
 export const useDeletePitchAction = routeAction$(
@@ -62,25 +73,29 @@ export const useDeletePitchAction = routeAction$(
     } catch {
       return {
         success: false,
-        message: "No se puede borrar la cancha porque tiene reservas asociadas. Prueba deshabilitándola."
+        message:
+          "No se puede borrar la cancha porque tiene reservas asociadas. Prueba deshabilitándola.",
       };
     }
   },
   zod$({
-    id: z.string()
-  })
+    id: z.string(),
+  }),
 );
 
 export const useUpdateExtraServicesAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
     const extras = JSON.parse(data.extrasJson as string) as any[];
-    await db.update(siteSettings).set({ extraServices: extras }).where(eq(siteSettings.id, 1));
+    await db
+      .update(siteSettings)
+      .set({ extraServices: extras })
+      .where(eq(siteSettings.id, 1));
     return { success: true };
   },
   zod$({
     extrasJson: z.string(),
-  })
+  }),
 );
 
 // 3. UI Orchestrator Component
@@ -110,32 +125,36 @@ export default component$(() => {
   const updateExtraServicesAction = useUpdateExtraServicesAction();
 
   return (
-    <div class="min-h-full bg-slate-50 text-slate-900 font-sans p-6 overflow-auto">
+    <div class="min-h-full overflow-auto bg-slate-50 p-6 font-sans text-slate-900">
       {/* Navigation Header */}
-      <header class="mb-8 pb-4 border-b border-slate-200 flex justify-between items-center">
+      <header class="mb-8 flex items-center justify-between border-b border-slate-200 pb-4">
         <div>
-          <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Configuración de Canchas</h1>
-          <p class="text-slate-500">Administra los precios, tipos y estados de las canchas.</p>
+          <h1 class="text-3xl font-bold tracking-tight text-slate-800">
+            Configuración de Canchas
+          </h1>
+          <p class="text-slate-500">
+            Administra los precios, tipos y estados de las canchas.
+          </p>
         </div>
         <div class="flex gap-3">
           <Button
-            onClick$={() => isExtrasModalOpen.value = true}
+            onClick$={() => (isExtrasModalOpen.value = true)}
             look="outline"
-            class="border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 px-6 py-2 rounded-xl font-bold shadow-sm"
+            class="rounded-xl border-slate-200 px-6 py-2 font-bold text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50"
           >
             Configurar Extras
           </Button>
           <Button
-            onClick$={() => isSelectionModalOpen.value = true}
+            onClick$={() => (isSelectionModalOpen.value = true)}
             look="outline"
-            class="border-red-100 text-red-600 hover:bg-red-50 hover:border-red-200 px-6 py-2 rounded-xl font-bold shadow-sm"
+            class="rounded-xl border-red-100 px-6 py-2 font-bold text-red-600 shadow-sm hover:border-red-200 hover:bg-red-50"
           >
             Borrar Cancha
           </Button>
           <Button
-            onClick$={() => nav('/admin/pitches/new')}
+            onClick$={() => nav("/admin/pitches/new")}
             look="primary"
-            class="bg-slate-800 text-white hover:bg-slate-900 px-6 py-2 rounded-xl font-bold shadow-sm transition-all hover:shadow-md"
+            class="rounded-xl bg-slate-800 px-6 py-2 font-bold text-white shadow-sm transition-all hover:bg-slate-900 hover:shadow-md"
           >
             Nueva Cancha
           </Button>
@@ -143,32 +162,74 @@ export default component$(() => {
       </header>
 
       <div class="space-y-6">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
-            <span class="w-1 h-6 bg-slate-800 rounded-full"></span>
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="flex items-center gap-2 text-xl font-bold text-slate-800">
+            <span class="h-6 w-1 rounded-full bg-slate-800"></span>
             Listado de Canchas
           </h2>
-          
-          <div class="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm shrink-0">
+
+          <div class="flex shrink-0 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
             <button
-              onClick$={() => viewMode.value = "grid"}
-              class={["p-2 rounded-lg transition-all", viewMode.value === "grid" ? "bg-slate-800 text-white shadow-md" : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"]}
+              onClick$={() => (viewMode.value = "grid")}
+              class={[
+                "rounded-lg p-2 transition-all",
+                viewMode.value === "grid"
+                  ? "bg-slate-800 text-white shadow-md"
+                  : "text-slate-400 hover:bg-slate-50 hover:text-slate-600",
+              ]}
               title="Vista Cuadrícula"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
             </button>
             <button
-              onClick$={() => viewMode.value = "list"}
-              class={["p-2 rounded-lg transition-all", viewMode.value === "list" ? "bg-slate-800 text-white shadow-md" : "text-slate-400 hover:text-slate-600 hover:bg-slate-50"]}
+              onClick$={() => (viewMode.value = "list")}
+              class={[
+                "rounded-lg p-2 transition-all",
+                viewMode.value === "list"
+                  ? "bg-slate-800 text-white shadow-md"
+                  : "text-slate-400 hover:bg-slate-50 hover:text-slate-600",
+              ]}
               title="Vista Lista"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
             </button>
           </div>
         </div>
 
         {viewMode.value === "grid" ? (
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
             {pitchesData.value.map((pitch, index) => (
               <PitchCard
                 key={pitch.id}
@@ -188,12 +249,35 @@ export default component$(() => {
         )}
 
         {pitchesData.value.length === 0 && (
-          <div class="col-span-full p-16 text-center bg-white border-2 border-dashed border-slate-200 rounded-[2rem]">
-            <div class="w-20 h-20 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-7l-2-2"></path><path d="M12 22v-7l2-2"></path><path d="M22 10a9 9 0 0 0-18 0c0 4 3 6 8 11.5 5-5.5 8-7.5 8-11.5z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+          <div class="col-span-full rounded-[2rem] border-2 border-dashed border-slate-200 bg-white p-16 text-center">
+            <div class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-slate-50 text-slate-300">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 22v-7l-2-2"></path>
+                <path d="M12 22v-7l2-2"></path>
+                <path d="M22 10a9 9 0 0 0-18 0c0 4 3 6 8 11.5 5-5.5 8-7.5 8-11.5z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+              </svg>
             </div>
-            <p class="text-slate-500 font-bold text-lg mb-6">Aún no hay canchas configuradas.</p>
-            <Button onClick$={() => nav('/admin/pitches/new')} look="primary" class="bg-slate-800 text-white px-8 py-3 rounded-2xl font-black uppercase tracking-wider">Crear mi primera cancha</Button>
+            <p class="mb-6 text-lg font-bold text-slate-500">
+              Aún no hay canchas configuradas.
+            </p>
+            <Button
+              onClick$={() => nav("/admin/pitches/new")}
+              look="primary"
+              class="rounded-2xl bg-slate-800 px-8 py-3 font-black tracking-wider text-white uppercase"
+            >
+              Crear mi primera cancha
+            </Button>
           </div>
         )}
       </div>

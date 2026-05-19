@@ -59,7 +59,7 @@ export const BookingListView = component$<BookingListViewProps>(
         .sort(
           (a, b) =>
             new Date(a.booking.startTime).getTime() -
-            new Date(b.booking.startTime).getTime()
+            new Date(b.booking.startTime).getTime(),
         );
       return { pitch, bookings: pitchBookings };
     });
@@ -67,35 +67,37 @@ export const BookingListView = component$<BookingListViewProps>(
     const totalBookings = bookings.length;
 
     return (
-      <div class="flex flex-col h-full overflow-hidden">
+      <div class="flex h-full flex-col overflow-hidden">
         {totalBookings === 0 ? (
-          <div class="flex-1 flex items-center justify-center">
-            <div class="text-center space-y-2">
+          <div class="flex flex-1 items-center justify-center">
+            <div class="space-y-2 text-center">
               <div class="text-4xl">📋</div>
-              <p class="text-slate-500 font-bold">No hay reservas para este día.</p>
+              <p class="font-bold text-slate-500">
+                No hay reservas para este día.
+              </p>
             </div>
           </div>
         ) : (
           <div class="flex-1 overflow-auto">
-            <table class="w-full text-left border-collapse">
+            <table class="w-full border-collapse text-left">
               <thead class="sticky top-0 z-10">
-                <tr class="bg-slate-50 border-b-2 border-slate-200">
-                  <th class="p-4 w-44 text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200">
+                <tr class="border-b-2 border-slate-200 bg-slate-50">
+                  <th class="w-44 border-r border-slate-200 p-4 text-[10px] font-black tracking-widest text-slate-400 uppercase">
                     Cancha
                   </th>
-                  <th class="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200">
+                  <th class="border-r border-slate-200 p-4 text-[10px] font-black tracking-widest text-slate-400 uppercase">
                     Horario
                   </th>
-                  <th class="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200">
+                  <th class="border-r border-slate-200 p-4 text-[10px] font-black tracking-widest text-slate-400 uppercase">
                     Cliente
                   </th>
-                  <th class="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200">
+                  <th class="border-r border-slate-200 p-4 text-[10px] font-black tracking-widest text-slate-400 uppercase">
                     Estado
                   </th>
-                  <th class="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200">
+                  <th class="border-r border-slate-200 p-4 text-[10px] font-black tracking-widest text-slate-400 uppercase">
                     Total
                   </th>
-                  <th class="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  <th class="p-4 text-[10px] font-black tracking-widest text-slate-400 uppercase">
                     Seña
                   </th>
                 </tr>
@@ -122,7 +124,7 @@ export const BookingListView = component$<BookingListViewProps>(
                           <tr
                             key={booking.id}
                             class={[
-                              "border-b border-slate-100 cursor-pointer transition-colors",
+                              "cursor-pointer border-b border-slate-100 transition-colors",
                               rowBg,
                             ]}
                             onClick$={() =>
@@ -133,50 +135,53 @@ export const BookingListView = component$<BookingListViewProps>(
                             {idx === 0 ? (
                               <td
                                 rowSpan={pb.length}
-                                class="p-4 border-r border-slate-200 align-top bg-white"
+                                class="border-r border-slate-200 bg-white p-4 align-top"
                               >
                                 <div class="flex items-center gap-2">
                                   <div
                                     class={[
-                                      "w-1.5 h-12 rounded-full shrink-0",
+                                      "h-12 w-1.5 shrink-0 rounded-full",
                                       STATUS_COLORS[booking.status],
                                     ]}
                                   />
                                   <div>
-                                    <div class="font-black text-slate-800 text-sm">
+                                    <div class="text-sm font-black text-slate-800">
                                       {pitch.name}
                                     </div>
-                                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                                    <div class="mt-0.5 text-[10px] font-bold tracking-widest text-slate-400 uppercase">
                                       {pitch.type}
                                     </div>
-                                    <div class="text-[10px] font-black text-slate-500 mt-1 bg-slate-100 rounded px-1.5 py-0.5 inline-block">
-                                      {pb.length} reserva{pb.length !== 1 ? "s" : ""}
+                                    <div class="mt-1 inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-black text-slate-500">
+                                      {pb.length} reserva
+                                      {pb.length !== 1 ? "s" : ""}
                                     </div>
                                   </div>
                                 </div>
                               </td>
                             ) : null}
 
-                            <td class="p-4 border-r border-slate-200">
-                              <div class="font-black text-slate-800 text-sm tabular-nums">
+                            <td class="border-r border-slate-200 p-4">
+                              <div class="text-sm font-black text-slate-800 tabular-nums">
                                 {timeStr}
                               </div>
-                              <div class="text-xs text-slate-400 mt-0.5">
+                              <div class="mt-0.5 text-xs text-slate-400">
                                 {durationH}h
                               </div>
                             </td>
 
-                            <td class="p-4 border-r border-slate-200">
-                              <div class="font-bold text-slate-800 text-sm">
+                            <td class="border-r border-slate-200 p-4">
+                              <div class="text-sm font-bold text-slate-800">
                                 {customerName}
                               </div>
-                              <div class="text-xs text-slate-400">{customerPhone}</div>
+                              <div class="text-xs text-slate-400">
+                                {customerPhone}
+                              </div>
                             </td>
 
-                            <td class="p-4 border-r border-slate-200">
+                            <td class="border-r border-slate-200 p-4">
                               <span
                                 class={[
-                                  "text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-full",
+                                  "rounded-full px-2 py-1 text-[10px] font-black tracking-wider uppercase",
                                   STATUS_TEXT[booking.status],
                                 ]}
                               >
@@ -190,7 +195,7 @@ export const BookingListView = component$<BookingListViewProps>(
                               </span>
                             </td>
 
-                            <td class="p-4 border-r border-slate-200 tabular-nums">
+                            <td class="border-r border-slate-200 p-4 tabular-nums">
                               <div class="font-black text-slate-800">
                                 ${booking.totalPrice}
                               </div>
@@ -201,7 +206,7 @@ export const BookingListView = component$<BookingListViewProps>(
                                 class={
                                   booking.paidAmount > 0
                                     ? "font-black text-emerald-600"
-                                    : "text-slate-400 font-bold"
+                                    : "font-bold text-slate-400"
                                 }
                               >
                                 {booking.paidAmount > 0
@@ -209,7 +214,7 @@ export const BookingListView = component$<BookingListViewProps>(
                                   : "—"}
                               </div>
                               {booking.paidAmount > 0 && (
-                                <div class="text-[10px] text-slate-400 font-bold uppercase">
+                                <div class="text-[10px] font-bold text-slate-400 uppercase">
                                   {booking.paymentStatus === "PARTIAL"
                                     ? `Resta $${booking.totalPrice - booking.paidAmount}`
                                     : "Pagado"}
@@ -228,5 +233,5 @@ export const BookingListView = component$<BookingListViewProps>(
         )}
       </div>
     );
-  }
+  },
 );

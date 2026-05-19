@@ -1,6 +1,9 @@
 import { component$, useSignal, $ } from "@builder.io/qwik";
 import type { DocumentHead } from "@builder.io/qwik-city";
-import { useGuestBookingAction, useUserBookingAction } from "./api/bookings/index";
+import {
+  useGuestBookingAction,
+  useUserBookingAction,
+} from "./api/bookings/index";
 import {
   usePitchesLoader,
   useUserLoader,
@@ -21,9 +24,16 @@ import { ContactSection } from "~/components/home/contact-section";
 import { HomeFooter } from "~/components/home/home-footer";
 import { HomeBookingModal } from "~/components/home/home-booking-modal";
 import { SchoolSection } from "~/components/home/school-section";
+import { SectionDivider } from "~/components/home/section-divider";
 
 export { useGuestBookingAction, useUserBookingAction };
-export { usePitchesLoader, useUserLoader, useInstagramFeed, useAISettingsLoader, useGalleryLoader };
+export {
+  usePitchesLoader,
+  useUserLoader,
+  useInstagramFeed,
+  useAISettingsLoader,
+  useGalleryLoader,
+};
 export { getDailyBookings } from "~/lib/home-page/loaders";
 
 export default component$(() => {
@@ -60,13 +70,38 @@ export default component$(() => {
 
       <HistorySection />
 
-      <PitchesGrid pitches={activePitches.value} onReserve={openBookingModal} />
+      <SectionDivider topColor="bg-slate-950" bottomColor="bg-[#F5F2EB]" />
 
-      <SchoolSection categories={aiSettings.value?.schoolCategories || []} />
+      <PitchesGrid
+        pitches={activePitches.value}
+        onReserve={openBookingModal}
+        theme="light"
+      />
+
+      <SchoolSection
+        categories={aiSettings.value?.schoolCategories || []}
+        theme="light"
+      />
+
+      <SectionDivider
+        topColor="bg-[#F5F2EB]"
+        bottomColor="bg-slate-950"
+        flip={true}
+        invert={true}
+      />
 
       <GallerySection images={gallery.value} />
 
-      <ContactSection settings={aiSettings.value ?? {}} />
+      <SectionDivider topColor="bg-slate-950" bottomColor="bg-[#F5F2EB]" />
+
+      <ContactSection settings={aiSettings.value ?? {}} theme="light" />
+
+      <SectionDivider
+        topColor="bg-[#F5F2EB]"
+        bottomColor="bg-slate-950"
+        flip={true}
+        invert={true}
+      />
 
       <RollingBall />
 
@@ -76,7 +111,9 @@ export default component$(() => {
         <Chatbot avatarUrl={aiSettings.value?.aiAvatarUrl || undefined} />
       )}
 
-      <WhatsAppButton phone={aiSettings.value?.whatsappNumber || "5491112345678"} />
+      <WhatsAppButton
+        phone={aiSettings.value?.whatsappNumber || "5491112345678"}
+      />
 
       <HomeBookingModal
         isOpen={isModalOpen}
@@ -99,7 +136,8 @@ export const head: DocumentHead = {
   meta: [
     {
       name: "description",
-      content: "Alquiler de canchas de fútbol premium. Reserva tu turno online en GardenClubFutbol.",
+      content:
+        "Alquiler de canchas de fútbol premium. Reserva tu turno online en GardenClubFutbol.",
     },
   ],
 };

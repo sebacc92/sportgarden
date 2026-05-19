@@ -7,7 +7,7 @@ export default {
         "nesting-rules": true,
       },
     },
-    "cssnano": {
+    cssnano: {
       preset: "default",
     },
   },

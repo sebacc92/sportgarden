@@ -17,9 +17,12 @@ async function main() {
   console.log("Migrando roles...");
   // Actually we need to just update where role = 'ADMIN' to 'OWNER'
   // But wait, the role column is just text, so we can run raw SQL or drizzle.
-  
+
   // Drizzle way
-  await db.update(users).set({ role: "OWNER" }).where(eq(users.role, "ADMIN" as any));
+  await db
+    .update(users)
+    .set({ role: "OWNER" })
+    .where(eq(users.role, "ADMIN" as any));
 
   console.log("Roles migrados exitosamente. Todos los ADMIN ahora son OWNER.");
   process.exit(0);

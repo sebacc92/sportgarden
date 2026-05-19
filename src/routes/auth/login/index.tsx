@@ -30,7 +30,7 @@ export const useLoginAction = routeAction$(
 
     // Create session
     const token = await createSessionJWT(user.id, user.role);
-    
+
     requestEvent.cookie.set("session", token, {
       path: "/",
       httpOnly: true,
@@ -43,16 +43,19 @@ export const useLoginAction = routeAction$(
   zod$({
     email: z.string().email("Correo electrónico inválido"),
     password: z.string().min(1, "La contraseña es requerida"),
-  })
+  }),
 );
 
 export default component$(() => {
   const loginAction = useLoginAction();
 
   return (
-    <div class="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans selection:bg-emerald-500 selection:text-white">
+    <div class="flex min-h-screen flex-col justify-center bg-slate-950 py-12 font-sans selection:bg-emerald-500 selection:text-white sm:px-6 lg:px-8">
       <div class="sm:mx-auto sm:w-full sm:max-w-md">
-        <Link href="/" class="block text-center font-black text-3xl tracking-tighter uppercase text-white mb-6">
+        <Link
+          href="/"
+          class="mb-6 block text-center text-3xl font-black tracking-tighter text-white uppercase"
+        >
           Sport<span class="text-emerald-400">Garden</span>
         </Link>
         <h2 class="text-center text-3xl font-bold tracking-tight text-white">
@@ -60,24 +63,34 @@ export default component$(() => {
         </h2>
         <p class="mt-2 text-center text-sm text-slate-400">
           O{" "}
-          <Link href="/auth/register" class="font-medium text-emerald-400 hover:text-emerald-300 transition-colors">
+          <Link
+            href="/auth/register"
+            class="font-medium text-emerald-400 transition-colors hover:text-emerald-300"
+          >
             crea una cuenta nueva
           </Link>
         </p>
       </div>
 
       <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div class="bg-slate-900 py-8 px-4 shadow-2xl shadow-emerald-900/10 sm:rounded-3xl sm:px-10 border border-white/5">
+        <div class="border border-white/5 bg-slate-900 px-4 py-8 shadow-2xl shadow-emerald-900/10 sm:rounded-3xl sm:px-10">
           <Form action={loginAction} class="space-y-6">
-            
             {loginAction.value?.message && (
-              <Alert.Root look="alert" class="bg-red-500/10 border-red-500/20 text-red-400 rounded-xl">
-                <Alert.Description>{loginAction.value.message}</Alert.Description>
+              <Alert.Root
+                look="alert"
+                class="rounded-xl border-red-500/20 bg-red-500/10 text-red-400"
+              >
+                <Alert.Description>
+                  {loginAction.value.message}
+                </Alert.Description>
               </Alert.Root>
             )}
 
             <div>
-              <label for="email" class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+              <label
+                for="email"
+                class="mb-2 block text-xs font-bold tracking-wider text-slate-400 uppercase"
+              >
                 Correo Electrónico
               </label>
               <div class="mt-1">
@@ -87,18 +100,24 @@ export default component$(() => {
                   type="email"
                   autocomplete="email"
                   required
-                  class="block w-full appearance-none rounded-xl border border-white/10 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
+                  class="block w-full appearance-none rounded-xl border border-white/10 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 focus:border-emerald-500 focus:ring-emerald-500 focus:outline-none sm:text-sm"
                 />
               </div>
             </div>
 
             <div>
-              <div class="flex items-center justify-between mb-2">
-                <label for="password" class="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <div class="mb-2 flex items-center justify-between">
+                <label
+                  for="password"
+                  class="block text-xs font-bold tracking-wider text-slate-400 uppercase"
+                >
                   Contraseña
                 </label>
                 <div class="text-sm">
-                  <a href="#" class="font-medium text-emerald-400 hover:text-emerald-300 transition-colors text-xs">
+                  <a
+                    href="#"
+                    class="text-xs font-medium text-emerald-400 transition-colors hover:text-emerald-300"
+                  >
                     ¿Olvidaste tu contraseña?
                   </a>
                 </div>
@@ -110,7 +129,7 @@ export default component$(() => {
                   type="password"
                   autocomplete="current-password"
                   required
-                  class="block w-full appearance-none rounded-xl border border-white/10 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-emerald-500 sm:text-sm"
+                  class="block w-full appearance-none rounded-xl border border-white/10 bg-slate-800 px-4 py-3 text-white placeholder-slate-500 focus:border-emerald-500 focus:ring-emerald-500 focus:outline-none sm:text-sm"
                 />
               </div>
             </div>
@@ -120,7 +139,7 @@ export default component$(() => {
                 type="submit"
                 look="primary"
                 disabled={loginAction.isRunning}
-                class="flex w-full justify-center rounded-xl bg-emerald-500 px-4 py-4 text-sm font-black uppercase tracking-wider text-white hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+                class="flex w-full justify-center rounded-xl bg-emerald-500 px-4 py-4 text-sm font-black tracking-wider text-white uppercase hover:bg-emerald-600 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900 focus:outline-none"
               >
                 {loginAction.isRunning ? "Iniciando..." : "Ingresar"}
               </Button>

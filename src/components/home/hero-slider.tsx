@@ -13,7 +13,10 @@ export const HeroSlider = component$(() => {
   });
 
   return (
-    <section id="inicio" class="relative flex h-screen min-h-[600px] items-center justify-center overflow-hidden">
+    <section
+      id="inicio"
+      class="relative flex h-screen min-h-[600px] items-center justify-center overflow-hidden"
+    >
       {HERO_SLIDES.map((slide, index) => (
         <div
           key={slide.image}
@@ -35,19 +38,19 @@ export const HeroSlider = component$(() => {
             <div class="mx-auto max-w-4xl translate-y-0 transform px-6 text-center transition-transform delay-100 duration-1000">
               {activeSlide.value === index && (
                 <div class="animate-fade-in-up">
-                  <div class="mb-6 inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-emerald-400 ring-1 ring-emerald-500/30 backdrop-blur-sm">
+                  <div class="mb-6 inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-4 py-1.5 text-xs font-bold tracking-widest text-emerald-400 uppercase ring-1 ring-emerald-500/30 backdrop-blur-sm">
                     <span class="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
                     Abierto todos los días
                   </div>
-                  <h1 class="mb-6 text-5xl font-black uppercase tracking-tighter text-white drop-shadow-2xl md:text-8xl">
+                  <h1 class="mb-6 text-5xl font-black tracking-tighter text-white uppercase drop-shadow-2xl md:text-8xl">
                     {slide.title}
                   </h1>
-                  <p class="mx-auto mb-10 mt-4 max-w-2xl text-xl font-medium text-slate-200 drop-shadow-md md:text-2xl">
+                  <p class="mx-auto mt-4 mb-10 max-w-2xl text-xl font-medium text-slate-200 drop-shadow-md md:text-2xl">
                     {slide.subtitle}
                   </p>
                   <a
                     href="#canchas"
-                    class="inline-block rounded-full bg-emerald-500 px-8 py-4 text-lg font-black uppercase tracking-widest text-white shadow-xl shadow-emerald-900/35 transition-all hover:-translate-y-1 hover:bg-emerald-600 hover:shadow-emerald-900/50"
+                    class="inline-block rounded-full bg-[#F5F2EB] px-8 py-4 text-lg font-black tracking-widest text-slate-950 uppercase shadow-xl transition-all hover:-translate-y-1 hover:bg-[#EAE6DB] hover:shadow-black/25"
                   >
                     Reservar Ahora
                   </a>
@@ -65,7 +68,9 @@ export const HeroSlider = component$(() => {
             type="button"
             onClick$={() => (activeSlide.value = index)}
             class={`h-3 rounded-full transition-all ${
-              activeSlide.value === index ? "w-8 bg-emerald-500" : "w-3 bg-white/50 hover:bg-white/80"
+              activeSlide.value === index
+                ? "w-8 bg-[#F5F2EB]"
+                : "w-3 bg-[#F5F2EB]/40 hover:bg-[#F5F2EB]/80"
             }`}
             aria-label={`Ir a diapositiva ${index + 1}`}
           />

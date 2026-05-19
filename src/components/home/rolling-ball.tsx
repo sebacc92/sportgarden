@@ -31,7 +31,7 @@ export const RollingBall = component$(() => {
       ref={containerRef}
       class="relative flex h-40 w-full items-end overflow-hidden border-y border-white/5 bg-slate-950 px-4 pb-6 md:h-52 md:px-8 md:pb-8"
     >
-      <div class="absolute bottom-0 left-0 right-0 z-0 h-6 overflow-hidden border-t-[3px] border-emerald-400 bg-gradient-to-t from-emerald-900 to-emerald-600 md:h-8">
+      <div class="absolute right-0 bottom-0 left-0 z-0 h-6 overflow-hidden border-t-[3px] border-emerald-400 bg-gradient-to-t from-emerald-900 to-emerald-600 md:h-8">
         <div
           class="absolute inset-0 opacity-20"
           style={{

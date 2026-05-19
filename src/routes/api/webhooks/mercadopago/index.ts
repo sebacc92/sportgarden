@@ -38,7 +38,9 @@ export const onPost: RequestHandler = async (requestEvent) => {
       }
       */
 
-      console.log(`[Webhook] Payment notification received for payment ID: ${paymentId}`);
+      console.log(
+        `[Webhook] Payment notification received for payment ID: ${paymentId}`,
+      );
     }
   }
 

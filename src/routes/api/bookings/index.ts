@@ -16,12 +16,14 @@ export const useGuestBookingAction = routeAction$(
     const db = getDB(requestEvent);
 
     const startTimeDate = parseDateTime(data.date, data.time);
-    const endTimeDate = new Date(startTimeDate.getTime() + data.duration * 60000);
+    const endTimeDate = new Date(
+      startTimeDate.getTime() + data.duration * 60000,
+    );
 
     // Check if pitch exists to calculate price
     const pitch = await db.query.pitches.findFirst({
       where: eq(pitches.id, data.pitchId),
-      with: { pricingRules: true }
+      with: { pricingRules: true },
     });
 
     if (!pitch) {
@@ -44,7 +46,8 @@ export const useGuestBookingAction = routeAction$(
     }
 
     const settings = await db.query.siteSettings.findFirst();
-    const holidays = (settings?.holidays as any[])?.map((h: any) => h.date) || [];
+    const holidays =
+      (settings?.holidays as any[])?.map((h: any) => h.date) || [];
 
     const totalPrice = calculateProportionalPrice(
       data.date,
@@ -52,7 +55,7 @@ export const useGuestBookingAction = routeAction$(
       data.duration,
       pitch.pricePerHour,
       pitch.pricingRules,
-      holidays
+      holidays,
     );
 
     const bookingId = crypto.randomUUID();
@@ -68,7 +71,9 @@ export const useGuestBookingAction = routeAction$(
       paidAmount: 0,
       paymentStatus: "PENDING",
       paymentMethod: data.paymentMethod || "CASH",
-      extras: data.extras ? data.extras.map((e: string) => JSON.parse(e)) : null,
+      extras: data.extras
+        ? data.extras.map((e: string) => JSON.parse(e))
+        : null,
     });
 
     await db.insert(guestRequests).values({
@@ -79,7 +84,12 @@ export const useGuestBookingAction = routeAction$(
       email: data.guestEmail || null,
     });
 
-    return { success: true, bookingId };
+    return {
+      success: true,
+      bookingId,
+      message:
+        "¡Reserva recibida! Un agente se pondrá en contacto contigo pronto por WhatsApp",
+    };
   },
   zod$({
     pitchId: z.string().min(1),
@@ -91,7 +101,7 @@ export const useGuestBookingAction = routeAction$(
     duration: z.coerce.number().min(30),
     paymentMethod: z.string().optional(),
     extras: z.array(z.string()).optional(),
-  })
+  }),
 );
 
 // Action for Registered Users
@@ -101,12 +111,16 @@ export const useUserBookingAction = routeAction$(
 
     const user = requestEvent.sharedMap.get("user");
     if (!user) {
-      return requestEvent.fail(401, { message: "Unauthorized. Please log in." });
+      return requestEvent.fail(401, {
+        message: "Unauthorized. Please log in.",
+      });
     }
     const userId = user.userId;
 
     const startTimeDate = parseDateTime(data.date, data.time);
-    const endTimeDate = new Date(startTimeDate.getTime() + data.duration * 60000);
+    const endTimeDate = new Date(
+      startTimeDate.getTime() + data.duration * 60000,
+    );
 
     // Check for overlap including overlapping pitches
     const { available, conflicts } = await isPitchAvailable(db, {
@@ -123,7 +137,7 @@ export const useUserBookingAction = routeAction$(
 
     const pitch = await db.query.pitches.findFirst({
       where: eq(pitches.id, data.pitchId),
-      with: { pricingRules: true }
+      with: { pricingRules: true },
     });
 
     if (!pitch) {
@@ -133,7 +147,8 @@ export const useUserBookingAction = routeAction$(
     }
 
     const settings = await db.query.siteSettings.findFirst();
-    const holidays = (settings?.holidays as any[])?.map((h: any) => h.date) || [];
+    const holidays =
+      (settings?.holidays as any[])?.map((h: any) => h.date) || [];
 
     const totalPrice = calculateProportionalPrice(
       data.date,
@@ -141,7 +156,7 @@ export const useUserBookingAction = routeAction$(
       data.duration,
       pitch.pricePerHour,
       pitch.pricingRules,
-      holidays
+      holidays,
     );
 
     // Calculate paid amount based on preference
@@ -149,9 +164,10 @@ export const useUserBookingAction = routeAction$(
     let paymentStatus: "PENDING" | "PARTIAL" | "PAID" = "PENDING";
 
     if (data.paymentOption === "SENA") {
-      paidAmount = pitch.depositType === "FIXED"
-        ? pitch.depositAmount
-        : (pitch.depositAmount / 100) * totalPrice;
+      paidAmount =
+        pitch.depositType === "FIXED"
+          ? pitch.depositAmount
+          : (pitch.depositAmount / 100) * totalPrice;
       paymentStatus = "PARTIAL";
     } else if (data.paymentOption === "TOTAL") {
       paidAmount = totalPrice;
@@ -172,7 +188,9 @@ export const useUserBookingAction = routeAction$(
       paidAmount,
       paymentStatus,
       paymentMethod: data.paymentMethod || "CASH",
-      extras: data.extras ? data.extras.map((e: string) => JSON.parse(e)) : null,
+      extras: data.extras
+        ? data.extras.map((e: string) => JSON.parse(e))
+        : null,
     });
 
     return { success: true, bookingId };
@@ -185,5 +203,5 @@ export const useUserBookingAction = routeAction$(
     paymentOption: z.enum(["LATER", "SENA", "TOTAL"]),
     paymentMethod: z.string().optional(),
     extras: z.array(z.string()).optional(),
-  })
+  }),
 );

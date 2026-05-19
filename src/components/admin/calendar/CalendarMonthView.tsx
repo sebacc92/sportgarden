@@ -12,53 +12,61 @@ export const CalendarMonthView = component$<CalendarMonthViewProps>((props) => {
   const { calendarData, monthDays, onDayClick$ } = props;
 
   return (
-    <div class="flex flex-col h-full overflow-hidden">
+    <div class="flex h-full flex-col overflow-hidden">
       {/* Days Header */}
-      <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50 shrink-0">
-        {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => (
-          <div key={d} class="py-3 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 last:border-0">
+      <div class="grid shrink-0 grid-cols-7 border-b border-slate-200 bg-slate-50">
+        {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => (
+          <div
+            key={d}
+            class="border-r border-slate-200 py-3 text-center text-[10px] font-black tracking-widest text-slate-400 uppercase last:border-0"
+          >
             {d}
           </div>
         ))}
       </div>
 
       {/* Month Grid */}
-      <div class="flex-1 grid grid-cols-7 grid-rows-5 bg-slate-200 gap-[1px]">
+      <div class="grid flex-1 grid-cols-7 grid-rows-5 gap-[1px] bg-slate-200">
         {monthDays.map((day, idx) => {
-          const isCurrentMonth = day.getMonth() === new Date(calendarData.startDateStr).getMonth();
+          const isCurrentMonth =
+            day.getMonth() === new Date(calendarData.startDateStr).getMonth();
           const isToday = getBAFormatDate(new Date()) === getBAFormatDate(day);
           const dateStr = getBAFormatDate(day);
-          
+
           const totalBookings = calendarData.monthCounts?.[dateStr] || 0;
 
           return (
             <div
               key={idx}
               class={cn(
-                "bg-white p-3 flex flex-col justify-between cursor-pointer hover:bg-slate-50 transition-colors group",
+                "group flex cursor-pointer flex-col justify-between bg-white p-3 transition-colors hover:bg-slate-50",
                 !isCurrentMonth ? "bg-slate-50 opacity-50" : "",
-                isToday ? "bg-emerald-50/30" : ""
+                isToday ? "bg-emerald-50/30" : "",
               )}
               onClick$={() => {
                 onDayClick$(dateStr);
               }}
             >
               <div class="flex items-start justify-end">
-                <div class={cn(
-                  "text-xs font-black w-7 h-7 flex items-center justify-center rounded-full transition-transform group-hover:scale-110",
-                  isToday ? "bg-emerald-500 text-white shadow-md" : "text-slate-400 bg-slate-100 group-hover:bg-slate-200"
-                )}>
+                <div
+                  class={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-full text-xs font-black transition-transform group-hover:scale-110",
+                    isToday
+                      ? "bg-emerald-500 text-white shadow-md"
+                      : "bg-slate-100 text-slate-400 group-hover:bg-slate-200",
+                  )}
+                >
                   {day.getDate()}
                 </div>
               </div>
 
               <div class="mt-auto">
                 {totalBookings > 0 ? (
-                  <div class="w-full text-center py-1.5 px-2 rounded-lg bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm text-xs font-black truncate">
-                    {totalBookings} Reserva{totalBookings !== 1 && 's'}
+                  <div class="w-full truncate rounded-lg border border-emerald-200 bg-emerald-100 px-2 py-1.5 text-center text-xs font-black text-emerald-700 shadow-sm">
+                    {totalBookings} Reserva{totalBookings !== 1 && "s"}
                   </div>
                 ) : (
-                  <div class="w-full text-center py-1.5 px-2 text-[10px] font-bold text-slate-300 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div class="w-full px-2 py-1.5 text-center text-[10px] font-bold tracking-widest text-slate-300 uppercase opacity-0 transition-opacity group-hover:opacity-100">
                     Sin reservas
                   </div>
                 )}

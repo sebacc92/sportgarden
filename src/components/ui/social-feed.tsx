@@ -1,4 +1,4 @@
-import { component$ } from '@builder.io/qwik';
+import { component$ } from "@builder.io/qwik";
 
 export interface InstagramPostProps {
   id: string;
@@ -10,46 +10,46 @@ export interface InstagramPostProps {
 
 export const MOCK_INSTAGRAM_POSTS: InstagramPostProps[] = [
   {
-    id: 'post-1',
-    imageUrl: '/slider1.png',
-    link: '#',
+    id: "post-1",
+    imageUrl: "/slider1.png",
+    link: "#",
     likes: 342,
-    caption: '¡Noche espectacular en la F5 principal!',
+    caption: "¡Noche espectacular en la F5 principal!",
   },
   {
-    id: 'post-2',
-    imageUrl: '/slider2.png',
-    link: '#',
+    id: "post-2",
+    imageUrl: "/slider2.png",
+    link: "#",
     likes: 512,
-    caption: 'La pelota rodando bajo las nuevas luces LED.',
+    caption: "La pelota rodando bajo las nuevas luces LED.",
   },
   {
-    id: 'post-3',
-    imageUrl: '/slider3.png',
-    link: '#',
+    id: "post-3",
+    imageUrl: "/slider3.png",
+    link: "#",
     likes: 289,
-    caption: 'Festejando el triunfo. ¡El tercer tiempo es nuestro!',
+    caption: "Festejando el triunfo. ¡El tercer tiempo es nuestro!",
   },
   {
-    id: 'post-4',
-    imageUrl: '/slider1.png',
-    link: '#',
+    id: "post-4",
+    imageUrl: "/slider1.png",
+    link: "#",
     likes: 876,
-    caption: 'Torneo de verano en GardenClubFutbol. Inscribite ya.',
+    caption: "Torneo de verano en GardenClubFutbol. Inscribite ya.",
   },
   {
-    id: 'post-5',
-    imageUrl: '/slider2.png',
-    link: '#',
+    id: "post-5",
+    imageUrl: "/slider2.png",
+    link: "#",
     likes: 120,
-    caption: 'El campo de juego en perfectas condiciones.',
+    caption: "El campo de juego en perfectas condiciones.",
   },
   {
-    id: 'post-6',
-    imageUrl: '/slider3.png',
-    link: '#',
+    id: "post-6",
+    imageUrl: "/slider3.png",
+    link: "#",
     likes: 450,
-    caption: 'Pasión por el fútbol todos los días.',
+    caption: "Pasión por el fútbol todos los días.",
   },
 ];
 
@@ -61,7 +61,7 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
   const safePosts = posts && posts.length > 0 ? posts : MOCK_INSTAGRAM_POSTS;
 
   return (
-    <section class="relative py-24 bg-slate-950 text-white z-20">
+    <section class="relative z-20 bg-slate-950 py-24 text-white">
       <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
       <div class="mx-auto flex max-w-7xl flex-col gap-10 px-6 lg:px-8">
@@ -70,7 +70,7 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
             <p class="mb-2 text-xs font-bold tracking-[0.35em] text-emerald-400">
               COMUNIDAD · FÚTBOL · AMIGOS
             </p>
-            <h2 class="text-3xl font-black uppercase leading-tight tracking-[0.25em] md:text-4xl text-white">
+            <h2 class="text-3xl leading-tight font-black tracking-[0.25em] text-white uppercase md:text-4xl">
               @gardenclubfutbol
             </h2>
           </div>
@@ -79,7 +79,7 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
             href="https://www.instagram.com/gardenclubfutbol/"
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-3 border-2 border-white/20 bg-slate-900 px-6 py-3 text-xs font-black uppercase tracking-[0.25em] text-white transition-all hover:-translate-y-1 hover:bg-emerald-500 hover:border-emerald-500 hover:text-white hover:shadow-lg hover:shadow-emerald-900/30 rounded-full"
+            class="inline-flex items-center gap-3 rounded-full border-2 border-white/20 bg-slate-900 px-6 py-3 text-xs font-black tracking-[0.25em] text-white uppercase transition-all hover:-translate-y-1 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white hover:shadow-lg hover:shadow-emerald-900/30"
           >
             <span>Ver perfil</span>
             <svg
@@ -100,17 +100,17 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
               href={post.link}
               target="_blank"
               rel="noopener noreferrer"
-              class="group relative block aspect-square overflow-hidden bg-slate-900 rounded-2xl border border-white/5 shadow-md"
+              class="group relative block aspect-square overflow-hidden rounded-2xl border border-white/5 bg-slate-900 shadow-md"
             >
               <img
                 src={post.imageUrl}
-                alt={post.caption || 'Post de Instagram de GardenClubFutbol'}
+                alt={post.caption || "Post de Instagram de GardenClubFutbol"}
                 loading="lazy"
                 class="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
               />
 
-              <div class="absolute inset-0 flex items-center justify-center bg-slate-950/70 opacity-0 transition-opacity duration-300 group-hover:opacity-100 backdrop-blur-sm">
-                <div class="flex flex-col items-center gap-2 text-center text-white px-2">
+              <div class="absolute inset-0 flex items-center justify-center bg-slate-950/70 opacity-0 backdrop-blur-sm transition-opacity duration-300 group-hover:opacity-100">
+                <div class="flex flex-col items-center gap-2 px-2 text-center text-white">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     class="mb-1 h-8 w-8 text-emerald-400"
@@ -121,7 +121,7 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
                   </svg>
 
                   {post.likes && (
-                    <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.25em]">
+                    <div class="flex items-center gap-2 text-xs font-bold tracking-[0.25em] uppercase">
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         class="h-4 w-4"

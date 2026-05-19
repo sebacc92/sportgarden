@@ -1,6 +1,6 @@
 import { component$, type PropFunction } from "@builder.io/qwik";
 import { Form } from "@builder.io/qwik-city";
-import { LuImage, LuSettings } from '@qwikest/icons/lucide';
+import { LuImage, LuSettings } from "@qwikest/icons/lucide";
 import { LoadingSpinner } from "./LoadingSpinner";
 
 interface PitchTableViewProps {
@@ -13,11 +13,11 @@ export const PitchTableView = component$((props: PitchTableViewProps) => {
   const { pitches, onEdit$, toggleStatusAction } = props;
 
   return (
-    <div class="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+    <div class="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
       <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse">
+        <table class="w-full border-collapse text-left">
           <thead>
-            <tr class="bg-slate-50 text-sm font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+            <tr class="border-b border-slate-100 bg-slate-50 text-sm font-black tracking-widest text-slate-400 uppercase">
               <th class="px-6 py-5">Foto</th>
               <th class="px-6 py-5">Cancha</th>
               <th class="px-6 py-5">Superficie</th>
@@ -31,44 +31,81 @@ export const PitchTableView = component$((props: PitchTableViewProps) => {
           </thead>
           <tbody class="divide-y divide-slate-100">
             {pitches.map((pitch) => {
-              const isToggling = toggleStatusAction.isRunning && toggleStatusAction.formData?.get("id") === pitch.id;
+              const isToggling =
+                toggleStatusAction.isRunning &&
+                toggleStatusAction.formData?.get("id") === pitch.id;
               return (
-                <tr key={pitch.id} class={["hover:bg-slate-50/50 transition-colors", !pitch.isActive && "opacity-70"]}>
+                <tr
+                  key={pitch.id}
+                  class={[
+                    "transition-colors hover:bg-slate-50/50",
+                    !pitch.isActive && "opacity-70",
+                  ]}
+                >
                   <td class="px-6 py-6">
                     {pitch.imageUrl ? (
-                      <img src={pitch.imageUrl} alt={pitch.name} class="w-16 h-16 rounded-2xl object-cover border border-slate-200" />
+                      <img
+                        src={pitch.imageUrl}
+                        alt={pitch.name}
+                        class="h-16 w-16 rounded-2xl border border-slate-200 object-cover"
+                      />
                     ) : (
-                      <div class="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-300">
-                        <LuImage class="w-7 h-7" />
+                      <div class="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-100 text-slate-300">
+                        <LuImage class="h-7 w-7" />
                       </div>
                     )}
                   </td>
                   <td class="px-6 py-6">
-                    <div class="font-black text-xl text-slate-800 tracking-tight">{pitch.name}</div>
-                    {pitch.notes && <div class="text-xs text-slate-400 font-medium mt-1 max-w-[250px]">{pitch.notes}</div>}
+                    <div class="text-xl font-black tracking-tight text-slate-800">
+                      {pitch.name}
+                    </div>
+                    {pitch.notes && (
+                      <div class="mt-1 max-w-[250px] text-xs font-medium text-slate-400">
+                        {pitch.notes}
+                      </div>
+                    )}
                   </td>
                   <td class="px-6 py-6">
-                    <span class="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-slate-200">
+                    <span class="rounded-lg border border-slate-200 bg-slate-100 px-3 py-1 text-[10px] font-black tracking-widest text-slate-700 uppercase">
                       {pitch.surface || "Sintético"}
                     </span>
                   </td>
                   <td class="px-6 py-6">
-                    <span class="bg-emerald-100 text-emerald-800 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-emerald-200">
+                    <span class="rounded-lg border border-emerald-200 bg-emerald-100 px-3 py-1 text-[10px] font-black tracking-widest text-emerald-800 uppercase">
                       {pitch.type}
                     </span>
                   </td>
-                  <td class="px-6 py-6 font-black text-2xl text-slate-800 tracking-tighter">${pitch.pricePerHour}</td>
-                  <td class="px-6 py-6 text-xl font-black text-slate-600 tracking-tight">
-                    {pitch.depositType === "FIXED" ? `$${pitch.depositAmount}` : `${pitch.depositAmount}%`}
+                  <td class="px-6 py-6 text-2xl font-black tracking-tighter text-slate-800">
+                    ${pitch.pricePerHour}
+                  </td>
+                  <td class="px-6 py-6 text-xl font-black tracking-tight text-slate-600">
+                    {pitch.depositType === "FIXED"
+                      ? `$${pitch.depositAmount}`
+                      : `${pitch.depositAmount}%`}
                   </td>
                   <td class="px-6 py-6">
                     <div class="flex flex-wrap gap-2">
-                      {pitch.isCovered && <span class="bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-blue-100">Cubierta</span>}
-                      {pitch.isLit && <span class="bg-amber-50 text-amber-600 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-amber-100">Luz</span>}
+                      {pitch.isCovered && (
+                        <span class="rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-1 text-[10px] font-black tracking-widest text-blue-600 uppercase">
+                          Cubierta
+                        </span>
+                      )}
+                      {pitch.isLit && (
+                        <span class="rounded-lg border border-amber-100 bg-amber-50 px-2.5 py-1 text-[10px] font-black tracking-widest text-amber-600 uppercase">
+                          Luz
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td class="px-6 py-6">
-                    <span class={["px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-[0.1em] border-2", pitch.isActive ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-red-50 text-red-700 border-red-100"]}>
+                    <span
+                      class={[
+                        "rounded-xl border-2 px-3 py-1.5 text-[10px] font-black tracking-[0.1em] uppercase",
+                        pitch.isActive
+                          ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+                          : "border-red-100 bg-red-50 text-red-700",
+                      ]}
+                    >
                       {pitch.isActive ? "Activa" : "Inactiva"}
                     </span>
                   </td>
@@ -76,25 +113,70 @@ export const PitchTableView = component$((props: PitchTableViewProps) => {
                     <div class="flex justify-end gap-3">
                       <button
                         onClick$={() => onEdit$(pitch)}
-                        class="p-3 text-slate-400 hover:text-slate-800 hover:bg-white rounded-xl border border-transparent hover:border-slate-200 transition-all shadow-none hover:shadow-md"
+                        class="rounded-xl border border-transparent p-3 text-slate-400 shadow-none transition-all hover:border-slate-200 hover:bg-white hover:text-slate-800 hover:shadow-md"
                         title="Editar"
                       >
-                        <LuSettings class="w-6 h-6" />
+                        <LuSettings class="h-6 w-6" />
                       </button>
                       <Form action={toggleStatusAction}>
                         <input type="hidden" name="id" value={pitch.id} />
                         <button
                           type="submit"
                           disabled={isToggling}
-                          class={["p-3 rounded-xl border-2 transition-all shadow-none hover:shadow-md", pitch.isActive ? "text-amber-600 border-transparent hover:border-amber-200 hover:bg-amber-50" : "text-emerald-600 border-transparent hover:border-emerald-200 hover:bg-emerald-50"]}
+                          class={[
+                            "rounded-xl border-2 p-3 shadow-none transition-all hover:shadow-md",
+                            pitch.isActive
+                              ? "border-transparent text-amber-600 hover:border-amber-200 hover:bg-amber-50"
+                              : "border-transparent text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50",
+                          ]}
                           title={pitch.isActive ? "Deshabilitar" : "Habilitar"}
                         >
-                          {isToggling ? <LoadingSpinner class="w-6 h-6" /> : (
-                            pitch.isActive ? (
-                              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="5" width="22" height="14" rx="7" ry="7"></rect><circle cx="16" cy="12" r="3"></circle></svg>
-                            ) : (
-                              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="5" width="22" height="14" rx="7" ry="7"></rect><circle cx="8" cy="12" r="3"></circle></svg>
-                            )
+                          {isToggling ? (
+                            <LoadingSpinner class="h-6 w-6" />
+                          ) : pitch.isActive ? (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="28"
+                              height="28"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <rect
+                                x="1"
+                                y="5"
+                                width="22"
+                                height="14"
+                                rx="7"
+                                ry="7"
+                              ></rect>
+                              <circle cx="16" cy="12" r="3"></circle>
+                            </svg>
+                          ) : (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="28"
+                              height="28"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <rect
+                                x="1"
+                                y="5"
+                                width="22"
+                                height="14"
+                                rx="7"
+                                ry="7"
+                              ></rect>
+                              <circle cx="8" cy="12" r="3"></circle>
+                            </svg>
                           )}
                         </button>
                       </Form>

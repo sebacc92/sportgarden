@@ -19,8 +19,12 @@ export const useCashHistoryData = routeLoader$(async (requestEvent) => {
       const movements = await db.query.cashMovements.findMany({
         where: eq(cashMovements.registerId, reg.id),
       });
-      const totalIncomes  = movements.filter(m => m.type === "INCOME").reduce((a, m) => a + m.amount, 0);
-      const totalExpenses = movements.filter(m => m.type === "EXPENSE").reduce((a, m) => a + m.amount, 0);
+      const totalIncomes = movements
+        .filter((m) => m.type === "INCOME")
+        .reduce((a, m) => a + m.amount, 0);
+      const totalExpenses = movements
+        .filter((m) => m.type === "EXPENSE")
+        .reduce((a, m) => a + m.amount, 0);
       return {
         ...reg,
         totalIncomes,
@@ -29,7 +33,7 @@ export const useCashHistoryData = routeLoader$(async (requestEvent) => {
         movementsCount: movements.length,
         hasArqueo: !!reg.billCount,
       };
-    })
+    }),
   );
 
   return registersWithTotals;
@@ -39,21 +43,24 @@ export default component$(() => {
   const historyData = useCashHistoryData();
 
   return (
-    <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans">
-      <div class="max-w-6xl mx-auto space-y-5">
-
+    <div class="min-h-full bg-slate-50 p-4 font-sans md:p-6">
+      <div class="mx-auto max-w-6xl space-y-5">
         <CashSectionNav />
 
-        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <div class="flex justify-between items-center mb-6">
-            <h1 class="text-2xl font-black tracking-tight text-slate-800">Historial de Cajas</h1>
-            <span class="text-xs text-slate-400 font-medium">{historyData.value.length} registros</span>
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div class="mb-6 flex items-center justify-between">
+            <h1 class="text-2xl font-black tracking-tight text-slate-800">
+              Historial de Cajas
+            </h1>
+            <span class="text-xs font-medium text-slate-400">
+              {historyData.value.length} registros
+            </span>
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse min-w-[700px]">
+            <table class="w-full min-w-[700px] border-collapse text-left">
               <thead>
-                <tr class="bg-slate-50 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
+                <tr class="border-b border-slate-200 bg-slate-50 text-xs font-black tracking-widest text-slate-400 uppercase">
                   <th class="p-3">Fecha Cierre</th>
                   <th class="p-3">Apertura</th>
                   <th class="p-3">Ingresos</th>
@@ -68,31 +75,80 @@ export default component$(() => {
               <tbody class="text-sm font-medium text-slate-700">
                 {historyData.value.length === 0 ? (
                   <tr>
-                    <td colSpan={9} class="p-10 text-center text-slate-400">No hay registros de cajas cerradas.</td>
+                    <td colSpan={9} class="p-10 text-center text-slate-400">
+                      No hay registros de cajas cerradas.
+                    </td>
                   </tr>
                 ) : (
                   historyData.value.map((reg) => (
-                    <tr key={reg.id} class="border-b border-slate-100 last:border-0 hover:bg-slate-50/70 transition-colors">
-                      <td class="p-3 whitespace-nowrap font-semibold text-slate-800">
-                        {reg.closedAt ? new Date(reg.closedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "-"}
+                    <tr
+                      key={reg.id}
+                      class="border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/70"
+                    >
+                      <td class="p-3 font-semibold whitespace-nowrap text-slate-800">
+                        {reg.closedAt
+                          ? new Date(reg.closedAt).toLocaleString("es-AR", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })
+                          : "-"}
                       </td>
-                      <td class="p-3">${reg.openingBalance.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</td>
-                      <td class="p-3 text-emerald-600 font-bold">+${reg.totalIncomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</td>
-                      <td class="p-3 text-red-600 font-bold">-${reg.totalExpenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</td>
-                      <td class="p-3 font-black text-slate-800">${reg.calculatedBalance.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</td>
-                      <td class="p-3 font-black text-slate-800">${(reg.closingBalance || 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}</td>
-                      <td class="p-3 text-center">
-                        <span class="px-2 py-0.5 bg-slate-100 rounded-full text-xs font-bold text-slate-600">{reg.movementsCount}</span>
+                      <td class="p-3">
+                        $
+                        {reg.openingBalance.toLocaleString("es-AR", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td class="p-3 font-bold text-emerald-600">
+                        +$
+                        {reg.totalIncomes.toLocaleString("es-AR", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td class="p-3 font-bold text-red-600">
+                        -$
+                        {reg.totalExpenses.toLocaleString("es-AR", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td class="p-3 font-black text-slate-800">
+                        $
+                        {reg.calculatedBalance.toLocaleString("es-AR", {
+                          minimumFractionDigits: 2,
+                        })}
+                      </td>
+                      <td class="p-3 font-black text-slate-800">
+                        $
+                        {(reg.closingBalance || 0).toLocaleString("es-AR", {
+                          minimumFractionDigits: 2,
+                        })}
                       </td>
                       <td class="p-3 text-center">
-                        {reg.hasArqueo
-                          ? <span title="Arqueo realizado" class="text-emerald-500 text-base">✓</span>
-                          : <span title="Sin arqueo" class="text-slate-300 text-base">—</span>}
+                        <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                          {reg.movementsCount}
+                        </span>
+                      </td>
+                      <td class="p-3 text-center">
+                        {reg.hasArqueo ? (
+                          <span
+                            title="Arqueo realizado"
+                            class="text-base text-emerald-500"
+                          >
+                            ✓
+                          </span>
+                        ) : (
+                          <span
+                            title="Sin arqueo"
+                            class="text-base text-slate-300"
+                          >
+                            —
+                          </span>
+                        )}
                       </td>
                       <td class="p-3 text-center">
                         <Link
                           href={`/admin/cash/history/${reg.id}/`}
-                          class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+                          class="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
                         >
                           Ver Reporte
                         </Link>
@@ -104,7 +160,6 @@ export default component$(() => {
             </table>
           </div>
         </div>
-
       </div>
     </div>
   );

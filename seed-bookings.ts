@@ -80,11 +80,17 @@ async function main() {
     for (let pitchIdx = 0; pitchIdx < pitchesToUse.length; pitchIdx++) {
       const pitch = pitchesToUse[pitchIdx];
       // Each pitch gets a staggered set of slots so they don't all overlap
-      const pitchSlots = slots.filter((_, i) => i % pitchesToUse.length === pitchIdx);
+      const pitchSlots = slots.filter(
+        (_, i) => i % pitchesToUse.length === pitchIdx,
+      );
 
       for (const slot of pitchSlots) {
         const startTime = makeDate(day, slot.hour);
-        const endTime = makeDate(day, slot.hour + Math.floor(slot.duration), (slot.duration % 1) * 60);
+        const endTime = makeDate(
+          day,
+          slot.hour + Math.floor(slot.duration),
+          (slot.duration % 1) * 60,
+        );
         const guest = names[nameIdx % names.length];
         const price = pitch.pricePerHour * slot.duration;
 
@@ -108,7 +114,9 @@ async function main() {
           phone: guest.phone,
         });
 
-        console.log(`✅ [${dayLabel}] ${pitch.name} ${slot.hour}:00 → ${guest.name} (${slot.status})`);
+        console.log(
+          `✅ [${dayLabel}] ${pitch.name} ${slot.hour}:00 → ${guest.name} (${slot.status})`,
+        );
         nameIdx++;
         count++;
       }

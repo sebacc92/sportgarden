@@ -12,7 +12,11 @@ const MAX_IMAGES = 20;
 
 export const useGalleryLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const [settings] = await db.select({ galleryImages: siteSettings.galleryImages }).from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+  const [settings] = await db
+    .select({ galleryImages: siteSettings.galleryImages })
+    .from(siteSettings)
+    .where(eq(siteSettings.id, 1))
+    .limit(1);
   return (settings?.galleryImages as string[] | null) ?? [];
 });
 
@@ -22,15 +26,23 @@ export const useUploadGalleryImageAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const [settings] = await db.select({ galleryImages: siteSettings.galleryImages }).from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+    const [settings] = await db
+      .select({ galleryImages: siteSettings.galleryImages })
+      .from(siteSettings)
+      .where(eq(siteSettings.id, 1))
+      .limit(1);
     const current = (settings?.galleryImages as string[] | null) ?? [];
 
     if (current.length >= MAX_IMAGES) {
-      return { success: false, message: `Límite de ${MAX_IMAGES} imágenes alcanzado.` };
+      return {
+        success: false,
+        message: `Límite de ${MAX_IMAGES} imágenes alcanzado.`,
+      };
     }
 
     const file = data.image as File;
-    if (!file || file.size === 0) return { success: false, message: "No se recibió imagen." };
+    if (!file || file.size === 0)
+      return { success: false, message: "No se recibió imagen." };
 
     const fileName = `gallery-${Date.now()}.webp`;
     const { url } = await put(fileName, file, {
@@ -39,23 +51,33 @@ export const useUploadGalleryImageAction = routeAction$(
     });
 
     const updated = [...current, url];
-    await db.update(siteSettings).set({ galleryImages: updated, updatedAt: new Date() }).where(eq(siteSettings.id, 1));
+    await db
+      .update(siteSettings)
+      .set({ galleryImages: updated, updatedAt: new Date() })
+      .where(eq(siteSettings.id, 1));
 
     return { success: true };
   },
-  zod$({ image: z.any() })
+  zod$({ image: z.any() }),
 );
 
 export const useDeleteGalleryImageAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const [settings] = await db.select({ galleryImages: siteSettings.galleryImages }).from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+    const [settings] = await db
+      .select({ galleryImages: siteSettings.galleryImages })
+      .from(siteSettings)
+      .where(eq(siteSettings.id, 1))
+      .limit(1);
     const current = (settings?.galleryImages as string[] | null) ?? [];
     const updated = current.filter((url) => url !== data.url);
-    await db.update(siteSettings).set({ galleryImages: updated, updatedAt: new Date() }).where(eq(siteSettings.id, 1));
+    await db
+      .update(siteSettings)
+      .set({ galleryImages: updated, updatedAt: new Date() })
+      .where(eq(siteSettings.id, 1));
     return { success: true };
   },
-  zod$({ url: z.string().url() })
+  zod$({ url: z.string().url() }),
 );
 
 export const useReorderGalleryAction = routeAction$(
@@ -63,10 +85,13 @@ export const useReorderGalleryAction = routeAction$(
     const db = getDB(requestEvent);
     const urls = JSON.parse(data.urlsJson as string) as string[];
     if (!Array.isArray(urls)) return { success: false };
-    await db.update(siteSettings).set({ galleryImages: urls, updatedAt: new Date() }).where(eq(siteSettings.id, 1));
+    await db
+      .update(siteSettings)
+      .set({ galleryImages: urls, updatedAt: new Date() })
+      .where(eq(siteSettings.id, 1));
     return { success: true };
   },
-  zod$({ urlsJson: z.string() })
+  zod$({ urlsJson: z.string() }),
 );
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -100,7 +125,9 @@ export default component$(() => {
         fileType: "image/webp",
         initialQuality: 0.82,
       });
-      const webpFile = new File([compressed], "gallery.webp", { type: "image/webp" });
+      const webpFile = new File([compressed], "gallery.webp", {
+        type: "image/webp",
+      });
       const fd = new FormData();
       fd.append("image", webpFile);
       const result = await uploadAction.submit(fd);
@@ -119,10 +146,13 @@ export default component$(() => {
     lightboxUrl.value = url;
   });
 
-  const closeLightbox = $(() => { lightboxUrl.value = null; });
+  const closeLightbox = $(() => {
+    lightboxUrl.value = null;
+  });
 
   const prevImage = $(() => {
-    const newIdx = (lightboxIdx.value - 1 + images.value.length) % images.value.length;
+    const newIdx =
+      (lightboxIdx.value - 1 + images.value.length) % images.value.length;
     lightboxIdx.value = newIdx;
     lightboxUrl.value = images.value[newIdx];
   });
@@ -143,36 +173,67 @@ export default component$(() => {
   });
 
   return (
-    <div class="min-h-full bg-slate-50 text-slate-900 font-sans p-6 overflow-auto">
+    <div class="min-h-full overflow-auto bg-slate-50 p-6 font-sans text-slate-900">
       {/* Header */}
-      <header class="mb-8 pb-4 border-b border-slate-200 flex justify-between items-center flex-wrap gap-4">
+      <header class="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <h1 class="text-3xl font-bold text-slate-800 tracking-tight">Galería de Fotos</h1>
-          <p class="text-slate-500 mt-1">
-            {count.value}/{MAX_IMAGES} imágenes · Las fotos se mostrarán en la página principal.
+          <h1 class="text-3xl font-bold tracking-tight text-slate-800">
+            Galería de Fotos
+          </h1>
+          <p class="mt-1 text-slate-500">
+            {count.value}/{MAX_IMAGES} imágenes · Las fotos se mostrarán en la
+            página principal.
           </p>
         </div>
 
         <label
           class={[
-            "flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm uppercase tracking-wider cursor-pointer transition-all shadow-sm",
+            "flex cursor-pointer items-center gap-2 rounded-xl px-6 py-3 text-sm font-bold tracking-wider uppercase shadow-sm transition-all",
             count.value >= MAX_IMAGES || isUploading.value
-              ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-              : "bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md"
+              ? "cursor-not-allowed bg-slate-200 text-slate-400"
+              : "bg-slate-800 text-white hover:bg-slate-900 hover:shadow-md",
           ]}
         >
           {isUploading.value ? (
             <>
-              <svg class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+              <svg
+                class="h-4 w-4 animate-spin"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                ></path>
               </svg>
               Subiendo...
             </>
           ) : (
             <>
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
               Agregar Foto
             </>
@@ -190,49 +251,92 @@ export default component$(() => {
 
       {/* Limit reached banner */}
       {count.value >= MAX_IMAGES && (
-        <div class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 text-amber-700">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          <span class="font-bold text-sm">Límite de {MAX_IMAGES} imágenes alcanzado. Elimina alguna para agregar más.</span>
+        <div class="mb-6 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-700">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span class="text-sm font-bold">
+            Límite de {MAX_IMAGES} imágenes alcanzado. Elimina alguna para
+            agregar más.
+          </span>
         </div>
       )}
 
       {/* Grid */}
       {images.value.length === 0 ? (
-        <div class="flex flex-col items-center justify-center py-32 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400">
-          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-4">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+        <div class="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 py-32 text-slate-400">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="mb-4"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
           </svg>
-          <p class="font-bold text-lg mb-2">Sin imágenes todavía</p>
-          <p class="text-sm">Hacé clic en "Agregar Foto" para subir la primera imagen.</p>
+          <p class="mb-2 text-lg font-bold">Sin imágenes todavía</p>
+          <p class="text-sm">
+            Hacé clic en "Agregar Foto" para subir la primera imagen.
+          </p>
         </div>
       ) : (
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {images.value.map((url, idx) => (
             <div
               key={url}
-              class="group relative aspect-square rounded-2xl overflow-hidden bg-slate-200 border border-slate-200 shadow-sm hover:shadow-lg transition-all duration-200"
+              class="group relative aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 shadow-sm transition-all duration-200 hover:shadow-lg"
             >
               <img
                 src={url}
                 alt={`Foto ${idx + 1}`}
                 width={300}
                 height={300}
-                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-pointer"
+                class="h-full w-full cursor-pointer object-cover transition-transform duration-500 group-hover:scale-105"
                 onClick$={() => openLightbox(url)}
               />
 
               {/* Overlay */}
-              <div class="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-200 flex items-center justify-center">
-                <div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1.5">
+              <div class="absolute inset-0 flex items-center justify-center bg-black/0 transition-all duration-200 group-hover:bg-black/40">
+                <div class="flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                   {/* View */}
                   <button
                     type="button"
                     onClick$={() => openLightbox(url)}
-                    class="w-8 h-8 rounded-full bg-white/90 text-slate-800 flex items-center justify-center hover:bg-white transition-colors"
+                    class="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-800 transition-colors hover:bg-white"
                     title="Ver"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
                     </svg>
                   </button>
                   {/* Move up */}
@@ -240,10 +344,22 @@ export default component$(() => {
                     <button
                       type="button"
                       onClick$={() => moveImage(idx, "up")}
-                      class="w-8 h-8 rounded-full bg-white/90 text-slate-800 flex items-center justify-center hover:bg-white transition-colors"
+                      class="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-800 transition-colors hover:bg-white"
                       title="Mover arriba"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <polyline points="18 15 12 9 6 15" />
+                      </svg>
                     </button>
                   )}
                   {/* Move down */}
@@ -251,28 +367,52 @@ export default component$(() => {
                     <button
                       type="button"
                       onClick$={() => moveImage(idx, "down")}
-                      class="w-8 h-8 rounded-full bg-white/90 text-slate-800 flex items-center justify-center hover:bg-white transition-colors"
+                      class="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-800 transition-colors hover:bg-white"
                       title="Mover abajo"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
                     </button>
                   )}
                   {/* Delete */}
                   <button
                     type="button"
-                    onClick$={() => confirmDeleteUrl.value = url}
-                    class="w-8 h-8 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition-colors"
+                    onClick$={() => (confirmDeleteUrl.value = url)}
+                    class="flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
                     title="Eliminar"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M3 6h18" />
+                      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                     </svg>
                   </button>
                 </div>
               </div>
 
               {/* Position badge */}
-              <div class="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/50 text-white text-[10px] font-black flex items-center justify-center">
+              <div class="absolute top-2 left-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/50 text-[10px] font-black text-white">
                 {idx + 1}
               </div>
             </div>
@@ -283,25 +423,53 @@ export default component$(() => {
       {/* ── Lightbox ── */}
       {lightboxUrl.value && (
         <div
-          class="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
           onClick$={closeLightbox}
         >
           <button
             type="button"
             onClick$={closeLightbox}
-            class="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+            class="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
           </button>
 
           {/* Prev */}
           {images.value.length > 1 && (
             <button
               type="button"
-              onClick$={(e) => { e.stopPropagation(); prevImage(); }}
-              class="absolute left-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+              onClick$={(e) => {
+                e.stopPropagation();
+                prevImage();
+              }}
+              class="absolute left-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
             </button>
           )}
 
@@ -310,7 +478,7 @@ export default component$(() => {
             alt="Vista ampliada"
             width={1200}
             height={800}
-            class="max-h-[85vh] max-w-[90vw] object-contain rounded-xl shadow-2xl"
+            class="max-h-[85vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
             onClick$={(e) => e.stopPropagation()}
           />
 
@@ -318,14 +486,29 @@ export default component$(() => {
           {images.value.length > 1 && (
             <button
               type="button"
-              onClick$={(e) => { e.stopPropagation(); nextImage(); }}
-              class="absolute right-4 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+              onClick$={(e) => {
+                e.stopPropagation();
+                nextImage();
+              }}
+              class="absolute right-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
             </button>
           )}
 
-          <div class="absolute bottom-4 text-white/60 text-sm font-medium">
+          <div class="absolute bottom-4 text-sm font-medium text-white/60">
             {lightboxIdx.value + 1} / {images.value.length}
           </div>
         </div>
@@ -333,18 +516,36 @@ export default component$(() => {
 
       {/* ── Delete Confirm Dialog ── */}
       {confirmDeleteUrl.value && (
-        <div class="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div class="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
-            <div class="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div class="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-2xl">
+            <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-500">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="28"
+                height="28"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M3 6h18" />
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              </svg>
             </div>
-            <h3 class="text-xl font-black text-slate-800 mb-2">¿Eliminar imagen?</h3>
-            <p class="text-slate-500 text-sm mb-6">Esta acción no se puede deshacer.</p>
+            <h3 class="mb-2 text-xl font-black text-slate-800">
+              ¿Eliminar imagen?
+            </h3>
+            <p class="mb-6 text-sm text-slate-500">
+              Esta acción no se puede deshacer.
+            </p>
             <div class="flex gap-3">
               <button
                 type="button"
-                onClick$={() => confirmDeleteUrl.value = null}
-                class="flex-1 py-3 rounded-xl border border-slate-200 font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                onClick$={() => (confirmDeleteUrl.value = null)}
+                class="flex-1 rounded-xl border border-slate-200 py-3 font-bold text-slate-700 transition-colors hover:bg-slate-50"
               >
                 Cancelar
               </button>
@@ -357,7 +558,7 @@ export default component$(() => {
                   await deleteAction.submit({ url });
                 }}
                 disabled={deleteAction.isRunning}
-                class="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-black transition-colors"
+                class="flex-1 rounded-xl bg-red-600 py-3 font-black text-white transition-colors hover:bg-red-700"
               >
                 Eliminar
               </button>

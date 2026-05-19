@@ -11,23 +11,27 @@ export default component$(() => {
   const seedAction = useSeedAction();
 
   return (
-    <div class="p-20 flex flex-col items-center justify-center space-y-8">
-      <h1 class="text-4xl font-black text-slate-800">Seeder de Base de Datos</h1>
-      <p class="text-slate-500 max-w-md text-center">
-        Al presionar el botón se llenará la base de datos con información de prueba para la última semana (Cajas, Escuelita, Reservas, etc.)
+    <div class="flex flex-col items-center justify-center space-y-8 p-20">
+      <h1 class="text-4xl font-black text-slate-800">
+        Seeder de Base de Datos
+      </h1>
+      <p class="max-w-md text-center text-slate-500">
+        Al presionar el botón se llenará la base de datos con información de
+        prueba para la última semana (Cajas, Escuelita, Reservas, etc.)
       </p>
 
       <button
         onClick$={() => seedAction.submit({})}
         disabled={seedAction.isRunning}
-        class="px-8 py-4 bg-emerald-500 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-500/20 disabled:opacity-50"
+        class="rounded-2xl bg-emerald-500 px-8 py-4 font-black tracking-widest text-white uppercase shadow-xl shadow-emerald-500/20 transition-all hover:bg-emerald-600 disabled:opacity-50"
       >
         {seedAction.isRunning ? "Sembrando..." : "Sembrar Datos de Prueba"}
       </button>
 
       {seedAction.value?.success && (
-        <div class="p-4 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200 font-bold">
-          ¡Base de datos sembrada con éxito! Ya puedes ir al calendario o balances.
+        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 font-bold text-emerald-700">
+          ¡Base de datos sembrada con éxito! Ya puedes ir al calendario o
+          balances.
         </div>
       )}
     </div>

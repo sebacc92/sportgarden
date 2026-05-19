@@ -1,5 +1,17 @@
-import { component$, useSignal, useComputed$, useTask$ } from "@builder.io/qwik";
-import { routeLoader$, routeAction$, Form, z, zod$, Link } from "@builder.io/qwik-city";
+import {
+  component$,
+  useSignal,
+  useComputed$,
+  useTask$,
+} from "@builder.io/qwik";
+import {
+  routeLoader$,
+  routeAction$,
+  Form,
+  z,
+  zod$,
+  Link,
+} from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { cashRegisters, cashMovements, bookings, students } from "~/db/schema";
 import { eq, desc, inArray } from "drizzle-orm";
@@ -12,8 +24,6 @@ import {
 } from "~/lib/admin/cash-settings-defaults";
 
 const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 100];
-
-
 
 export const useCashData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -90,17 +100,24 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     }
   }
 
-  const totalIncomes = allMovements.filter(m => m.type === "INCOME").reduce((a, m) => a + m.amount, 0);
-  const totalExpenses = allMovements.filter(m => m.type === "EXPENSE").reduce((a, m) => a + m.amount, 0);
-  const currentBalance = (latestRegister?.openingBalance || 0) + totalIncomes - totalExpenses;
+  const totalIncomes = allMovements
+    .filter((m) => m.type === "INCOME")
+    .reduce((a, m) => a + m.amount, 0);
+  const totalExpenses = allMovements
+    .filter((m) => m.type === "EXPENSE")
+    .reduce((a, m) => a + m.amount, 0);
+  const currentBalance =
+    (latestRegister?.openingBalance || 0) + totalIncomes - totalExpenses;
 
   const settings = await db.query.siteSettings.findFirst();
-  const availableMethods = resolvePaymentMethodsForAnalytics(settings?.paymentMethods);
+  const availableMethods = resolvePaymentMethodsForAnalytics(
+    settings?.paymentMethods,
+  );
 
   // Desglose por método de pago
   const byMethod: Record<string, { incomes: number; expenses: number }> = {};
 
-  availableMethods.forEach(pm => {
+  availableMethods.forEach((pm) => {
     byMethod[pm.id] = { incomes: 0, expenses: 0 };
   });
 
@@ -124,8 +141,8 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalCount / limit),
-      totalCount
-    }
+      totalCount,
+    },
   };
 });
 
@@ -135,23 +152,33 @@ export const useToggleRegisterAction = routeAction$(
     const { action, balance, registerId, notes } = data;
     if (action === "OPEN") {
       const id = crypto.randomUUID();
-      await db.insert(cashRegisters).values({ id, openingBalance: Number(balance) || 0, status: "OPEN", notes: notes || null });
+      await db.insert(cashRegisters).values({
+        id,
+        openingBalance: Number(balance) || 0,
+        status: "OPEN",
+        notes: notes || null,
+      });
       return { success: true };
     } else if (action === "CLOSE") {
       // Parse billCount from JSON string
       let billCount: Record<string, number> | null = null;
       if (data.billCountJson) {
-        try { billCount = JSON.parse(data.billCountJson as string); } catch {
+        try {
+          billCount = JSON.parse(data.billCountJson as string);
+        } catch {
           // Ignorar error de parseo si el JSON es inválido
         }
       }
-      await db.update(cashRegisters).set({
-        status: "CLOSED",
-        closingBalance: Number(balance) || 0,
-        closedAt: new Date(),
-        billCount: billCount ?? null,
-        notes: notes || null,
-      }).where(eq(cashRegisters.id, registerId!));
+      await db
+        .update(cashRegisters)
+        .set({
+          status: "CLOSED",
+          closingBalance: Number(balance) || 0,
+          closedAt: new Date(),
+          billCount: billCount ?? null,
+          notes: notes || null,
+        })
+        .where(eq(cashRegisters.id, registerId!));
       return { success: true };
     }
     return { success: false };
@@ -162,7 +189,7 @@ export const useToggleRegisterAction = routeAction$(
     registerId: z.string().optional(),
     notes: z.string().optional(),
     billCountJson: z.string().optional(),
-  })
+  }),
 );
 
 export const useAddMovementAction = routeAction$(
@@ -186,7 +213,7 @@ export const useAddMovementAction = routeAction$(
     amount: z.coerce.number().positive("El monto debe ser mayor a 0"),
     description: z.string().min(1, "La descripción / concepto es requerida"),
     paymentMethod: z.string(),
-  })
+  }),
 );
 
 export default component$(() => {
@@ -202,15 +229,18 @@ export default component$(() => {
 
   // Arqueo de billetes
   const bills = useSignal<Record<number, number>>(
-    Object.fromEntries(BILL_DENOMINATIONS.map(d => [d, 0]))
+    Object.fromEntries(BILL_DENOMINATIONS.map((d) => [d, 0])),
   );
   const billTotal = useComputed$(() =>
-    BILL_DENOMINATIONS.reduce((sum, d) => sum + d * (bills.value[d] || 0), 0)
+    BILL_DENOMINATIONS.reduce((sum, d) => sum + d * (bills.value[d] || 0), 0),
   );
 
   const reg = cashData.value.latestRegister;
   const openedAtStr = reg?.openedAt
-    ? new Date(reg.openedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })
+    ? new Date(reg.openedAt).toLocaleString("es-AR", {
+        dateStyle: "short",
+        timeStyle: "short",
+      })
     : "";
 
   // Close modal when movement is added
@@ -230,7 +260,7 @@ export default component$(() => {
   });
 
   return (
-    <div class="p-4 md:p-6 bg-slate-50 min-h-full font-sans print:bg-white print:p-0">
+    <div class="min-h-full bg-slate-50 p-4 font-sans md:p-6 print:bg-white print:p-0">
       <style>{`
         @media print {
           @page { margin: 1cm; }
@@ -241,27 +271,33 @@ export default component$(() => {
           .border { border-color: #e2e8f0 !important; }
         }
       `}</style>
-      
-      <div class="max-w-6xl mx-auto space-y-5">
-        
+
+      <div class="mx-auto max-w-6xl space-y-5">
         {/* Print-only Header */}
-        <div class="hidden print:block mb-6 border-b border-slate-900 pb-4">
+        <div class="mb-6 hidden border-b border-slate-900 pb-4 print:block">
           <h1 class="text-xl font-black">GardenClubFutbol - Reporte de Caja</h1>
-          <p class="text-xs text-slate-500 font-bold uppercase">{new Date().toLocaleString("es-AR")}</p>
+          <p class="text-xs font-bold text-slate-500 uppercase">
+            {new Date().toLocaleString("es-AR")}
+          </p>
         </div>
 
         <CashSectionNav />
 
         {/* Header */}
-        <div class="flex flex-wrap justify-between items-start gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 print:shadow-none print:border-slate-300">
+        <div class="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:border-slate-300 print:shadow-none">
           <div>
-            <h1 class="text-2xl font-black tracking-tight text-slate-800">Caja Actual</h1>
+            <h1 class="text-2xl font-black tracking-tight text-slate-800">
+              Caja Actual
+            </h1>
             {isOpen ? (
-              <p class="text-slate-500 mt-1 text-sm">
-                Abierta el <span class="font-semibold text-slate-700">{openedAtStr}</span>
+              <p class="mt-1 text-sm text-slate-500">
+                Abierta el{" "}
+                <span class="font-semibold text-slate-700">{openedAtStr}</span>
               </p>
             ) : (
-              <p class="text-slate-400 mt-1 text-sm">Caja cerrada · Ábrela para comenzar a operar.</p>
+              <p class="mt-1 text-sm text-slate-400">
+                Caja cerrada · Ábrela para comenzar a operar.
+              </p>
             )}
           </div>
 
@@ -270,31 +306,67 @@ export default component$(() => {
               <>
                 <button
                   onClick$={() => (isMovementModalOpen.value = true)}
-                  class="flex items-center gap-2 px-5 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-sm font-bold shadow-sm transition-all active:scale-95"
+                  class="flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-2 text-sm font-bold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-95"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
                   Nuevo Movimiento
                 </button>
                 <button
                   onClick$={() => window.print()}
-                  class="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                  class="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect width="12" height="8" x="6" y="14" /></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="6 9 6 2 18 2 18 9" />
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                    <rect width="12" height="8" x="6" y="14" />
+                  </svg>
                   Reporte del Día
                 </button>
                 <button
                   onClick$={() => (showCloseModal.value = true)}
-                  class="flex items-center gap-2 px-5 py-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 font-bold rounded-xl text-sm transition-colors"
+                  class="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-2 text-sm font-bold text-red-600 transition-colors hover:bg-red-100"
                 >
                   Cerrar Caja
                 </button>
               </>
             ) : (
-              <Form action={toggleAction} class="flex gap-2 items-center">
+              <Form action={toggleAction} class="flex items-center gap-2">
                 <input type="hidden" name="action" value="OPEN" />
-                <input type="number" name="balance" placeholder="Monto Inicial $" required
-                  class="px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-sm w-44" />
-                <Button look="primary" type="submit" class="bg-emerald-500 text-white hover:bg-emerald-600 font-bold px-5 py-2 rounded-xl shadow text-sm">
+                <input
+                  type="number"
+                  name="balance"
+                  placeholder="Monto Inicial $"
+                  required
+                  class="w-44 rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                />
+                <Button
+                  look="primary"
+                  type="submit"
+                  class="rounded-xl bg-emerald-500 px-5 py-2 text-sm font-bold text-white shadow hover:bg-emerald-600"
+                >
                   Abrir Caja
                 </Button>
               </Form>
@@ -305,54 +377,95 @@ export default component$(() => {
         {/* Close Modal */}
         {showCloseModal.value && (
           <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 print:hidden">
-            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-5">
-              <div class="flex justify-between items-center">
+            <div class="w-full max-w-md space-y-5 rounded-2xl bg-white p-6 shadow-2xl">
+              <div class="flex items-center justify-between">
                 <h2 class="text-xl font-black text-slate-800">Cerrar Caja</h2>
-                <button onClick$={() => (showCloseModal.value = false)} class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                <button
+                  onClick$={() => (showCloseModal.value = false)}
+                  class="text-2xl leading-none text-slate-400 hover:text-slate-600"
+                >
+                  &times;
+                </button>
               </div>
 
               <div>
-                <h3 class="font-bold text-slate-700 mb-3 text-sm uppercase tracking-wider">Arqueo de Billetes</h3>
+                <h3 class="mb-3 text-sm font-bold tracking-wider text-slate-700 uppercase">
+                  Arqueo de Billetes
+                </h3>
                 <div class="space-y-2">
                   {BILL_DENOMINATIONS.map((d) => (
                     <div key={d} class="flex items-center gap-3">
-                      <span class="w-24 text-sm font-bold text-slate-600 text-right">${d.toLocaleString("es-AR")}</span>
+                      <span class="w-24 text-right text-sm font-bold text-slate-600">
+                        ${d.toLocaleString("es-AR")}
+                      </span>
                       <input
-                        type="number" min="0" value={bills.value[d] || 0}
+                        type="number"
+                        min="0"
+                        value={bills.value[d] || 0}
                         onInput$={(e) => {
-                          const v = parseInt((e.target as HTMLInputElement).value) || 0;
+                          const v =
+                            parseInt((e.target as HTMLInputElement).value) || 0;
                           bills.value = { ...bills.value, [d]: v };
                         }}
-                        class="w-24 px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-center focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                        class="w-24 rounded-lg border border-slate-200 px-3 py-1.5 text-center text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                       />
-                      <span class="text-sm text-slate-500 font-medium">
+                      <span class="text-sm font-medium text-slate-500">
                         = ${((bills.value[d] || 0) * d).toLocaleString("es-AR")}
                       </span>
                     </div>
                   ))}
                 </div>
-                <div class="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex justify-between items-center">
-                  <span class="font-bold text-emerald-700 text-sm">Total en Efectivo</span>
-                  <span class="text-xl font-black text-emerald-800">${billTotal.value.toLocaleString("es-AR")}</span>
+                <div class="mt-4 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                  <span class="text-sm font-bold text-emerald-700">
+                    Total en Efectivo
+                  </span>
+                  <span class="text-xl font-black text-emerald-800">
+                    ${billTotal.value.toLocaleString("es-AR")}
+                  </span>
                 </div>
               </div>
 
               <Form action={toggleAction} class="space-y-3">
                 <input type="hidden" name="action" value="CLOSE" />
-                <input type="hidden" name="registerId" value={cashData.value.latestRegister?.id} />
-                <input type="hidden" name="balance" value={billTotal.value.toString()} />
-                <input type="hidden" name="billCountJson" value={JSON.stringify(bills.value)} />
+                <input
+                  type="hidden"
+                  name="registerId"
+                  value={cashData.value.latestRegister?.id}
+                />
+                <input
+                  type="hidden"
+                  name="balance"
+                  value={billTotal.value.toString()}
+                />
+                <input
+                  type="hidden"
+                  name="billCountJson"
+                  value={JSON.stringify(bills.value)}
+                />
                 <div>
-                  <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Observaciones del turno</label>
-                  <textarea name="notes" rows={2} placeholder="Ej: turno tranquilo, falta cambio..."
-                    class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                  <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                    Observaciones del turno
+                  </label>
+                  <textarea
+                    name="notes"
+                    rows={2}
+                    placeholder="Ej: turno tranquilo, falta cambio..."
+                    class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  />
                 </div>
                 <div class="flex gap-3 pt-1">
-                  <button type="button" onClick$={() => (showCloseModal.value = false)}
-                    class="flex-1 py-2 border border-slate-200 rounded-xl font-bold text-slate-600 hover:bg-slate-50 text-sm transition-colors">
+                  <button
+                    type="button"
+                    onClick$={() => (showCloseModal.value = false)}
+                    class="flex-1 rounded-xl border border-slate-200 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-slate-50"
+                  >
                     Cancelar
                   </button>
-                  <Button look="primary" type="submit" class="flex-1 py-2 bg-red-500 text-white hover:bg-red-600 rounded-xl font-bold text-sm">
+                  <Button
+                    look="primary"
+                    type="submit"
+                    class="flex-1 rounded-xl bg-red-500 py-2 text-sm font-bold text-white hover:bg-red-600"
+                  >
                     Confirmar Cierre
                   </Button>
                 </div>
@@ -363,69 +476,174 @@ export default component$(() => {
 
         {isOpen && (
           <div class="space-y-6">
-
             {/* Stats Overview */}
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print:grid-cols-2">
-              <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-                <div class="flex items-center gap-3 mb-3">
-                  <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-2">
+              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+                <div class="mb-3 flex items-center gap-3">
+                  <div class="rounded-lg bg-emerald-50 p-2 text-emerald-600">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                      <polyline points="17 6 23 6 23 12" />
+                    </svg>
                   </div>
-                  <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ingresos Totales</div>
+                  <div class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                    Ingresos Totales
+                  </div>
                 </div>
-                <div class="text-2xl font-black text-emerald-600">${cashData.value.totalIncomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
-                <div class="mt-4 pt-4 border-t border-slate-100 space-y-1.5">
-                  {Object.entries(cashData.value.byMethod).filter(([, v]) => v.incomes > 0).map(([k, v]) => (
-                    <div key={k} class="flex justify-between text-[10px] text-slate-500 font-bold uppercase tracking-tight">
-                      <span>{cashData.value.paymentMethods.find((pm: any) => pm.id === k)?.name || k}</span>
-                      <span class="text-emerald-600">+${v.incomes.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  ))}
+                <div class="text-2xl font-black text-emerald-600">
+                  $
+                  {cashData.value.totalIncomes.toLocaleString("es-AR", {
+                    minimumFractionDigits: 2,
+                  })}
+                </div>
+                <div class="mt-4 space-y-1.5 border-t border-slate-100 pt-4">
+                  {Object.entries(cashData.value.byMethod)
+                    .filter(([, v]) => v.incomes > 0)
+                    .map(([k, v]) => (
+                      <div
+                        key={k}
+                        class="flex justify-between text-[10px] font-bold tracking-tight text-slate-500 uppercase"
+                      >
+                        <span>
+                          {cashData.value.paymentMethods.find(
+                            (pm: any) => pm.id === k,
+                          )?.name || k}
+                        </span>
+                        <span class="text-emerald-600">
+                          +$
+                          {v.incomes.toLocaleString("es-AR", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    ))}
                 </div>
               </div>
 
-              <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
-                <div class="flex items-center gap-3 mb-3">
-                  <div class="p-2 bg-rose-50 rounded-lg text-rose-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><polyline points="17 18 23 18 23 12" /></svg>
+              <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md">
+                <div class="mb-3 flex items-center gap-3">
+                  <div class="rounded-lg bg-rose-50 p-2 text-rose-600">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+                      <polyline points="17 18 23 18 23 12" />
+                    </svg>
                   </div>
-                  <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Egresos Totales</div>
+                  <div class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                    Egresos Totales
+                  </div>
                 </div>
-                <div class="text-2xl font-black text-rose-600">${cashData.value.totalExpenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
-                <div class="mt-4 pt-4 border-t border-slate-100 space-y-1.5">
-                  {Object.entries(cashData.value.byMethod).filter(([, v]) => v.expenses > 0).map(([k, v]) => (
-                    <div key={k} class="flex justify-between text-[10px] text-slate-500 font-bold uppercase tracking-tight">
-                      <span>{cashData.value.paymentMethods.find((pm: any) => pm.id === k)?.name || k}</span>
-                      <span class="text-rose-600">-${v.expenses.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</span>
-                    </div>
-                  ))}
+                <div class="text-2xl font-black text-rose-600">
+                  $
+                  {cashData.value.totalExpenses.toLocaleString("es-AR", {
+                    minimumFractionDigits: 2,
+                  })}
+                </div>
+                <div class="mt-4 space-y-1.5 border-t border-slate-100 pt-4">
+                  {Object.entries(cashData.value.byMethod)
+                    .filter(([, v]) => v.expenses > 0)
+                    .map(([k, v]) => (
+                      <div
+                        key={k}
+                        class="flex justify-between text-[10px] font-bold tracking-tight text-slate-500 uppercase"
+                      >
+                        <span>
+                          {cashData.value.paymentMethods.find(
+                            (pm: any) => pm.id === k,
+                          )?.name || k}
+                        </span>
+                        <span class="text-rose-600">
+                          -$
+                          {v.expenses.toLocaleString("es-AR", {
+                            minimumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    ))}
                 </div>
               </div>
 
-              <div class="bg-slate-900 p-5 rounded-2xl shadow-xl border border-slate-800 text-white sm:col-span-2">
-                <div class="flex items-center justify-between mb-4">
+              <div class="rounded-2xl border border-slate-800 bg-slate-900 p-5 text-white shadow-xl sm:col-span-2">
+                <div class="mb-4 flex items-center justify-between">
                   <div class="flex items-center gap-3">
-                    <div class="p-2 bg-white/10 rounded-lg text-emerald-400">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" /><path d="M12 18V6" /></svg>
+                    <div class="rounded-lg bg-white/10 p-2 text-emerald-400">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.5"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+                        <path d="M12 18V6" />
+                      </svg>
                     </div>
-                    <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Balance del Turno</div>
+                    <div class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                      Balance del Turno
+                    </div>
                   </div>
-                  <div class="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                    Inicial: ${cashData.value.latestRegister?.openingBalance?.toLocaleString("es-AR")}
+                  <div class="text-[10px] font-black tracking-widest text-slate-500 uppercase">
+                    Inicial: $
+                    {cashData.value.latestRegister?.openingBalance?.toLocaleString(
+                      "es-AR",
+                    )}
                   </div>
                 </div>
                 <div class="flex items-baseline gap-2">
-                  <div class="text-4xl font-black text-emerald-400">${cashData.value.currentBalance.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</div>
-                  <div class="text-sm font-bold text-slate-500 uppercase tracking-widest">AR$</div>
+                  <div class="text-4xl font-black text-emerald-400">
+                    $
+                    {cashData.value.currentBalance.toLocaleString("es-AR", {
+                      minimumFractionDigits: 2,
+                    })}
+                  </div>
+                  <div class="text-sm font-bold tracking-widest text-slate-500 uppercase">
+                    AR$
+                  </div>
                 </div>
                 <div class="mt-4 flex gap-2">
                   {Object.entries(cashData.value.byMethod).map(([k, v]) => {
                     const bal = v.incomes - v.expenses;
-                    if (bal === 0 && k !== 'CASH') return null;
+                    if (bal === 0 && k !== "CASH") return null;
                     return (
-                      <div key={k} class="px-3 py-1 bg-white/5 rounded-lg border border-white/5 flex flex-col">
-                        <span class="text-[8px] font-black text-slate-500 uppercase">{cashData.value.paymentMethods.find((pm: any) => pm.id === k)?.name || k}</span>
-                        <span class={cn("text-[10px] font-bold", bal >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                      <div
+                        key={k}
+                        class="flex flex-col rounded-lg border border-white/5 bg-white/5 px-3 py-1"
+                      >
+                        <span class="text-[8px] font-black text-slate-500 uppercase">
+                          {cashData.value.paymentMethods.find(
+                            (pm: any) => pm.id === k,
+                          )?.name || k}
+                        </span>
+                        <span
+                          class={cn(
+                            "text-[10px] font-bold",
+                            bal >= 0 ? "text-emerald-400" : "text-rose-400",
+                          )}
+                        >
                           ${bal.toLocaleString("es-AR")}
                         </span>
                       </div>
@@ -436,27 +654,42 @@ export default component$(() => {
             </div>
 
             {/* Movements List - Full Width */}
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-              <div class="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center print:bg-white print:p-0 print:pb-3">
+            <div class="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 p-5 print:bg-white print:p-0 print:pb-3">
                 <div class="flex items-center gap-3">
-                  <h2 class="text-lg font-black text-slate-800">Movimientos del Turno</h2>
-                  <div class="px-2 py-0.5 bg-slate-200 text-slate-600 rounded-md text-[10px] font-black uppercase tracking-widest print:hidden">
+                  <h2 class="text-lg font-black text-slate-800">
+                    Movimientos del Turno
+                  </h2>
+                  <div class="rounded-md bg-slate-200 px-2 py-0.5 text-[10px] font-black tracking-widest text-slate-600 uppercase print:hidden">
                     {cashData.value.pagination.totalCount} registros
                   </div>
                 </div>
                 <button
                   onClick$={() => (isMovementModalOpen.value = true)}
-                  class="flex items-center gap-2 text-xs font-black text-emerald-600 hover:text-emerald-700 transition-colors uppercase tracking-widest print:hidden"
+                  class="flex items-center gap-2 text-xs font-black tracking-widest text-emerald-600 uppercase transition-colors hover:text-emerald-700 print:hidden"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
                   Agregar Movimiento
                 </button>
               </div>
 
               <div class="flex-1 overflow-auto">
-                <table class="w-full text-left border-collapse min-w-[800px]">
+                <table class="w-full min-w-[800px] border-collapse text-left">
                   <thead>
-                    <tr class="bg-slate-50/80 text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">
+                    <tr class="border-b border-slate-200 bg-slate-50/80 text-xs font-black tracking-widest text-slate-400 uppercase">
                       <th class="p-4 pl-6">Hora</th>
                       <th class="p-4">Categoría</th>
                       <th class="p-4">Descripción</th>
@@ -470,54 +703,115 @@ export default component$(() => {
                       <tr>
                         <td colSpan={5} class="p-16 text-center">
                           <div class="flex flex-col items-center gap-3">
-                            <div class="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" /></svg>
+                            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-300">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                              >
+                                <rect
+                                  width="18"
+                                  height="18"
+                                  x="3"
+                                  y="3"
+                                  rx="2"
+                                />
+                                <path d="M3 9h18" />
+                                <path d="M9 21V9" />
+                              </svg>
                             </div>
-                            <p class="text-slate-400 font-medium">No hay movimientos aún en este turno.</p>
+                            <p class="font-medium text-slate-400">
+                              No hay movimientos aún en este turno.
+                            </p>
                           </div>
                         </td>
                       </tr>
                     ) : (
                       cashData.value.movements.map((m) => {
-                        const mc = cashData.value.movementCategories.find(c => c.id === m.category);
+                        const mc = cashData.value.movementCategories.find(
+                          (c) => c.id === m.category,
+                        );
                         const label = mc ? mc.name : m.category;
                         const icon = mc ? mc.icon : "📌";
-                        const typeColor = m.type === "INCOME" ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100";
-                        
+                        const typeColor =
+                          m.type === "INCOME"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                            : "bg-rose-50 text-rose-700 border-rose-100";
+
                         return (
-                          <tr key={m.id} class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors group">
-                            <td class="p-4 pl-6 text-slate-500 text-xs font-bold whitespace-nowrap">
-                              {new Date(m.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                          <tr
+                            key={m.id}
+                            class="group border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/50"
+                          >
+                            <td class="p-4 pl-6 text-xs font-bold whitespace-nowrap text-slate-500">
+                              {new Date(m.createdAt).toLocaleTimeString(
+                                "es-AR",
+                                { hour: "2-digit", minute: "2-digit" },
+                              )}
                             </td>
                             <td class="p-4">
-                              <span class={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-tight border ${typeColor}`}>
+                              <span
+                                class={`rounded-md border px-2 py-0.5 text-[10px] font-black tracking-tight uppercase ${typeColor}`}
+                              >
                                 <span class="mr-1">{icon}</span>
                                 {label}
                               </span>
                             </td>
-                            <td class="p-4 text-slate-600 font-medium max-w-md truncate">{m.description || <span class="text-slate-300">—</span>}</td>
+                            <td class="max-w-md truncate p-4 font-medium text-slate-600">
+                              {m.description || (
+                                <span class="text-slate-300">—</span>
+                              )}
+                            </td>
                             <td class="p-4">
                               <div class="flex items-center gap-2">
-                                <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                                <span class="text-xs text-slate-500 font-bold uppercase tracking-widest">
-                                  {cashData.value.paymentMethods.find((pm: any) => pm.id === m.paymentMethod)?.name || m.paymentMethod}
+                                <span class="h-1.5 w-1.5 rounded-full bg-slate-300"></span>
+                                <span class="text-xs font-bold tracking-widest text-slate-500 uppercase">
+                                  {cashData.value.paymentMethods.find(
+                                    (pm: any) => pm.id === m.paymentMethod,
+                                  )?.name || m.paymentMethod}
                                 </span>
                               </div>
                             </td>
-                            <td class={`p-4 text-right font-black text-base whitespace-nowrap ${m.type === "INCOME" ? "text-emerald-600" : "text-rose-600"}`}>
-                              {m.type === "INCOME" ? "+ $" : "- $"}{m.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                            <td
+                              class={`p-4 text-right text-base font-black whitespace-nowrap ${m.type === "INCOME" ? "text-emerald-600" : "text-rose-600"}`}
+                            >
+                              {m.type === "INCOME" ? "+ $" : "- $"}
+                              {m.amount.toLocaleString("es-AR", {
+                                minimumFractionDigits: 2,
+                              })}
                             </td>
                             <td class="p-4 pr-6 text-center print:hidden">
-                              {(m.category === "BOOKING" && m.booking) || (m.category === "SCHOOL" && m.student) ? (
+                              {(m.category === "BOOKING" && m.booking) ||
+                              (m.category === "SCHOOL" && m.student) ? (
                                 <button
                                   onClick$={() => {
                                     selectedMovement.value = m;
                                     isDetailModalOpen.value = true;
                                   }}
-                                  class="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all active:scale-90"
+                                  class="rounded-xl p-2 text-slate-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 active:scale-90"
                                   title="Ver detalle"
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="18"
+                                    height="18"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                  >
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="16" x2="12" y2="12" />
+                                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                                  </svg>
                                 </button>
                               ) : (
                                 <span class="text-slate-200">—</span>
@@ -533,30 +827,44 @@ export default component$(() => {
 
               {/* Pagination Footer */}
               {cashData.value.pagination.totalPages > 1 && (
-                <div class="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between print:hidden">
-                  <div class="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                    Página {cashData.value.pagination.currentPage} de {cashData.value.pagination.totalPages}
+                <div class="flex items-center justify-between border-t border-slate-100 bg-slate-50 p-4 print:hidden">
+                  <div class="text-xs font-bold tracking-widest text-slate-400 uppercase">
+                    Página {cashData.value.pagination.currentPage} de{" "}
+                    {cashData.value.pagination.totalPages}
                   </div>
                   <div class="flex gap-2">
                     <button
                       disabled={cashData.value.pagination.currentPage === 1}
                       onClick$={() => {
                         const url = new URL(window.location.href);
-                        url.searchParams.set("page", (cashData.value.pagination.currentPage - 1).toString());
+                        url.searchParams.set(
+                          "page",
+                          (
+                            cashData.value.pagination.currentPage - 1
+                          ).toString(),
+                        );
                         window.location.href = url.toString();
                       }}
-                      class="px-4 py-2 text-xs font-black uppercase tracking-widest border border-slate-200 rounded-lg bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-black tracking-widest text-slate-600 uppercase transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Anterior
                     </button>
                     <button
-                      disabled={cashData.value.pagination.currentPage === cashData.value.pagination.totalPages}
+                      disabled={
+                        cashData.value.pagination.currentPage ===
+                        cashData.value.pagination.totalPages
+                      }
                       onClick$={() => {
                         const url = new URL(window.location.href);
-                        url.searchParams.set("page", (cashData.value.pagination.currentPage + 1).toString());
+                        url.searchParams.set(
+                          "page",
+                          (
+                            cashData.value.pagination.currentPage + 1
+                          ).toString(),
+                        );
                         window.location.href = url.toString();
                       }}
-                      class="px-4 py-2 text-xs font-black uppercase tracking-widest border border-slate-200 rounded-lg bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                      class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-black tracking-widest text-slate-600 uppercase transition-all hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Siguiente
                     </button>
@@ -570,40 +878,80 @@ export default component$(() => {
 
       {/* Detail Modal */}
       <Modal.Root bind:show={isDetailModalOpen}>
-        <Modal.Panel class="max-w-md p-0 rounded-3xl overflow-hidden shadow-2xl border-none">
+        <Modal.Panel class="max-w-md overflow-hidden rounded-3xl border-none p-0 shadow-2xl">
           {selectedMovement.value && (
             <div class="flex flex-col">
-              <div class="bg-emerald-600 p-8 text-white relative">
+              <div class="relative bg-emerald-600 p-8 text-white">
                 <button
                   onClick$={() => (isDetailModalOpen.value = false)}
-                  class="absolute top-6 right-6 text-white/60 hover:text-white transition-colors"
+                  class="absolute top-6 right-6 text-white/60 transition-colors hover:text-white"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
-                <div class="text-[10px] font-black uppercase tracking-widest text-emerald-200 mb-2">Detalle de Operación</div>
-                <h2 class="text-2xl font-black tracking-tighter uppercase mb-1">
-                  {cashData.value.movementCategories.find(mc => mc.id === selectedMovement.value?.category)?.name || "Movimiento"}
+                <div class="mb-2 text-[10px] font-black tracking-widest text-emerald-200 uppercase">
+                  Detalle de Operación
+                </div>
+                <h2 class="mb-1 text-2xl font-black tracking-tighter uppercase">
+                  {cashData.value.movementCategories.find(
+                    (mc) => mc.id === selectedMovement.value?.category,
+                  )?.name || "Movimiento"}
                 </h2>
-                <div class="flex items-center gap-2 text-emerald-100 text-xs font-bold">
-                  <span>{new Date(selectedMovement.value.createdAt).toLocaleDateString("es-AR")}</span>
+                <div class="flex items-center gap-2 text-xs font-bold text-emerald-100">
+                  <span>
+                    {new Date(
+                      selectedMovement.value.createdAt,
+                    ).toLocaleDateString("es-AR")}
+                  </span>
                   <span>•</span>
-                  <span>{new Date(selectedMovement.value.createdAt).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}</span>
+                  <span>
+                    {new Date(
+                      selectedMovement.value.createdAt,
+                    ).toLocaleTimeString("es-AR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
                 </div>
               </div>
 
-              <div class="p-8 bg-white space-y-8">
+              <div class="space-y-8 bg-white p-8">
                 {/* Movement Info */}
-                <div class="flex justify-between items-end pb-6 border-b border-slate-100">
+                <div class="flex items-end justify-between border-b border-slate-100 pb-6">
                   <div>
-                    <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Monto Registrado</div>
-                    <div class={`text-3xl font-black ${selectedMovement.value.type === "INCOME" ? "text-emerald-600" : "text-rose-600"}`}>
-                      {selectedMovement.value.type === "INCOME" ? "+ $" : "- $"}{selectedMovement.value.amount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                    <div class="mb-1 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                      Monto Registrado
+                    </div>
+                    <div
+                      class={`text-3xl font-black ${selectedMovement.value.type === "INCOME" ? "text-emerald-600" : "text-rose-600"}`}
+                    >
+                      {selectedMovement.value.type === "INCOME" ? "+ $" : "- $"}
+                      {selectedMovement.value.amount.toLocaleString("es-AR", {
+                        minimumFractionDigits: 2,
+                      })}
                     </div>
                   </div>
                   <div class="text-right">
-                    <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Método</div>
-                    <div class="text-sm font-black text-slate-700 uppercase tracking-tight">
-                      {cashData.value.paymentMethods.find((pm: any) => pm.id === selectedMovement.value.paymentMethod)?.name || selectedMovement.value.paymentMethod}
+                    <div class="mb-1 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                      Método
+                    </div>
+                    <div class="text-sm font-black tracking-tight text-slate-700 uppercase">
+                      {cashData.value.paymentMethods.find(
+                        (pm: any) =>
+                          pm.id === selectedMovement.value.paymentMethod,
+                      )?.name || selectedMovement.value.paymentMethod}
                     </div>
                   </div>
                 </div>
@@ -611,28 +959,68 @@ export default component$(() => {
                 {/* Booking Info if available */}
                 {selectedMovement.value.booking && (
                   <div class="space-y-6">
-                    <div class="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-4">
+                    <div class="space-y-4 rounded-2xl border border-slate-100 bg-slate-50 p-5">
                       <div class="flex items-center gap-3">
-                        <div class="p-2 bg-white rounded-xl text-emerald-600 shadow-sm border border-slate-100">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2 22 1-1h3l9-9"/><path d="M3 21v-3l9-9"/><path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l-3-3Z"/></svg>
+                        <div class="rounded-xl border border-slate-100 bg-white p-2 text-emerald-600 shadow-sm">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="m2 22 1-1h3l9-9" />
+                            <path d="M3 21v-3l9-9" />
+                            <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l-3-3Z" />
+                          </svg>
                         </div>
                         <div>
-                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancha / Turno</div>
-                          <div class="text-sm font-black text-slate-800">{selectedMovement.value.booking.pitch?.name}</div>
+                          <div class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                            Cancha / Turno
+                          </div>
+                          <div class="text-sm font-black text-slate-800">
+                            {selectedMovement.value.booking.pitch?.name}
+                          </div>
                         </div>
                       </div>
 
                       <div class="grid grid-cols-2 gap-4 pt-2">
                         <div>
-                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Fecha</div>
+                          <div class="mb-0.5 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                            Fecha
+                          </div>
                           <div class="text-xs font-bold text-slate-600">
-                            {new Date(selectedMovement.value.booking.startTime).toLocaleDateString("es-AR", { weekday: 'long', day: 'numeric', month: 'long' })}
+                            {new Date(
+                              selectedMovement.value.booking.startTime,
+                            ).toLocaleDateString("es-AR", {
+                              weekday: "long",
+                              day: "numeric",
+                              month: "long",
+                            })}
                           </div>
                         </div>
                         <div>
-                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Horario</div>
+                          <div class="mb-0.5 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                            Horario
+                          </div>
                           <div class="text-xs font-bold text-slate-600">
-                            {new Date(selectedMovement.value.booking.startTime).toLocaleTimeString("es-AR", { hour: '2-digit', minute: '2-digit' })} - {new Date(selectedMovement.value.booking.endTime).toLocaleTimeString("es-AR", { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(
+                              selectedMovement.value.booking.startTime,
+                            ).toLocaleTimeString("es-AR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}{" "}
+                            -{" "}
+                            {new Date(
+                              selectedMovement.value.booking.endTime,
+                            ).toLocaleTimeString("es-AR", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
                           </div>
                         </div>
                       </div>
@@ -640,89 +1028,145 @@ export default component$(() => {
 
                     <div class="space-y-4">
                       <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <div class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
                         </div>
                         <div>
-                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</div>
-                          <div class="text-sm font-bold text-slate-800">
-                            {selectedMovement.value.booking.user?.name || selectedMovement.value.booking.guestRequest?.name || "Cliente Final"}
+                          <div class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                            Cliente
                           </div>
-                          <div class="text-[10px] text-slate-500 font-medium">
-                            {selectedMovement.value.booking.user?.email || selectedMovement.value.booking.guestRequest?.phone || "Sin contacto"}
+                          <div class="text-sm font-bold text-slate-800">
+                            {selectedMovement.value.booking.user?.name ||
+                              selectedMovement.value.booking.guestRequest
+                                ?.name ||
+                              "Cliente Final"}
+                          </div>
+                          <div class="text-[10px] font-medium text-slate-500">
+                            {selectedMovement.value.booking.user?.email ||
+                              selectedMovement.value.booking.guestRequest
+                                ?.phone ||
+                              "Sin contacto"}
                           </div>
                         </div>
                       </div>
 
-                      {selectedMovement.value.booking.extras && selectedMovement.value.booking.extras.length > 0 && (
-                        <div class="pt-2">
-                          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Servicios Extra</div>
-                          <div class="flex flex-wrap gap-2">
-                            {selectedMovement.value.booking.extras.map((extra: string) => (
-                              <span key={extra} class="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black uppercase tracking-tight border border-blue-100">
-                                {extra}
-                              </span>
-                            ))}
+                      {selectedMovement.value.booking.extras &&
+                        selectedMovement.value.booking.extras.length > 0 && (
+                          <div class="pt-2">
+                            <div class="mb-2 text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                              Servicios Extra
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                              {selectedMovement.value.booking.extras.map(
+                                (extra: string) => (
+                                  <span
+                                    key={extra}
+                                    class="rounded-lg border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-black tracking-tight text-blue-600 uppercase"
+                                  >
+                                    {extra}
+                                  </span>
+                                ),
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
                     </div>
                   </div>
                 )}
 
                 {/* School Info if available */}
-                {selectedMovement.value.category === "SCHOOL" && selectedMovement.value.student && (
-                  <div class="space-y-6">
-                    <div class="bg-blue-50 rounded-2xl p-6 border border-blue-100">
-                      <div class="flex items-center gap-4 mb-4">
-                        <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-                        </div>
-                        <div>
-                          <div class="text-[10px] font-black text-blue-400 uppercase tracking-widest">Alumno / Escuelita</div>
-                          <div class="text-base font-black text-blue-900 leading-tight">{selectedMovement.value.student.name}</div>
-                        </div>
-                      </div>
-
-                      <div class="grid grid-cols-2 gap-4">
-                        <div>
-                          <div class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Categoría</div>
-                          <div class="px-3 py-1 bg-white rounded-lg border border-blue-100 text-xs font-black text-blue-600 inline-block">
-                            {selectedMovement.value.student.category}
+                {selectedMovement.value.category === "SCHOOL" &&
+                  selectedMovement.value.student && (
+                    <div class="space-y-6">
+                      <div class="rounded-2xl border border-blue-100 bg-blue-50 p-6">
+                        <div class="mb-4 flex items-center gap-4">
+                          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-200">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="24"
+                              height="24"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="2.5"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                              <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                            </svg>
+                          </div>
+                          <div>
+                            <div class="text-[10px] font-black tracking-widest text-blue-400 uppercase">
+                              Alumno / Escuelita
+                            </div>
+                            <div class="text-base leading-tight font-black text-blue-900">
+                              {selectedMovement.value.student.name}
+                            </div>
                           </div>
                         </div>
-                        <div>
-                          <div class="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1">Tutor</div>
-                          <div class="text-xs font-bold text-blue-800">{selectedMovement.value.student.guardianName || "-"}</div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                          <div>
+                            <div class="mb-1 text-[10px] font-black tracking-widest text-blue-400 uppercase">
+                              Categoría
+                            </div>
+                            <div class="inline-block rounded-lg border border-blue-100 bg-white px-3 py-1 text-xs font-black text-blue-600">
+                              {selectedMovement.value.student.category}
+                            </div>
+                          </div>
+                          <div>
+                            <div class="mb-1 text-[10px] font-black tracking-widest text-blue-400 uppercase">
+                              Tutor
+                            </div>
+                            <div class="text-xs font-bold text-blue-800">
+                              {selectedMovement.value.student.guardianName ||
+                                "-"}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
                 {/* Info button for other school payments that don't have student attached yet */}
-                {selectedMovement.value.category === "SCHOOL" && !selectedMovement.value.student && (
-                  <div class="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
-                    <p class="text-xs font-bold text-slate-400 leading-relaxed">
-                      Pago de escuelita registrado manualmente. 
-                      No tiene un alumno vinculado automáticamente.
-                    </p>
-                  </div>
-                )}
+                {selectedMovement.value.category === "SCHOOL" &&
+                  !selectedMovement.value.student && (
+                    <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                      <p class="text-xs leading-relaxed font-bold text-slate-400">
+                        Pago de escuelita registrado manualmente. No tiene un
+                        alumno vinculado automáticamente.
+                      </p>
+                    </div>
+                  )}
 
-                {!selectedMovement.value.booking && selectedMovement.value.category !== "SCHOOL" && (
-                  <div class="p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center">
-                    <p class="text-xs font-bold text-slate-400 leading-relaxed">
-                      Este es un movimiento manual registrado directamente en caja. 
-                      No tiene una operación vinculada automáticamente.
-                    </p>
-                  </div>
-                )}
+                {!selectedMovement.value.booking &&
+                  selectedMovement.value.category !== "SCHOOL" && (
+                    <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                      <p class="text-xs leading-relaxed font-bold text-slate-400">
+                        Este es un movimiento manual registrado directamente en
+                        caja. No tiene una operación vinculada automáticamente.
+                      </p>
+                    </div>
+                  )}
 
                 <div class="pt-4">
                   <button
                     onClick$={() => (isDetailModalOpen.value = false)}
-                    class="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10"
+                    class="w-full rounded-2xl bg-slate-900 py-4 text-xs font-black tracking-widest text-white uppercase shadow-xl shadow-slate-900/10 transition-all hover:bg-slate-800"
                   >
                     Cerrar Detalle
                   </button>
@@ -735,30 +1179,56 @@ export default component$(() => {
 
       {/* New Movement Modal */}
       <Modal.Root bind:show={isMovementModalOpen}>
-        <Modal.Panel class="max-w-md p-0 rounded-3xl overflow-hidden shadow-2xl border-none">
-          <div class="bg-slate-900 p-8 text-white relative">
+        <Modal.Panel class="max-w-md overflow-hidden rounded-3xl border-none p-0 shadow-2xl">
+          <div class="relative bg-slate-900 p-8 text-white">
             <button
               onClick$={() => (isMovementModalOpen.value = false)}
-              class="absolute top-6 right-6 text-slate-400 hover:text-white transition-colors"
+              class="absolute top-6 right-6 text-slate-400 transition-colors hover:text-white"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
-            <h2 class="text-2xl font-black tracking-tighter uppercase mb-1">Nuevo Movimiento</h2>
-            <p class="text-slate-400 text-sm font-medium">Registra un ingreso o egreso de caja</p>
+            <h2 class="mb-1 text-2xl font-black tracking-tighter uppercase">
+              Nuevo Movimiento
+            </h2>
+            <p class="text-sm font-medium text-slate-400">
+              Registra un ingreso o egreso de caja
+            </p>
           </div>
 
-          <div class="p-8 bg-white">
+          <div class="bg-white p-8">
             <Form action={addMovementAction} class="space-y-5">
-              <input type="hidden" name="registerId" value={cashData.value.latestRegister?.id} />
+              <input
+                type="hidden"
+                name="registerId"
+                value={cashData.value.latestRegister?.id}
+              />
 
               <div class="grid grid-cols-2 gap-4">
                 <div class="space-y-1.5">
-                  <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo</label>
-                  <select 
-                    name="type" 
+                  <label class="block text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                    Tipo
+                  </label>
+                  <select
+                    name="type"
                     value={movementType.value}
-                    onChange$={(e) => movementType.value = (e.target as HTMLSelectElement).value as any}
-                    class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-bold text-slate-700 appearance-none cursor-pointer transition-all"
+                    onChange$={(e) =>
+                      (movementType.value = (e.target as HTMLSelectElement)
+                        .value as any)
+                    }
+                    class="w-full cursor-pointer appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
                   >
                     <option value="INCOME">📈 Ingreso</option>
                     <option value="EXPENSE">📉 Egreso</option>
@@ -766,20 +1236,30 @@ export default component$(() => {
                 </div>
 
                 <div class="space-y-1.5">
-                  <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoría</label>
-                  <select name="category" required class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-bold text-slate-700 appearance-none cursor-pointer transition-all">
-                    <option value="" disabled selected>Seleccione...</option>
+                  <label class="block text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                    Categoría
+                  </label>
+                  <select
+                    name="category"
+                    required
+                    class="w-full cursor-pointer appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  >
+                    <option value="" disabled selected>
+                      Seleccione...
+                    </option>
                     {cashData.value.movementCategories
-                      .filter(mc => mc.type === movementType.value)
-                      .map(mc => (
-                        <option key={mc.id} value={mc.id}>{`${mc.icon} ${mc.name}`}</option>
-                      ))
-                    }
+                      .filter((mc) => mc.type === movementType.value)
+                      .map((mc) => (
+                        <option
+                          key={mc.id}
+                          value={mc.id}
+                        >{`${mc.icon} ${mc.name}`}</option>
+                      ))}
                   </select>
                 </div>
               </div>
 
-              <p class="text-[10px] leading-snug text-slate-500 font-medium">
+              <p class="text-[10px] leading-snug font-medium text-slate-500">
                 Podés agregar o editar categorías en{" "}
                 <Link
                   href="/admin/cash/categorias-movimientos-caja/"
@@ -791,24 +1271,43 @@ export default component$(() => {
               </p>
 
               <div class="space-y-1.5">
-                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto ($)</label>
+                <label class="block text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                  Monto ($)
+                </label>
                 <div class="relative">
-                  <span class="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-400">$</span>
-                  <input type="number" step="1" name="amount" required placeholder="0"
-                    class="w-full pl-8 pr-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-black text-slate-800 transition-all" />
+                  <span class="absolute top-1/2 left-4 -translate-y-1/2 font-black text-slate-400">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    step="1"
+                    name="amount"
+                    required
+                    placeholder="0"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pr-4 pl-8 text-sm font-black text-slate-800 transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  />
                 </div>
               </div>
 
               <div class="space-y-1.5">
-                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Método de Pago</label>
-                <select name="paymentMethod" class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-bold text-slate-700 appearance-none cursor-pointer transition-all">
-                  {cashData.value.paymentMethods.filter((pm: any) => pm.isActive).map((pm: any) => (
-                    <option key={pm.id} value={pm.id}>{pm.name}</option>
-                  ))}
+                <label class="block text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                  Método de Pago
+                </label>
+                <select
+                  name="paymentMethod"
+                  class="w-full cursor-pointer appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                >
+                  {cashData.value.paymentMethods
+                    .filter((pm: any) => pm.isActive)
+                    .map((pm: any) => (
+                      <option key={pm.id} value={pm.id}>
+                        {pm.name}
+                      </option>
+                    ))}
                 </select>
               </div>
 
-              <p class="text-[10px] leading-snug text-slate-500 font-medium">
+              <p class="text-[10px] leading-snug font-medium text-slate-500">
                 Activá o agregá medios de pago en{" "}
                 <Link
                   href="/admin/cash/medios-de-pago/"
@@ -820,26 +1319,35 @@ export default component$(() => {
               </p>
 
               <div class="space-y-1.5">
-                <label class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Descripción / Concepto</label>
-                <textarea name="description" rows={2} required placeholder="Ej: Pago de luz, Venta de gaseosas..."
-                  class="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-medium text-slate-600 transition-all resize-none" />
+                <label class="block text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                  Descripción / Concepto
+                </label>
+                <textarea
+                  name="description"
+                  rows={2}
+                  required
+                  placeholder="Ej: Pago de luz, Venta de gaseosas..."
+                  class="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                />
               </div>
 
-              <div class="pt-2 flex gap-3">
+              <div class="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick$={() => (isMovementModalOpen.value = false)}
-                  class="flex-1 py-4 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors"
+                  class="flex-1 py-4 text-xs font-black tracking-widest text-slate-400 uppercase transition-colors hover:text-slate-600"
                 >
                   Cancelar
                 </button>
-                <Button 
-                  look="primary" 
-                  type="submit" 
+                <Button
+                  look="primary"
+                  type="submit"
                   disabled={addMovementAction.isRunning}
-                  class="flex-[2] py-4 bg-slate-900 text-white hover:bg-slate-800 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-slate-900/10 disabled:opacity-50"
+                  class="flex-[2] rounded-2xl bg-slate-900 py-4 text-xs font-black tracking-widest text-white uppercase shadow-xl shadow-slate-900/10 hover:bg-slate-800 disabled:opacity-50"
                 >
-                  {addMovementAction.isRunning ? "Registrando..." : "Confirmar Movimiento"}
+                  {addMovementAction.isRunning
+                    ? "Registrando..."
+                    : "Confirmar Movimiento"}
                 </Button>
               </div>
             </Form>

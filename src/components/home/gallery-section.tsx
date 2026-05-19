@@ -35,7 +35,7 @@ export const GallerySection = component$<GallerySectionProps>(({ images }) => {
     <section id="galeria" class="relative z-20 bg-slate-950 py-24">
       <div class="mx-auto max-w-7xl px-6 lg:px-8">
         <div class="mb-14 text-center">
-          <h2 class="mb-4 text-4xl font-black uppercase tracking-tighter text-white md:text-5xl">
+          <h2 class="mb-4 text-4xl font-black tracking-tighter text-white uppercase md:text-5xl">
             Nuestras <span class="text-emerald-400">Instalaciones</span>
           </h2>
           <p class="mx-auto max-w-xl text-lg text-slate-400">
@@ -82,11 +82,14 @@ export const GallerySection = component$<GallerySectionProps>(({ images }) => {
       </div>
 
       {lightboxUrl.value && (
-        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/95" onClick$={closeLightbox}>
+        <div
+          class="fixed inset-0 z-[100] flex items-center justify-center bg-black/95"
+          onClick$={closeLightbox}
+        >
           <button
             type="button"
             onClick$={closeLightbox}
-            class="absolute right-5 top-5 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+            class="absolute top-5 right-5 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
             aria-label="Cerrar"
           >
             <svg
@@ -136,7 +139,7 @@ export const GallerySection = component$<GallerySectionProps>(({ images }) => {
             alt="Vista ampliada"
             width={1200}
             height={800}
-            class="max-h-[88vh] max-w-[92vw] select-none rounded-2xl object-contain shadow-2xl"
+            class="max-h-[88vh] max-w-[92vw] rounded-2xl object-contain shadow-2xl select-none"
             onClick$={(e) => e.stopPropagation()}
           />
 
@@ -166,7 +169,7 @@ export const GallerySection = component$<GallerySectionProps>(({ images }) => {
             </button>
           )}
 
-          <div class="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium text-white/70 backdrop-blur-sm tabular-nums">
+          <div class="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-4 py-1.5 text-sm font-medium text-white/70 tabular-nums backdrop-blur-sm">
             {lightboxIdx.value + 1} / {images.length}
           </div>
         </div>
