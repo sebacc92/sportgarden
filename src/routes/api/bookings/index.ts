@@ -1,8 +1,30 @@
+// Polyfill process properties for Vercel Edge Runtime compatibility with Mercado Pago SDK
+if (typeof process === "undefined") {
+  (globalThis as any).process = {
+    env: {},
+    version: "v20.0.0",
+    versions: { node: "20.0.0" },
+    arch: "x64",
+    platform: "linux",
+  };
+} else {
+  if (!process.version) {
+    (process as any).version = "v20.0.0";
+  }
+  if (!process.arch) {
+    (process as any).arch = "x64";
+  }
+  if (!process.platform) {
+    (process as any).platform = "linux";
+  }
+}
+
 import { routeAction$, zod$, z } from "@builder.io/qwik-city";
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
 import { bookings, guestRequests, pitches } from "~/db/schema";
 import { isPitchAvailable } from "~/utils/availability";
+import { MercadoPagoConfig, Preference } from "mercadopago";
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
   return new Date(`${dateStr}T${timeStr}:00`);
@@ -160,40 +182,88 @@ export const useUserBookingAction = routeAction$(
     );
 
     // Calculate paid amount based on preference
-    let paidAmount = 0;
-    let paymentStatus: "PENDING" | "PARTIAL" | "PAID" = "PENDING";
+    let amountToCharge = 0;
+    let paymentMethod = "CASH";
+    let bookingStatus: "CONFIRMED" | "PENDING_APPROVAL" = "CONFIRMED";
 
     if (data.paymentOption === "SENA") {
-      paidAmount =
+      amountToCharge =
         pitch.depositType === "FIXED"
           ? pitch.depositAmount
           : (pitch.depositAmount / 100) * totalPrice;
-      paymentStatus = "PARTIAL";
+      paymentMethod = "MERCADOPAGO";
+      bookingStatus = "PENDING_APPROVAL";
     } else if (data.paymentOption === "TOTAL") {
-      paidAmount = totalPrice;
-      paymentStatus = "PAID";
+      amountToCharge = totalPrice;
+      paymentMethod = "MERCADOPAGO";
+      bookingStatus = "PENDING_APPROVAL";
     }
 
     const bookingId = crypto.randomUUID();
+    let checkoutUrl: string | null = null;
 
-    // Insert booking (auto-confirmed for registered users in this flow)
+    if (amountToCharge > 0) {
+      const mpAccessToken = requestEvent.env.get("MP_ACCESS_TOKEN");
+      if (!mpAccessToken) {
+        return requestEvent.fail(500, {
+          message: "Configuración incorrecta: falta el token de acceso de Mercado Pago en el servidor.",
+        });
+      }
+
+      try {
+        const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
+        const preference = new Preference(client);
+
+        const origin = requestEvent.url.origin;
+        const response = await preference.create({
+          body: {
+            items: [
+              {
+                id: bookingId,
+                title: `Seña / Pago Reserva Cancha ${pitch.name} - Garden Club`,
+                quantity: 1,
+                unit_price: amountToCharge,
+                currency_id: "ARS",
+              },
+            ],
+            external_reference: bookingId,
+            back_urls: {
+              success: `${origin}/pago/exitoso`,
+              failure: `${origin}/pago/fallido`,
+              pending: `${origin}/pago/pendiente`,
+            },
+            auto_return: "approved",
+            statement_descriptor: "GARDEN CLUB",
+          },
+        });
+
+        checkoutUrl = response.init_point || null;
+      } catch (mpError: any) {
+        console.error("Error al crear preferencia de Mercado Pago:", mpError);
+        return requestEvent.fail(500, {
+          message: "No se pudo iniciar el proceso de pago online de Mercado Pago. Intenta nuevamente.",
+        });
+      }
+    }
+
+    // Insert booking
     await db.insert(bookings).values({
       id: bookingId,
       userId,
       pitchId: data.pitchId,
       startTime: startTimeDate,
       endTime: endTimeDate,
-      status: "CONFIRMED",
+      status: bookingStatus,
       totalPrice,
-      paidAmount,
-      paymentStatus,
-      paymentMethod: data.paymentMethod || "CASH",
+      paidAmount: 0,
+      paymentStatus: "PENDING",
+      paymentMethod: data.paymentMethod || paymentMethod,
       extras: data.extras
         ? data.extras.map((e: string) => JSON.parse(e))
         : null,
     });
 
-    return { success: true, bookingId };
+    return { success: true, bookingId, checkoutUrl };
   },
   zod$({
     pitchId: z.string().min(1),

@@ -199,6 +199,16 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       }
     });
 
+    // Redirect to Mercado Pago if the user selected online payment (checkoutUrl is generated)
+    useTask$((ctx) => {
+      const actionResult = ctx.track(() => userAction.value);
+      if (actionResult?.success && actionResult?.checkoutUrl) {
+        if (typeof window !== "undefined") {
+          window.location.href = actionResult.checkoutUrl;
+        }
+      }
+    });
+
     const isSlotDisabled = (time: string) => {
       if (!dateStr.value) return true;
 
