@@ -142,6 +142,7 @@ export const siteSettings = sqliteTable("site_settings", {
   extraServices: text("extra_services", { mode: "json" }), // array of { name: string, price: number, icon: string }
   bankAlias: text("bank_alias"),
   galleryImages: text("gallery_images", { mode: "json" }), // array of image URLs (max 20)
+  reels: text("reels", { mode: "json" }), // array of { id: string, videoUrl: string, posterUrl: string, caption?: string }
   schoolCategories: text("school_categories", { mode: "json" }), // array of { id: string, name: string, teacher: string }
   paymentMethods: text("payment_methods", { mode: "json" }), // array of { id: string, name: string, isActive: boolean }
   movementCategories: text("movement_categories", { mode: "json" }), // array of { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }

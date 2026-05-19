@@ -221,7 +221,7 @@ export const PitchesGrid = component$<PitchesGridProps>(
                     </div>
                     <div
                       class={[
-                        "mt-8 flex items-end justify-between border-t pt-6",
+                        "mt-8 flex flex-col gap-4 pt-6 border-t min-[380px]:flex-row min-[380px]:items-end min-[380px]:justify-between",
                         isLight ? "border-slate-100" : "border-white/5",
                       ]}
                     >
@@ -229,10 +229,10 @@ export const PitchesGrid = component$<PitchesGridProps>(
                         <div class="mb-0.5 text-[10px] font-bold tracking-widest text-slate-500 uppercase">
                           Desde
                         </div>
-                        <div class="flex items-baseline gap-1.5">
+                        <div class="flex items-baseline gap-1.5 flex-wrap">
                           <div
                             class={[
-                              "text-3xl font-black",
+                              "text-2xl min-[380px]:text-3xl font-black",
                               isLight ? "text-slate-900" : "text-white",
                             ]}
                           >
@@ -247,7 +247,7 @@ export const PitchesGrid = component$<PitchesGridProps>(
                         onClick$={() => onReserve(pitch.id)}
                         look="primary"
                         class={[
-                          "cursor-pointer rounded-xl text-white shadow-md transition-transform duration-200 active:scale-95",
+                          "cursor-pointer rounded-xl text-white shadow-md transition-all duration-200 active:scale-[0.98] w-full min-[380px]:w-auto font-black tracking-widest text-center py-3.5 px-6 uppercase",
                           isLight
                             ? "bg-emerald-600 shadow-emerald-600/10 hover:bg-emerald-700"
                             : "bg-emerald-500 shadow-emerald-500/10 hover:bg-emerald-600",

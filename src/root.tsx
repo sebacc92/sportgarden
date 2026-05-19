@@ -32,6 +32,7 @@ export default component$(() => {
           href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
           rel="stylesheet"
         />
+        <link href="https://fonts.cdnfonts.com/css/heavitas" rel="stylesheet" />
         <RouterHead />
       </head>
       <body lang="es">

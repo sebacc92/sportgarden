@@ -47,21 +47,21 @@ export const HomeNavbar = component$<HomeNavbarProps>(
             <img
               src={logoMobile}
               alt="Sport Garden"
-              width={160}
-              height={160}
-              class="h-16 w-auto object-contain transition-all duration-300 hover:scale-105 lg:hidden"
+              width={200}
+              height={200}
+              class="h-20 w-auto object-contain transition-all duration-300 hover:scale-105 lg:hidden"
             />
             <img
               src={logoDesktop}
               alt="Sport Garden"
-              width={260}
-              height={80}
-              class="hidden h-20 w-auto object-contain transition-all duration-300 hover:scale-105 lg:block"
+              width={300}
+              height={92}
+              class="hidden h-20 w-auto object-contain transition-all duration-300 hover:scale-105 lg:block xl:h-24 2xl:h-26"
             />
           </Link>
           
           {/* Desktop Menu */}
-          <div class="hidden min-w-0 items-center gap-10 text-[16px] font-bold tracking-wide text-slate-200 lg:flex">
+          <div class="hidden items-center gap-4 text-sm font-bold tracking-wide text-slate-200 lg:flex xl:gap-6 xl:text-base 2xl:gap-8">
             <a
               href="#historia"
               class="transition-colors hover:text-emerald-400"
@@ -200,7 +200,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
 
             <a
               href="#canchas"
-              class="rounded-full border border-white/20 bg-white px-6 py-2.5 font-black tracking-widest text-[#001407] uppercase shadow-lg shadow-black/25 transition-all hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-black/30"
+              class="rounded-full border border-white/20 bg-white px-4 py-2 font-black tracking-widest text-[#001407] uppercase shadow-lg shadow-black/25 transition-all hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-black/30 xl:px-6 xl:py-2.5"
             >
               Reservar
             </a>

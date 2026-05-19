@@ -75,18 +75,101 @@ export const onPost: RequestHandler = async (requestEvent) => {
         )
         .join("\n");
 
+    const formatOperatingHours = (hoursJson: any) => {
+      try {
+        if (!hoursJson) return "No configurado.";
+        const hours = typeof hoursJson === "string" ? JSON.parse(hoursJson) : hoursJson;
+        if (!Array.isArray(hours)) return "No configurado.";
+        const days = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+        return hours
+          .map((h: any) => `- ${days[h.day]}: ${h.isOpen ? `${h.openTime}hs a ${h.closeTime}hs` : "Cerrado"}`)
+          .join("\n");
+      } catch {
+        return "No configurado.";
+      }
+    };
+
+    const formatSchoolCategories = (categoriesJson: any) => {
+      try {
+        if (!categoriesJson) return "No configurado actualmente.";
+        const categories = typeof categoriesJson === "string" ? JSON.parse(categoriesJson) : categoriesJson;
+        if (!Array.isArray(categories)) return "No configurado actualmente.";
+        return categories.map((c: any) => `- ${c.name} ${c.teacher ? `(Profesor/Entrenador: ${c.teacher})` : ""}`).join("\n");
+      } catch {
+        return "No configurado actualmente.";
+      }
+    };
+
+    const formatServices = (servicesJson: any) => {
+      try {
+        if (!servicesJson) return "No configurado.";
+        const list = typeof servicesJson === "string" ? JSON.parse(servicesJson) : servicesJson;
+        if (!Array.isArray(list)) return "No configurado.";
+        return list.map((s: string) => `- ${s}`).join("\n");
+      } catch {
+        return "No configurado.";
+      }
+    };
+
+    const formatExtraServices = (extrasJson: any) => {
+      try {
+        if (!extrasJson) return "Ninguno.";
+        const list = typeof extrasJson === "string" ? JSON.parse(extrasJson) : extrasJson;
+        if (!Array.isArray(list)) return "Ninguno.";
+        return list.map((e: any) => `- ${e.name}: $${e.price}`).join("\n");
+      } catch {
+        return "Ninguno.";
+      }
+    };
+
+    const formatPaymentMethods = (methodsJson: any) => {
+      try {
+        if (!methodsJson) return "No configurado.";
+        const list = typeof methodsJson === "string" ? JSON.parse(methodsJson) : methodsJson;
+        if (!Array.isArray(list)) return "No configurado.";
+        return list.filter((m: any) => m.isActive).map((m: any) => `- ${m.name}`).join("\n");
+      } catch {
+        return "No configurado.";
+      }
+    };
+
     // System prompt
     const systemPrompt = `${settings?.aiInitialGreeting || "Hola! Soy el Asistente de GardenClubFutbol, ¿en qué te puedo ayudar hoy?"}
+
+INFORMACIÓN GENERAL DEL CLUB (DESDE BASE DE DATOS):
+- Nombre del Complejo: ${settings?.clubName || "Sport Garden / GardenClubFutbol"}
+- Ubicación / Dirección: ${settings?.clubAddress || "No especificada. Consultar vía WhatsApp."}
+- Teléfono de Contacto: ${settings?.clubPhone || "No especificado."}
+- WhatsApp de Contacto: ${settings?.whatsappNumber || "No especificado."}
+
+HORARIOS DE ATENCIÓN:
+${formatOperatingHours(settings?.operatingHours)}
+
+SERVICIOS GENERALES:
+${formatServices(settings?.services)}
+
+SERVICIOS ADICIONALES:
+${formatExtraServices(settings?.extraServices)}
+
+ESCUELITAS Y CATEGORÍAS DISPONIBLES:
+${formatSchoolCategories(settings?.schoolCategories)}
+
+MÉTODOS DE PAGO ACEPTADOS:
+${formatPaymentMethods(settings?.paymentMethods)}
+${settings?.bankAlias ? `- Alias Bancario para Transferencias: ${settings.bankAlias}` : ""}
 
 DATOS EN TIEMPO REAL (CANCHAS DISPONIBLES EN EL COMPLEJO):
 ${activePitches.length > 0 ? formatPitches(activePitches) : "No hay información de canchas en este momento."}
 
-CONOCIMIENTO DEL CLUB:
+CONOCIMIENTO ADICIONAL DEL CLUB:
 ${settings?.aiKnowledge || "- Identidad: Somos GardenClubFutbol. Nuestro foco es brindar las mejores canchas de césped sintético e iluminación LED de la zona."}
 
-INSTRUCCIONES Y REGLAS:
+INSTRUCCIONES Y REGLAS DE COMPORTAMIENTO PARA LA IA:
 - Tono: ${settings?.aiTone || "Amigable, apasionado por el fútbol, respetuoso y servicial"}.
-- WhatsApp de Contacto: ${settings?.whatsappNumber || "5491112345678"}.
+- WhatsApp de Contacto: ${settings?.whatsappNumber || "No especificado"}.
+- NUNCA compartas balances, estado de caja, ingresos, egresos ni información de transacciones internas con los usuarios generales. Usa el sentido común.
+- Mantén tus respuestas claras, profesionales y enfocadas en la experiencia del cliente y la pasión por el fútbol.
+- Si te consultan por disponibilidad exacta o reservas específicas que no figuran aquí, invítalos cordialmente a usar el sistema interactivo de reservas de nuestra web o a contactarnos por WhatsApp: ${settings?.whatsappNumber || "5491112345678"}.
 ${settings?.aiInstructions || "1. TRATO NEUTRO E INCLUSIVO.\n2. CERO ALUCINACIONES: Si preguntan disponibilidad exacta para una fecha, indícales que usen el sistema de reservas de la web o el WhatsApp."}
 
 LLAMADO A LA ACCIÓN:

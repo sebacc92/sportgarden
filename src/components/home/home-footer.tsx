@@ -1,5 +1,5 @@
 import { component$ } from "@builder.io/qwik";
-import logo from "~/media/g184.png";
+import logo from "~/media/garden-logo-transparente.png";
 import {
   groupOperatingHoursForDisplay,
   type OperatingHourRow,

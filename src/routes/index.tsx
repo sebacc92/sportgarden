@@ -14,12 +14,12 @@ import {
 import { SocialFeed } from "~/components/ui/social-feed";
 import { Chatbot } from "~/components/chatbot/chatbot";
 import { WhatsAppButton } from "~/components/ui/whatsapp-button";
-import { RollingBall } from "~/components/home/rolling-ball";
 import { HomeNavbar } from "~/components/home/home-navbar";
 import { HeroSlider } from "~/components/home/hero-slider";
 import { HistorySection } from "~/components/home/history-section";
 import { PitchesGrid } from "~/components/home/pitches-grid";
 import { GallerySection } from "~/components/home/gallery-section";
+import { ReelsSection } from "~/components/home/reels-section";
 import { ContactSection } from "~/components/home/contact-section";
 import { HomeFooter } from "~/components/home/home-footer";
 import { HomeBookingModal } from "~/components/home/home-booking-modal";
@@ -90,7 +90,9 @@ export default component$(() => {
         theme="dark"
       />
 
-      <GallerySection images={gallery.value} />
+      <ReelsSection reels={aiSettings.value?.reels || []} />
+
+      <GallerySection images={gallery.value.slice(0, 12)} />
 
       <SectionDivider topColor="bg-slate-950" bottomColor="bg-[#F5F2EB]" />
 
@@ -102,8 +104,6 @@ export default component$(() => {
         flip={true}
         invert={true}
       />
-
-      <RollingBall />
 
       <SocialFeed posts={instagramFeed.value} />
 

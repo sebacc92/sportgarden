@@ -70,7 +70,7 @@ export const SocialFeed = component$<SocialFeedProps>(({ posts }) => {
             <p class="mb-2 text-xs font-bold tracking-[0.35em] text-emerald-400">
               COMUNIDAD · FÚTBOL · AMIGOS
             </p>
-            <h2 class="text-3xl leading-tight font-black tracking-[0.25em] text-white uppercase md:text-4xl">
+            <h2 class="text-lg min-[375px]:text-xl min-[420px]:text-2xl leading-tight font-black tracking-[0.05em] text-white uppercase md:text-4xl md:tracking-[0.25em]">
               @gardenclubfutbol
             </h2>
           </div>
