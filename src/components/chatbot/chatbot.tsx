@@ -6,7 +6,7 @@ import {
   useSignal,
 } from "@builder.io/qwik";
 
-import logoMobile from "~/media/logo-mobile.png";
+import logoMobile from "~/media/logo-mobile-removebg-preview.png";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -112,48 +112,48 @@ export const Chatbot = component$((props: { avatarUrl?: string }) => {
         class={[
           "fixed right-6 z-50 flex cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 shadow-2xl shadow-emerald-900/25 transition-all duration-300 hover:scale-105 active:scale-95",
           bottomPos,
-        state.isOpen
-          ? "h-14 w-14 border-slate-800 bg-slate-950 p-3 text-white"
-          : "h-16 w-16 border-emerald-300 bg-emerald-500 text-white p-3",
-      ]}
-      aria-label="Abrir asistente virtual"
-    >
-      {state.isOpen ? (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke-width="2"
-          stroke="currentColor"
-          class="h-6 w-6"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
-      ) : (
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke-width="2"
-          stroke="currentColor"
-          class="h-10 w-10"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M2.25 12.76c0-4.43 3.65-8.08 8.08-8.08h3.33c4.43 0 8.08 3.65 8.08 8.08s-3.65 8.08-8.08 8.08H7.5A5.25 5.25 0 012.25 15.6zm10.74-2.5h.01M9.75 10.25h.01M14.25 10.25h.01"
-          />
-        </svg>
-      )}
-    </button>
+          state.isOpen
+            ? "h-14 w-14 border-slate-800 bg-slate-950 p-3 text-white"
+            : "h-16 w-16 border-emerald-300 bg-emerald-500 text-white p-3",
+        ]}
+        aria-label="Abrir asistente virtual"
+      >
+        {state.isOpen ? (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+            class="h-6 w-6"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        ) : (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+            class="h-10 w-10"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M2.25 12.76c0-4.43 3.65-8.08 8.08-8.08h3.33c4.43 0 8.08 3.65 8.08 8.08s-3.65 8.08-8.08 8.08H7.5A5.25 5.25 0 012.25 15.6zm10.74-2.5h.01M9.75 10.25h.01M14.25 10.25h.01"
+            />
+          </svg>
+        )}
+      </button>
 
       {state.isOpen && (
         <div

@@ -169,7 +169,7 @@ export const HomeFooter = component$<HomeFooterProps>(({ settings }) => {
             </ul>
             <a
               href="#canchas"
-              class="inline-flex items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-5 py-2.5 text-xs font-black tracking-widest text-emerald-400 uppercase transition-all duration-300 hover:bg-emerald-500 hover:text-white"
+              class="inline-flex items-center justify-center rounded-xl border-2 border-white bg-white/5 px-8 py-3.5 text-base font-black tracking-widest text-white uppercase transition-all duration-300 hover:bg-white hover:text-[#001407] hover:shadow-lg hover:shadow-white/10"
             >
               Reservar Online
             </a>

@@ -1,17 +1,17 @@
 import { component$, useSignal, useStylesScoped$ } from "@builder.io/qwik";
 import { Link } from "@builder.io/qwik-city";
 
-import logoMobile from "~/media/logo-mobile.png";
-import logoDesktop from "~/media/logo.png";
+import logoMobile from "~/media/logo-mobile-removebg-preview.png";
+import logoDesktop from "~/media/logo-removebg-preview.png";
 
 export type HomeNavbarUser =
   | {
-      userId: string;
-      role: string;
-      name: string;
-      email: string | null;
-      phone: string | null;
-    }
+    userId: string;
+    role: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+  }
   | undefined;
 
 type HomeNavbarProps = {
@@ -42,7 +42,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
 
     return (
       <nav class="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#001407]">
-        <div class="mx-auto flex h-28 max-w-7xl items-center justify-between px-6 lg:px-8">
+        <div class="mx-auto flex h-28 max-w-[96rem] items-center justify-between px-6 lg:px-10 xl:px-12">
           <Link href="/" class="group flex shrink-0 items-center py-1">
             <img
               src={logoMobile}
@@ -59,7 +59,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
               class="hidden h-20 w-auto object-contain transition-all duration-300 hover:scale-105 lg:block xl:h-24 2xl:h-26"
             />
           </Link>
-          
+
           {/* Desktop Menu */}
           <div class="hidden items-center gap-4 text-sm font-bold tracking-wide text-slate-200 lg:flex xl:gap-6 xl:text-base 2xl:gap-8">
             <a
@@ -98,13 +98,13 @@ export const HomeNavbar = component$<HomeNavbarProps>(
               user?.role === "OWNER" ||
               user?.role === "MANAGER" ||
               user?.role === "EMPLOYEE") && (
-              <a
-                href="/admin/calendar"
-                class="rounded-full bg-white/10 px-4 py-2 text-white transition-colors hover:bg-white/20"
-              >
-                Panel Admin
-              </a>
-            )}
+                <a
+                  href="/admin/calendar"
+                  class="rounded-full bg-white/10 px-4 py-2 text-white transition-colors hover:bg-white/20"
+                >
+                  Panel Admin
+                </a>
+              )}
 
             {user ? (
               <div class="group/user relative">
@@ -192,7 +192,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
             ) : (
               <Link
                 href="/auth/login"
-                class="transition-colors hover:text-white"
+                class="inline-flex items-center justify-center text-center rounded-xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition-all hover:bg-white/10 hover:border-white/40 hover:text-white"
               >
                 Iniciar Sesión
               </Link>
@@ -203,6 +203,29 @@ export const HomeNavbar = component$<HomeNavbarProps>(
               class="rounded-full border border-white/20 bg-white px-4 py-2 font-black tracking-widest text-[#001407] uppercase shadow-lg shadow-black/25 transition-all hover:-translate-y-0.5 hover:bg-slate-100 hover:shadow-black/30 xl:px-6 xl:py-2.5"
             >
               Reservar
+            </a>
+
+            <a
+              href="https://www.instagram.com/gardenclubfutbol/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center text-slate-200 transition-colors hover:text-emerald-400 ml-2"
+              aria-label="Instagram"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5.5 w-5.5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+              </svg>
             </a>
           </div>
 
@@ -280,20 +303,46 @@ export const HomeNavbar = component$<HomeNavbarProps>(
                 Contacto
               </a>
 
+              <a
+                href="https://www.instagram.com/gardenclubfutbol/"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick$={() => {
+                  isMobileMenuOpen.value = false;
+                }}
+                class="rounded-xl px-4 py-3 text-lg font-bold tracking-wider text-slate-200 transition-colors hover:bg-white/5 hover:text-emerald-400 border-b border-white/5 flex items-center gap-3"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-5.5 w-5.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+                <span>Instagram</span>
+              </a>
+
               {(user?.role === "DEV" ||
                 user?.role === "OWNER" ||
                 user?.role === "MANAGER" ||
                 user?.role === "EMPLOYEE") && (
-                <a
-                  href="/admin/calendar"
-                  onClick$={() => {
-                    isMobileMenuOpen.value = false;
-                  }}
-                  class="mx-auto flex w-full max-w-xs items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/30 px-6 py-3 text-base font-bold text-emerald-400 transition-all hover:bg-emerald-500/30"
-                >
-                  Panel Admin
-                </a>
-              )}
+                  <a
+                    href="/admin/calendar"
+                    onClick$={() => {
+                      isMobileMenuOpen.value = false;
+                    }}
+                    class="mx-auto flex w-full max-w-xs items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/30 px-6 py-3 text-base font-bold text-emerald-400 transition-all hover:bg-emerald-500/30"
+                  >
+                    Panel Admin
+                  </a>
+                )}
 
               {user ? (
                 <div class="flex flex-col gap-4 border-t border-white/10 pt-6">
@@ -330,7 +379,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
                   onClick$={() => {
                     isMobileMenuOpen.value = false;
                   }}
-                  class="mx-auto flex w-full max-w-xs items-center justify-center rounded-full border border-white/20 bg-white/5 px-6 py-3 text-base font-bold text-white transition-all hover:bg-white/10"
+                  class="mx-auto flex w-full max-w-xs items-center justify-center rounded-xl border border-white/20 bg-white/5 px-6 py-3 text-base font-bold text-white transition-all hover:bg-white/10"
                 >
                   Iniciar Sesión
                 </Link>

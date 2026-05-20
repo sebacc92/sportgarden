@@ -31,7 +31,7 @@ export const ReelsSection = component$<ReelsSectionProps>(({ reels }) => {
             Nuestros <span class="text-emerald-400">Reels</span>
           </h2>
           <p class="mx-auto max-w-xl text-lg text-slate-400">
-            Viví el día a día y las mejores jugadas de Garden Club Fútbol.
+            Viví el Club con amigos. Compartimos momentos.
           </p>
         </div>
 
@@ -39,7 +39,7 @@ export const ReelsSection = component$<ReelsSectionProps>(({ reels }) => {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 lg:gap-12 justify-center justify-items-center w-full">
           {reels.map((reel) => (
             <div key={reel.id} class="relative w-full max-w-[320px]">
-              <div 
+              <div
                 class="relative bg-black rounded-[32px] overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,0.8)] border border-white/10 w-full aspect-[9/16] transition-all duration-300 hover:scale-[1.02] hover:border-emerald-500/30"
               >
                 <video
@@ -62,7 +62,7 @@ export const ReelsSection = component$<ReelsSectionProps>(({ reels }) => {
                   </div>
                 )}
               </div>
-              
+
               {/* Glow effect matching Emerald palette */}
               <div class="absolute -inset-4 bg-emerald-500/10 blur-3xl rounded-full -z-10 pointer-events-none" />
             </div>
