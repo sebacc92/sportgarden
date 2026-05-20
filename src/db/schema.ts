@@ -147,6 +147,9 @@ export const siteSettings = sqliteTable("site_settings", {
   paymentMethods: text("payment_methods", { mode: "json" }), // array of { id: string, name: string, isActive: boolean }
   movementCategories: text("movement_categories", { mode: "json" }), // array of { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }
   holidays: text("holidays", { mode: "json" }), // array of { date: string, name: string }
+  landingTexts: text("landing_texts", { mode: "json" }),
+  heroSlides: text("hero_slides", { mode: "json" }),
+  promoPopup: text("promo_popup", { mode: "json" }),
 
   updatedAt: integer("updated_at", { mode: "timestamp" }),
 });

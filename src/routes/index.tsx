@@ -17,6 +17,7 @@ import { WhatsAppButton } from "~/components/ui/whatsapp-button";
 import { HomeNavbar } from "~/components/home/home-navbar";
 import { HeroSlider } from "~/components/home/hero-slider";
 import { HistorySection } from "~/components/home/history-section";
+import { PromoPopup } from "~/components/home/promo-popup";
 import { PitchesGrid } from "~/components/home/pitches-grid";
 import { GallerySection } from "~/components/home/gallery-section";
 import { ReelsSection } from "~/components/home/reels-section";
@@ -66,9 +67,9 @@ export default component$(() => {
         showSchoolLink={(aiSettings.value?.schoolCategories || []).length > 0}
       />
 
-      <HeroSlider />
+      <HeroSlider slides={aiSettings.value?.heroSlides} />
 
-      <HistorySection />
+      <HistorySection texts={aiSettings.value?.landingTexts} />
 
       <SectionDivider topColor="bg-[#001407]" bottomColor="bg-[#F5F2EB]" />
 
@@ -114,6 +115,8 @@ export default component$(() => {
       <WhatsAppButton
         phone={aiSettings.value?.clubPhone || aiSettings.value?.whatsappNumber || "5491112345678"}
       />
+
+      <PromoPopup popup={aiSettings.value?.promoPopup} />
 
       <HomeBookingModal
         isOpen={isModalOpen}

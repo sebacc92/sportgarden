@@ -273,6 +273,28 @@ export default component$(() => {
           <polyline points="21 15 16 10 5 21" />
         </svg>
       ),
+    },
+    {
+      name: "Contenido Web",
+      href: "/admin/contenido/",
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="shrink-0"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+          <path d="M2 12h20" />
+        </svg>
+      ),
       roles: ["DEV", "OWNER", "MANAGER"],
     },
     {
@@ -313,7 +335,7 @@ export default component$(() => {
   ];
 
   const visibleNavItems = navItems.filter((item) =>
-    item.roles.includes(userRole),
+    item.roles?.includes(userRole),
   );
 
   return (

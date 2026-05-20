@@ -1,13 +1,17 @@
 import { component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 import { HERO_SLIDES } from "~/lib/home-page/constants";
 
-export const HeroSlider = component$(() => {
+export const HeroSlider = component$((props: { slides?: any[] | null }) => {
   const activeSlide = useSignal(0);
+
+  const slides = Array.isArray(props.slides) && props.slides.length > 0
+    ? props.slides
+    : (HERO_SLIDES as unknown as any[]);
 
   // eslint-disable-next-line qwik/no-use-visible-task
   useVisibleTask$(() => {
     const interval = setInterval(() => {
-      activeSlide.value = (activeSlide.value + 1) % HERO_SLIDES.length;
+      activeSlide.value = (activeSlide.value + 1) % slides.length;
     }, 5000);
     return () => clearInterval(interval);
   });
@@ -17,7 +21,7 @@ export const HeroSlider = component$(() => {
       id="inicio"
       class="relative flex h-screen min-h-[600px] items-center justify-center overflow-hidden"
     >
-      {HERO_SLIDES.map((slide, index) => (
+      {slides.map((slide, index) => (
         <div
           key={slide.image}
           class={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
@@ -40,7 +44,7 @@ export const HeroSlider = component$(() => {
                 <div class="animate-fade-in-up">
                   <div class="mb-6 inline-flex items-center gap-2 rounded-full bg-emerald-500/20 px-4 py-1.5 text-xs font-bold tracking-widest text-emerald-400 uppercase ring-1 ring-emerald-500/30 backdrop-blur-sm">
                     <span class="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-                    Abierto todos los días
+                    {slide.badgeText || "Abierto todos los días"}
                   </div>
                   <h1 class="mb-6 text-5xl font-black tracking-tighter text-white uppercase drop-shadow-2xl md:text-8xl">
                     {slide.title}
@@ -62,7 +66,7 @@ export const HeroSlider = component$(() => {
       ))}
 
       <div class="absolute inset-x-0 bottom-10 z-30 flex justify-center gap-3">
-        {HERO_SLIDES.map((slide, index) => (
+        {slides.map((slide, index) => (
           <button
             key={slide.image}
             type="button"

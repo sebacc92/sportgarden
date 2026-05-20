@@ -58,6 +58,9 @@ export const useAISettingsLoader = routeLoader$(async (requestEvent) => {
     schoolCategories: (settings?.schoolCategories || []) as { id: string; name: string; teacher: string; monthlyFee: number; schedules?: { day: number; startTime: string; endTime: string }[] }[],
     holidays: (settings?.holidays || []) as { date: string; name: string }[],
     reels: (settings?.reels || []) as { id: string; videoUrl: string; posterUrl: string; caption?: string }[],
+    landingTexts: (settings?.landingTexts || null) as any,
+    heroSlides: (settings?.heroSlides || null) as any[],
+    promoPopup: (settings?.promoPopup || null) as any,
   };
 });
 

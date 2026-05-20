@@ -2,8 +2,13 @@ import { component$ } from "@builder.io/qwik";
 import gardenLogo from "~/media/escudo-garden-sport.png";
 import forbexLogo from "~/media/forbex.png";
 
-export const HistorySection = component$(() => {
+export const HistorySection = component$((props: { texts?: any }) => {
   const yearsOfPassion = new Date().getFullYear() - 1997;
+
+  const title = props.texts?.historyTitle || "Nuestra";
+  const subtitle = props.texts?.historySubtitle || "Historia";
+  const text1 = props.texts?.historyText1 || "GardenClubFutbol nació con la visión de crear el espacio definitivo para los amantes del fútbol. Desde nuestros humildes comienzos, nos hemos dedicado a ofrecer canchas de primer nivel donde la pasión por el deporte se vive al máximo en cada partido.";
+  const text2 = props.texts?.historyText2 || "Creemos que el fútbol es más que un juego; es comunidad, amistad y esfuerzo. Por eso, nuestras instalaciones no solo cuentan con la mejor tecnología en césped artificial, sino que también ofrecen un ambiente inigualable para el tan esperado \"tercer tiempo\".";
 
   return (
     <section id="historia" class="relative z-20 bg-[#001407] py-24">
@@ -11,20 +16,13 @@ export const HistorySection = component$(() => {
         <div class="grid items-start gap-16 lg:grid-cols-2">
           <div class="space-y-8">
             <h2 class="text-4xl font-black tracking-tighter text-white uppercase md:text-5xl">
-              Nuestra <span class="text-emerald-400">Historia</span>
+              {title} <span class="text-emerald-400">{subtitle}</span>
             </h2>
             <p class="text-lg leading-relaxed text-slate-400">
-              GardenClubFutbol nació con la visión de crear el espacio
-              definitivo para los amantes del fútbol. Desde nuestros humildes
-              comienzos, nos hemos dedicado a ofrecer canchas de primer nivel
-              donde la pasión por el deporte se vive al máximo en cada partido.
+              {text1}
             </p>
             <p class="text-lg leading-relaxed text-slate-400">
-              Creemos que el fútbol es más que un juego; es comunidad, amistad y
-              esfuerzo. Por eso, nuestras instalaciones no solo cuentan con la
-              mejor tecnología en césped artificial, sino que también ofrecen un
-              ambiente inigualable para el tan esperado &quot;tercer
-              tiempo&quot;.
+              {text2}
             </p>
             <div class="grid grid-cols-2 gap-6 border-t border-white/10 pt-4">
               <div>
