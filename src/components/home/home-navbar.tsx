@@ -43,7 +43,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
     return (
       <nav class="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#001407]">
         <div class="mx-auto flex h-28 max-w-[96rem] items-center justify-between px-6 lg:px-10 xl:px-12">
-          <Link href="/" class="group flex shrink-0 items-center py-1">
+          <Link href="/" class="group flex shrink-0 items-center py-3">
             <img
               src={logoMobile}
               alt="Sport Garden"
@@ -56,7 +56,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
               alt="Sport Garden"
               width={300}
               height={92}
-              class="hidden h-20 w-auto object-contain transition-all duration-300 hover:scale-105 lg:block xl:h-24 2xl:h-26"
+              class="hidden h-16 w-auto object-contain transition-all duration-300 hover:scale-105 lg:block xl:h-[72px] 2xl:h-20"
             />
           </Link>
 

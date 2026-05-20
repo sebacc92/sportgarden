@@ -70,9 +70,6 @@ export const SchoolSection = component$<SchoolSectionProps>(
                 isLight ? "text-[#001407]" : "text-white",
               ]}
             >
-              <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-                ⚽
-              </span>
               Escuelita de Fútbol
             </h2>
             <p
