@@ -11,6 +11,8 @@ import { getDB } from "~/db";
 import { siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
 import { LuPlus, LuTrash2, LuSave, LuCalendar } from "@qwikest/icons/lucide";
+import { MercadoPagoConnectButton } from "~/components/MercadoPagoConnectButton";
+import { useLocation } from "@builder.io/qwik-city";
 
 export const useSiteSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -42,7 +44,13 @@ export const useSiteSettings = routeLoader$(async (requestEvent) => {
     });
   }
 
-  return settings;
+  const mpEnv = {
+    clientId: requestEvent.env.get("MP_CLIENT_ID") || "",
+    redirectUri: requestEvent.env.get("MP_REDIRECT_URI") || "",
+    isConnected: !!settings?.mpAccessToken,
+  };
+
+  return { ...settings, mpEnv };
 });
 
 export const useSaveClubSettingsAction = routeAction$(
@@ -90,6 +98,7 @@ export default component$(() => {
 
 export const ClubProfileSettings = component$((props: { settings: any }) => {
   const saveAction = useSaveClubSettingsAction();
+  const loc = useLocation();
 
   const daysLabels = [
     "Domingo",
@@ -250,8 +259,19 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
         </Button>
       </header>
 
+      {loc.url.searchParams.get("mp_success") && (
+        <div class="mb-6 animate-pulse rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center text-sm font-bold text-emerald-700">
+          ¡Cuenta de MercadoPago conectada exitosamente!
+        </div>
+      )}
+      {loc.url.searchParams.get("mp_error") && (
+        <div class="mb-6 rounded-xl border border-red-100 bg-red-50 p-4 text-center text-sm font-bold text-red-700">
+          Error al conectar MercadoPago: {loc.url.searchParams.get("mp_error")}
+        </div>
+      )}
+
       {saveAction.value?.success && (
-        <div class="animate-pulse rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center text-sm font-bold text-emerald-700">
+        <div class="mb-6 animate-pulse rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-center text-sm font-bold text-emerald-700">
           ¡Información del complejo actualizada correctamente!
         </div>
       )}
@@ -333,32 +353,16 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
             </div>
 
             <div class="border-t border-slate-100 pt-8">
-              <button
-                type="button"
-                class="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#009EE3] py-4 text-sm font-black tracking-widest text-white uppercase shadow-md shadow-blue-200 transition-all hover:bg-[#0086C3] active:scale-[0.98]"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="shrink-0"
-                >
-                  <path
-                    d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z"
-                    fill="currentColor"
-                  />
-                  <path
-                    d="M11 17L17 11L15.59 9.59L11 14.17L8.41 11.59L7 13L11 17Z"
-                    fill="currentColor"
-                  />
-                </svg>
-                Conectar con MercadoPago
-              </button>
-              <p class="mt-3 text-center text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase">
-                Habilita pagos automáticos y señas
-              </p>
+              <MercadoPagoConnectButton
+                clientId={props.settings.mpEnv?.clientId || ""}
+                redirectUri={props.settings.mpEnv?.redirectUri || ""}
+                isConnected={props.settings.mpEnv?.isConnected}
+              />
+              {!props.settings.mpEnv?.isConnected && (
+                <p class="mt-3 text-center text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase">
+                  Habilita pagos automáticos y señas
+                </p>
+              )}
             </div>
           </div>
 

@@ -151,6 +151,12 @@ export const siteSettings = sqliteTable("site_settings", {
   heroSlides: text("hero_slides", { mode: "json" }),
   promoPopup: text("promo_popup", { mode: "json" }),
 
+  // MercadoPago Integration
+  mpAccessToken: text("mp_access_token"),
+  mpRefreshToken: text("mp_refresh_token"),
+  mpPublicKey: text("mp_public_key"),
+  mpTokenExpiresAt: integer("mp_token_expires_at", { mode: "timestamp" }),
+
   updatedAt: integer("updated_at", { mode: "timestamp" }),
 });
 
