@@ -452,3 +452,20 @@ export const studentSubscriptionsRelations = relations(
     }),
   }),
 );
+
+// --- Mercado Pago Credentials (OAuth Integration) ---
+export const mercadoPagoCredentials = sqliteTable("mercado_pago_credentials", {
+  id: text("id").primaryKey(), // local administrator, club, or tenant identifier
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  publicKey: text("public_key").notNull(),
+  userId: text("user_id").notNull(), // Mercado Pago seller user_id
+  liveMode: integer("live_mode", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});

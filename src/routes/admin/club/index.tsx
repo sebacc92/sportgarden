@@ -2,17 +2,39 @@ import { component$, useStore, $, useSignal } from "@builder.io/qwik";
 import {
   routeLoader$,
   routeAction$,
+  globalAction$,
   zod$,
   z,
   Form,
 } from "@builder.io/qwik-city";
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
-import { siteSettings } from "~/db/schema";
+import { siteSettings, mercadoPagoCredentials } from "~/db/schema";
 import { Button } from "~/components/ui";
 import { LuPlus, LuTrash2, LuSave, LuCalendar } from "@qwikest/icons/lucide";
 import { MercadoPagoConnectButton } from "~/components/MercadoPagoConnectButton";
 import { useLocation } from "@builder.io/qwik-city";
+
+export const useMpCredentials = routeLoader$(async (requestEvent) => {
+  const db = getDB(requestEvent);
+  const credentials = await db.query.mercadoPagoCredentials.findFirst({
+    where: eq(mercadoPagoCredentials.id, "1"),
+  });
+
+  return {
+    isConnected: !!credentials,
+    userId: credentials?.userId || null,
+    publicKey: credentials?.publicKey || null,
+  };
+});
+
+export const useDisconnectMpAction = globalAction$(async (data, requestEvent) => {
+  const db = getDB(requestEvent);
+  await db
+    .delete(mercadoPagoCredentials)
+    .where(eq(mercadoPagoCredentials.id, "1"));
+  return { success: true };
+});
 
 export const useSiteSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -44,10 +66,14 @@ export const useSiteSettings = routeLoader$(async (requestEvent) => {
     });
   }
 
+  const credentials = await db.query.mercadoPagoCredentials.findFirst({
+    where: eq(mercadoPagoCredentials.id, "1"),
+  });
+
   const mpEnv = {
     clientId: requestEvent.env.get("MP_CLIENT_ID") || "",
     redirectUri: requestEvent.env.get("MP_REDIRECT_URI") || "",
-    isConnected: !!settings?.mpAccessToken,
+    isConnected: !!credentials || !!settings?.mpAccessToken,
   };
 
   return { ...settings, mpEnv };
@@ -99,6 +125,8 @@ export default component$(() => {
 export const ClubProfileSettings = component$((props: { settings: any }) => {
   const saveAction = useSaveClubSettingsAction();
   const loc = useLocation();
+  const mpCredentials = useMpCredentials();
+  const disconnectAction = useDisconnectMpAction();
 
   const daysLabels = [
     "Domingo",
@@ -353,15 +381,49 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
             </div>
 
             <div class="border-t border-slate-100 pt-8">
-              <MercadoPagoConnectButton
-                clientId={props.settings.mpEnv?.clientId || ""}
-                redirectUri={props.settings.mpEnv?.redirectUri || ""}
-                isConnected={props.settings.mpEnv?.isConnected}
-              />
-              {!props.settings.mpEnv?.isConnected && (
-                <p class="mt-3 text-center text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase">
-                  Habilita pagos automáticos y señas
-                </p>
+              {mpCredentials.value.isConnected ? (
+                <div class="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 text-center">
+                  <div class="flex items-center justify-center gap-2 text-emerald-700 font-bold">
+                    <svg
+                      class="h-5 w-5 shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2.5"
+                    >
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>✓ Cuenta Vinculada</span>
+                  </div>
+                  {mpCredentials.value.userId && (
+                    <p class="mt-1.5 text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
+                      ID de Vendedor: {mpCredentials.value.userId}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick$={async () => {
+                      if (confirm("¿Estás seguro de que deseas desconectar la cuenta de Mercado Pago?")) {
+                        await disconnectAction.submit({});
+                      }
+                    }}
+                    disabled={disconnectAction.isRunning}
+                    class="mt-3 block w-full text-center text-xs font-bold text-red-500 hover:text-red-700 transition-colors focus:outline-none disabled:opacity-50"
+                  >
+                    {disconnectAction.isRunning ? "Desconectando..." : "Desconectar cuenta"}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <MercadoPagoConnectButton
+                    clientId={props.settings.mpEnv?.clientId || ""}
+                    redirectUri={props.settings.mpEnv?.redirectUri || ""}
+                    isConnected={false}
+                  />
+                  <p class="mt-3 text-center text-[10px] font-bold tracking-[0.1em] text-slate-400 uppercase">
+                    Habilita pagos automáticos y señas
+                  </p>
+                </>
               )}
             </div>
           </div>

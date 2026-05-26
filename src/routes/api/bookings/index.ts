@@ -33,7 +33,7 @@ if (typeof globalThis.Headers !== "undefined" && !(globalThis.Headers.prototype 
 import { routeAction$, zod$, z } from "@builder.io/qwik-city";
 import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
-import { bookings, guestRequests, pitches } from "~/db/schema";
+import { bookings, guestRequests, pitches, mercadoPagoCredentials } from "~/db/schema";
 import { isPitchAvailable } from "~/utils/availability";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 
@@ -214,7 +214,15 @@ export const useUserBookingAction = routeAction$(
     let checkoutUrl: string | null = null;
 
     if (amountToCharge > 0) {
-      const mpAccessToken = requestEvent.env.get("MP_ACCESS_TOKEN");
+      // 1. Obtener las credenciales de la base de datos para el ID "1" si existen
+      const [credentials] = await db
+        .select()
+        .from(mercadoPagoCredentials)
+        .where(eq(mercadoPagoCredentials.id, "1"))
+        .limit(1);
+
+      const mpAccessToken = credentials?.accessToken || requestEvent.env.get("MP_ACCESS_TOKEN");
+
       if (!mpAccessToken) {
         return requestEvent.fail(500, {
           message: "Configuración incorrecta: falta el token de acceso de Mercado Pago en el servidor.",
@@ -225,7 +233,14 @@ export const useUserBookingAction = routeAction$(
         const client = new MercadoPagoConfig({ accessToken: mpAccessToken });
         const preference = new Preference(client);
 
-        const origin = requestEvent.url.origin;
+        // 2. Resolver host de forma segura con headers de reenvío
+        const headers = requestEvent.request.headers;
+        const proto = headers.get("x-forwarded-proto") || "https";
+        const host = headers.get("x-forwarded-host") || headers.get("host") || requestEvent.url.host;
+        const origin = host.includes("localhost") || host.includes("127.0.0.1")
+          ? "https://evasion-chute-bonding.ngrok-free.dev"
+          : `${proto}://${host}`;
+
         const response = await preference.create({
           body: {
             items: [

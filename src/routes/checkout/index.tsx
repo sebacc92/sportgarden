@@ -33,9 +33,21 @@ if (typeof globalThis.Headers !== "undefined" && !(globalThis.Headers.prototype 
 import { component$, useVisibleTask$ } from "@builder.io/qwik";
 import { routeAction$, Form, Link } from "@builder.io/qwik-city";
 import { MercadoPagoConfig, Preference } from "mercadopago";
+import { getDB } from "~/db";
+import { eq } from "drizzle-orm";
+import { mercadoPagoCredentials } from "~/db/schema";
 
 export const useCrearPreferencia = routeAction$(async (data, requestEvent) => {
-  const mpAccessToken = requestEvent.env.get("MP_ACCESS_TOKEN");
+  const db = getDB(requestEvent);
+
+  // Intentar obtener las credenciales de la base de datos para el ID "1" si existen
+  const [credentials] = await db
+    .select()
+    .from(mercadoPagoCredentials)
+    .where(eq(mercadoPagoCredentials.id, "1"))
+    .limit(1);
+
+  const mpAccessToken = credentials?.accessToken || requestEvent.env.get("MP_ACCESS_TOKEN");
 
   if (!mpAccessToken) {
     return requestEvent.fail(500, {
@@ -49,8 +61,13 @@ export const useCrearPreferencia = routeAction$(async (data, requestEvent) => {
       accessToken: mpAccessToken,
     });
 
-    // 2. Resolver host dinámicamente para los back_urls
-    const origin = requestEvent.url.origin;
+    // 2. Resolver host dinámicamente para los back_urls con headers de reenvío
+    const headers = requestEvent.request.headers;
+    const proto = headers.get("x-forwarded-proto") || "https";
+    const host = headers.get("x-forwarded-host") || headers.get("host") || requestEvent.url.host;
+    const origin = host.includes("localhost") || host.includes("127.0.0.1")
+      ? "https://evasion-chute-bonding.ngrok-free.dev"
+      : `${proto}://${host}`;
 
     // 3. Crear instancia de Preferencia
     const preference = new Preference(client);
