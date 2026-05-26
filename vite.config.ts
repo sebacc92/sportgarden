@@ -19,14 +19,35 @@ errorOnDuplicatesPkgDeps(devDependencies, dependencies);
  * Note that Vite normally starts from `index.html` but the qwikCity plugin makes start at `src/entry.ssr.tsx` instead.
  */
 
+const replaceCryptoPlugin = {
+  name: "replace-crypto-require",
+  renderChunk(code: string) {
+    if (code.includes('require("crypto")') || code.includes("require('crypto')")) {
+      return {
+        code: code
+          .replace(/__require\("crypto"\)/g, "{}")
+          .replace(/__require\('crypto'\)/g, "{}")
+          .replace(/require\("crypto"\)/g, "{}")
+          .replace(/require\('crypto'\)/g, "{}"),
+        map: null,
+      };
+    }
+    return null;
+  },
+};
+
 export default defineConfig(({ command, mode }): UserConfig => {
   return {
     plugins: [
+      replaceCryptoPlugin,
       qwikCity(),
       qwikVite(),
       tsconfigPaths({ root: "." }),
       tailwindcss(),
     ],
+    ssr: {
+      external: ["crypto", "node:crypto"],
+    },
     // This tells Vite which dependencies to pre-build in dev mode.
     optimizeDeps: {
       // Put problematic deps that break bundling here, mostly those with binaries.
