@@ -45,6 +45,15 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     guestAction,
     userAction,
   }) => {
+    const getLocalDateString = (offset = 0) => {
+      const d = new Date();
+      if (offset !== 0) d.setDate(d.getDate() + offset);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
     const dateStr = useSignal("");
     const timeStr = useSignal("");
     const occupiedSlots = useSignal<{ startTime: string; endTime: string }[]>(
@@ -322,7 +331,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                       </span>
                     )}
                   </div>
-                  <div class="flex flex-wrap gap-1.5">
+                  <div class="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:gap-1.5">
                     {slotsInPeriod.map((time) => {
                       const disabled =
                         isSlotDisabled(time) || isCheckingAvailability.value;
@@ -334,9 +343,9 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                           disabled={disabled}
                           onClick$={() => (timeStr.value = time)}
                           class={[
-                            "rounded-lg border px-3 py-1.5 text-xs font-bold transition-all",
+                            "flex h-11 items-center justify-center rounded-xl border text-xs font-black transition-all sm:h-9 sm:px-3 active:scale-95",
                             disabled
-                              ? "cursor-not-allowed border-white/5 bg-transparent text-slate-600 line-through opacity-25"
+                              ? "cursor-not-allowed border-white/5 bg-transparent text-slate-600 line-through opacity-20"
                               : selected
                                 ? "scale-105 border-[#F5F2EB]/60 bg-[#F5F2EB] text-slate-900 shadow-md ring-2 shadow-[#F5F2EB]/10 ring-[#F5F2EB]/20"
                                 : "cursor-pointer border-white/8 bg-slate-800/80 text-slate-300 hover:border-[#F5F2EB]/30 hover:bg-slate-700 hover:text-white",
@@ -639,6 +648,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                   </div>
 
                   <Form
+                    id="booking-form"
                     action={(user ? userAction : guestAction) as any}
                     class="space-y-6"
                   >
@@ -680,42 +690,38 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                       <div class="space-y-4">
                         {/* Date input row */}
                         <div>
-                          <div class="mb-1.5 flex items-center justify-between">
+                          <div class="mb-2.5 flex items-center justify-between">
                             <label class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
                               Fecha del turno
                             </label>
-                            <div class="flex gap-1">
-                              <button
-                                type="button"
-                                onClick$={() => {
-                                  const today = new Date();
-                                  dateStr.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-                                }}
-                                class={[
-                                  "rounded border px-2 py-0.5 text-[9px] font-black tracking-wider uppercase transition-all",
-                                  dateStr.value === new Date().toISOString().split("T")[0]
-                                    ? "border-[#F5F2EB]/50 bg-[#F5F2EB]/15 text-[#F5F2EB]"
-                                    : "border-emerald-500/20 bg-emerald-500/8 text-emerald-400 hover:bg-emerald-500/15",
-                                ]}
-                              >
-                                HOY
-                              </button>
-                              <button
-                                type="button"
-                                onClick$={() => {
-                                  const tomorrow = new Date();
-                                  tomorrow.setDate(tomorrow.getDate() + 1);
-                                  dateStr.value = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
-                                }}
-                                class={[
-                                  "rounded border px-2 py-0.5 text-[9px] font-black tracking-wider uppercase transition-all",
-                                  dateStr.value === (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0]; })()
-                                    ? "border-[#F5F2EB]/50 bg-[#F5F2EB]/15 text-[#F5F2EB]"
-                                    : "border-white/8 bg-slate-800 text-slate-400 hover:border-white/20 hover:text-white",
-                                ]}
-                              >
-                                MAÑANA
-                              </button>
+                            <div class="flex gap-1.5">
+                              {(
+                                [
+                                  { label: "Hoy", offset: 0 },
+                                  { label: "Mañana", offset: 1 },
+                                  { label: "Pasado", offset: 2 },
+                                ] as const
+                              ).map(({ label, offset }) => {
+                                const targetDate = getLocalDateString(offset);
+                                const isSelected = dateStr.value === targetDate;
+                                return (
+                                  <button
+                                    key={label}
+                                    type="button"
+                                    onClick$={() => {
+                                      dateStr.value = targetDate;
+                                    }}
+                                    class={[
+                                      "rounded-full border px-3 py-1.5 text-[9px] font-black tracking-wider uppercase transition-all active:scale-95",
+                                      isSelected
+                                        ? "border-emerald-500 bg-emerald-500/10 text-emerald-400 font-extrabold shadow-sm shadow-emerald-500/10"
+                                        : "border-white/8 bg-slate-800 text-slate-400 hover:border-white/20 hover:bg-slate-700 hover:text-white",
+                                    ]}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })}
                             </div>
                           </div>
                           <input
@@ -723,7 +729,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                             name="date"
                             required
                             bind:value={dateStr}
-                            min={new Date().toISOString().split("T")[0]}
+                            min={getLocalDateString(0)}
                             class="w-full rounded-xl border border-white/8 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-white [color-scheme:dark] transition-all focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/20 focus:outline-none"
                           />
                         </div>
@@ -835,14 +841,14 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                               <Link
                                 href="/auth/register"
                                 target="_blank"
-                                class="rounded-lg bg-emerald-500 py-2 text-center text-[11px] font-black tracking-wider text-white uppercase transition-all hover:bg-emerald-600"
+                                class="rounded-xl bg-emerald-500 py-2.5 text-center text-[11px] font-black tracking-wider text-white uppercase transition-all hover:bg-emerald-600 active:scale-95 flex items-center justify-center h-10 shadow-sm"
                               >
                                 Crear Cuenta
                               </Link>
                               <Link
                                 href="/auth/login"
                                 target="_blank"
-                                class="rounded-lg border border-white/5 bg-slate-800 py-2 text-center text-[11px] font-black tracking-wider text-white uppercase transition-all hover:bg-slate-700"
+                                class="rounded-xl border border-white/8 bg-slate-800 py-2.5 text-center text-[11px] font-black tracking-wider text-white uppercase transition-all hover:bg-slate-700 active:scale-95 flex items-center justify-center h-10"
                               >
                                 Iniciar Sesión
                               </Link>
@@ -1095,42 +1101,49 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                           <label class="mb-3 block text-xs font-black tracking-widest text-slate-400 uppercase">
                             Método de Pago Preferido
                           </label>
-                          <div class="flex flex-wrap gap-2">
+                          <div class="grid grid-cols-2 gap-2">
                             {(settings?.paymentMethods || [])
                               .filter((pm: any) => pm.isActive)
-                              .map((pm: any) => (
-                                <label
-                                  key={pm.id}
-                                  class={[
-                                    "min-w-[110px] flex-1 cursor-pointer rounded-xl border p-3 text-center text-sm font-bold transition-all",
-                                    paymentMethod.value === pm.id
-                                      ? "border-emerald-500 bg-emerald-500/10 text-white"
-                                      : "border-white/10 text-slate-300 hover:bg-slate-800",
-                                  ]}
-                                >
-                                  <input
-                                    type="radio"
-                                    name="paymentMethod"
-                                    value={pm.id}
-                                    checked={paymentMethod.value === pm.id}
-                                    onInput$={() =>
-                                      (paymentMethod.value = pm.id)
-                                    }
-                                    class="hidden"
-                                  />
-                                  <span>{pm.name}</span>
-                                </label>
-                              ))}
+                              .map((pm: any) => {
+                                const isSelected = paymentMethod.value === pm.id;
+                                const icon = pm.id.toLowerCase().includes("cash") || pm.id.toLowerCase().includes("efectivo")
+                                  ? "💵"
+                                  : pm.id.toLowerCase().includes("transfer")
+                                    ? "🏦"
+                                    : "💳";
+                                return (
+                                  <label
+                                    key={pm.id}
+                                    class={[
+                                      "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
+                                      isSelected
+                                        ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
+                                        : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
+                                    ]}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="paymentMethod"
+                                      value={pm.id}
+                                      checked={isSelected}
+                                      onInput$={() => (paymentMethod.value = pm.id)}
+                                      class="hidden"
+                                    />
+                                    <span class="text-lg mb-1">{icon}</span>
+                                    <span class="text-xs font-black tracking-wider uppercase">{pm.name}</span>
+                                  </label>
+                                );
+                              })}
                             {(settings?.paymentMethods || []).filter(
                               (pm: any) => pm.isActive,
                             ).length === 0 && (
                               <>
                                 <label
                                   class={[
-                                    "flex-1 cursor-pointer rounded-xl border p-3 text-center text-sm font-bold transition-all",
+                                    "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
                                     paymentMethod.value === "CASH"
-                                      ? "border-emerald-500 bg-emerald-500/10 text-white"
-                                      : "border-white/10 text-slate-300 hover:bg-slate-800",
+                                      ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
+                                      : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
                                   ]}
                                 >
                                   <input
@@ -1138,19 +1151,18 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                                     name="paymentMethod"
                                     value="CASH"
                                     checked={paymentMethod.value === "CASH"}
-                                    onInput$={() =>
-                                      (paymentMethod.value = "CASH")
-                                    }
+                                    onInput$={() => (paymentMethod.value = "CASH")}
                                     class="hidden"
                                   />
-                                  <span>Efectivo</span>
+                                  <span class="text-lg mb-1">💵</span>
+                                  <span class="text-xs font-black tracking-wider uppercase">Efectivo</span>
                                 </label>
                                 <label
                                   class={[
-                                    "flex-1 cursor-pointer rounded-xl border p-3 text-center text-sm font-bold transition-all",
+                                    "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
                                     paymentMethod.value === "TRANSFER"
-                                      ? "border-emerald-500 bg-emerald-500/10 text-white"
-                                      : "border-white/10 text-slate-300 hover:bg-slate-800",
+                                      ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
+                                      : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
                                   ]}
                                 >
                                   <input
@@ -1158,12 +1170,11 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                                     name="paymentMethod"
                                     value="TRANSFER"
                                     checked={paymentMethod.value === "TRANSFER"}
-                                    onInput$={() =>
-                                      (paymentMethod.value = "TRANSFER")
-                                    }
+                                    onInput$={() => (paymentMethod.value = "TRANSFER")}
                                     class="hidden"
                                   />
-                                  <span>Transferencia</span>
+                                  <span class="text-lg mb-1">🏦</span>
+                                  <span class="text-xs font-black tracking-wider uppercase">Transferencia</span>
                                 </label>
                               </>
                             )}
@@ -1483,7 +1494,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                 </div>
 
                 {/* RIGHT COLUMN: GORGEOUS STICKY SUMMARY CARD (DESKTOP) */}
-                <div class="h-fit space-y-4 lg:sticky lg:top-4 lg:col-span-4">
+                <div class="hidden lg:block h-fit space-y-4 lg:sticky lg:top-4 lg:col-span-4">
                   {/* Pitch card */}
                   <div class="overflow-hidden rounded-2xl border border-white/8 bg-slate-900/70">
                     {selectedPitch.value?.imageUrl && (
@@ -1740,6 +1751,93 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
               </div>
             )}
           </div>
+
+          {/* MOBILE STICKY BOTTOM BAR */}
+          {!guestAction.value?.success && !userAction.value?.success && (
+            <div class="sticky bottom-0 z-30 -mx-4 -mb-4 border-t border-white/10 bg-[#0b1710]/95 p-4 backdrop-blur-md shadow-[0_-10px_25px_rgba(0,0,0,0.6)] sm:-mx-7 sm:-mb-7 lg:hidden flex items-center justify-between gap-4">
+              {/* Left Column: Summary Info */}
+              <div class="flex flex-col">
+                {timeStr.value ? (
+                  <span class="text-[10px] font-black tracking-wide text-emerald-400 uppercase leading-none mb-1">
+                    {dateStr.value
+                      ? new Date(dateStr.value + "T12:00:00").toLocaleDateString("es-AR", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                        })
+                      : ""} · {timeStr.value} hs
+                  </span>
+                ) : (
+                  <span class="text-[10px] font-bold text-slate-500 uppercase leading-none mb-1">
+                    Paso {currentStep.value} de 3
+                  </span>
+                )}
+                <div class="flex items-baseline gap-1">
+                  <span class="text-[10px] font-black text-slate-500 uppercase">Total:</span>
+                  <span class="text-xl font-black text-white">${totalPrice.value}</span>
+                </div>
+              </div>
+
+              {/* Right Column: Button Actions */}
+              <div class="flex-1 max-w-[200px]">
+                {currentStep.value === 1 && (
+                  <button
+                    type="button"
+                    onClick$={nextStep}
+                    disabled={!timeStr.value || isSubmitDisabled.value}
+                    class="w-full h-11 flex items-center justify-center gap-1.5 rounded-xl bg-[#F5F2EB] text-slate-900 text-xs font-black tracking-widest uppercase transition-all shadow-md shadow-[#F5F2EB]/10 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Continuar
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )}
+
+                {currentStep.value === 2 && (
+                  <button
+                    type="button"
+                    onClick$={nextStep}
+                    disabled={!isStep3Enabled.value}
+                    class="w-full h-11 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 text-white text-xs font-black tracking-widest uppercase transition-all shadow-md shadow-emerald-500/20 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Continuar
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )}
+
+                {currentStep.value === 3 && (
+                  <button
+                    type="submit"
+                    form="booking-form"
+                    disabled={userAction.isRunning || guestAction.isRunning}
+                    class={[
+                      "w-full h-11 flex items-center justify-center gap-1.5 rounded-xl text-xs font-black tracking-widest uppercase transition-all shadow-md active:scale-95",
+                      !user
+                        ? "bg-[#25D366] text-white shadow-[#25D366]/20 hover:bg-[#1ea952]"
+                        : "bg-emerald-500 text-white shadow-emerald-500/25 hover:bg-emerald-600",
+                      (userAction.isRunning || guestAction.isRunning) && "cursor-wait opacity-70",
+                    ]}
+                  >
+                    {userAction.isRunning || guestAction.isRunning ? (
+                      <span class="flex items-center gap-1 animate-pulse">⏳...</span>
+                    ) : !user ? (
+                      <>
+                        <svg class="h-3.5 w-3.5 fill-white" viewBox="0 0 24 24">
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                        </svg>
+                        Enviar
+                      </>
+                    ) : (
+                      <>Confirmar</>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </Modal.Panel>
       </Modal.Root>
     );

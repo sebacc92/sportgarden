@@ -45,19 +45,42 @@ export const useCashData = routeLoader$(async (requestEvent) => {
   let allMovements: any[] = [];
   let paginatedMovements: any[] = [];
   let totalCount = 0;
+  let digitalTransactions: any[] = [];
 
   if (latestRegister) {
-    allMovements = await db.query.cashMovements.findMany({
+    const cashMovementsList = await db.query.cashMovements.findMany({
       where: eq(cashMovements.registerId, latestRegister.id),
-      orderBy: [desc(cashMovements.createdAt)],
     });
+
+    digitalTransactions = await db.query.transactions.findMany({
+      where: eq(transactions.cashSessionId, latestRegister.id),
+    });
+
+    // Map digital transactions to match standard movement structure
+    const mappedDigital = digitalTransactions.map((t) => ({
+      id: t.id,
+      registerId: t.cashSessionId,
+      type: t.type,
+      category: t.category, // e.g. "RESERVA_MP"
+      amount: t.amount,
+      description: t.description,
+      paymentMethod: t.paymentMethod || "MERCADOPAGO",
+      referenceId: t.referenceId,
+      createdAt: t.createdAt,
+      isDigital: true,
+    }));
+
+    // Merge standard movements and digital transactions
+    allMovements = [...cashMovementsList, ...mappedDigital];
+    // Sort all by createdAt descending
+    allMovements.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     totalCount = allMovements.length;
     paginatedMovements = allMovements.slice(offset, offset + limit);
 
-    // Fetch related bookings for the current page
+    // Fetch related bookings for either BOOKING or RESERVA_MP category
     const bookingIds = paginatedMovements
-      .filter((m) => m.category === "BOOKING" && m.referenceId)
+      .filter((m) => (m.category === "BOOKING" || m.category === "RESERVA_MP") && m.referenceId)
       .map((m) => m.referenceId);
 
     if (bookingIds.length > 0) {
@@ -72,7 +95,7 @@ export const useCashData = routeLoader$(async (requestEvent) => {
 
       // Attach booking info to movements
       paginatedMovements = paginatedMovements.map((m) => {
-        if (m.category === "BOOKING" && m.referenceId) {
+        if ((m.category === "BOOKING" || m.category === "RESERVA_MP") && m.referenceId) {
           const booking = relatedBookings.find((b) => b.id === m.referenceId);
           return { ...m, booking };
         }
@@ -100,23 +123,14 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     }
   }
 
-  let digitalTransactions: any[] = [];
-  if (latestRegister) {
-    digitalTransactions = await db.query.transactions.findMany({
-      where: eq(transactions.cashSessionId, latestRegister.id),
-    });
-  }
-
-  const digitalIncomesTotal = digitalTransactions
-    .filter((t) => t.type === "INCOME")
-    .reduce((sum, t) => sum + t.amount, 0);
-
   const totalIncomes = allMovements
     .filter((m) => m.type === "INCOME")
-    .reduce((a, m) => a + m.amount, 0) + digitalIncomesTotal;
+    .reduce((a, m) => a + m.amount, 0);
+
   const totalExpenses = allMovements
     .filter((m) => m.type === "EXPENSE")
     .reduce((a, m) => a + m.amount, 0);
+
   const currentBalance =
     (latestRegister?.openingBalance || 0) + totalIncomes - totalExpenses;
 
@@ -140,15 +154,25 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     else byMethod[m.paymentMethod].expenses += m.amount;
   }
 
-  // Incorporate digital transactions into payment method breakdown
-  for (const t of digitalTransactions) {
-    const method = t.paymentMethod || "MERCADOPAGO";
-    if (!byMethod[method]) {
-      byMethod[method] = { incomes: 0, expenses: 0 };
-    }
-    if (t.type === "INCOME") byMethod[method].incomes += t.amount;
-    else byMethod[method].expenses += t.amount;
-  }
+  // Cargar transacciones en suspenso (mientras la caja está cerrada actualmente)
+  const pendingTransactions = await db.query.transactions.findMany({
+    where: isNull(transactions.cashSessionId),
+  });
+
+  const pendingDigital = {
+    count: pendingTransactions.length,
+    total: pendingTransactions.reduce((sum, t) => sum + t.amount, 0),
+  };
+
+  // Cargar transacciones que ingresaron fuera de horario para el turno actual
+  const closedPeriodPayments = latestRegister && latestRegister.status === "OPEN"
+    ? digitalTransactions.filter((t) => new Date(t.createdAt).getTime() < new Date(latestRegister!.openedAt).getTime())
+    : [];
+
+  const closedPeriodDigital = {
+    count: closedPeriodPayments.length,
+    total: closedPeriodPayments.reduce((sum, t) => sum + t.amount, 0),
+  };
 
   // Check for unconfirmed Cuenta Corriente bookings for today
   const startOfToday = new Date();
@@ -178,6 +202,8 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     paymentMethods: availableMethods,
     movementCategories: resolveMovementCategories(settings?.movementCategories),
     unconfirmedTodayBookings,
+    pendingDigital,
+    closedPeriodDigital,
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalCount / limit),
@@ -413,6 +439,70 @@ export default component$(() => {
               </div>
             </div>
           )}
+
+        {!isOpen && cashData.value.pendingDigital && cashData.value.pendingDigital.count > 0 && (
+          <div class="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm print:hidden">
+            <div class="flex items-start gap-4">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-800">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </div>
+              <div class="space-y-1">
+                <h3 class="text-sm font-black text-blue-800 uppercase tracking-wide">
+                  Pagos Online en Espera ({cashData.value.pendingDigital.count})
+                </h3>
+                <p class="text-xs font-semibold leading-relaxed text-blue-700">
+                  Se recibieron <strong>{cashData.value.pendingDigital.count}</strong> pagos digitales por un total de <strong>${cashData.value.pendingDigital.total.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</strong> mientras la caja física estaba cerrada (fuera de horario / madrugada).
+                  Se asignarán de forma automática a la próxima apertura de caja de tu complejo.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isOpen && cashData.value.closedPeriodDigital && cashData.value.closedPeriodDigital.count > 0 && (
+          <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm print:hidden">
+            <div class="flex items-start gap-4">
+              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+              </div>
+              <div class="space-y-1">
+                <h3 class="text-sm font-black text-emerald-800 uppercase tracking-wide">
+                  Pagos fuera de horario incorporados ({cashData.value.closedPeriodDigital.count})
+                </h3>
+                <p class="text-xs font-semibold leading-relaxed text-emerald-700">
+                  Se han detectado e incorporado <strong>{cashData.value.closedPeriodDigital.count}</strong> pagos online recibidos en suspenso mientras la caja estaba cerrada (madrugada / fuera de turno), por un total de <strong>${cashData.value.closedPeriodDigital.total.toLocaleString("es-AR", { minimumFractionDigits: 2 })}</strong>. Se muestran correctamente en el listado de movimientos cronológicos de este turno.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div class="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:border-slate-300 print:shadow-none">
@@ -918,7 +1008,7 @@ export default component$(() => {
                               })}
                             </td>
                             <td class="p-4 pr-6 text-center print:hidden">
-                              {(m.category === "BOOKING" && m.booking) ||
+                              {((m.category === "BOOKING" || m.category === "RESERVA_MP") && m.booking) ||
                               (m.category === "SCHOOL" && m.student) ? (
                                 <button
                                   onClick$={() => {
