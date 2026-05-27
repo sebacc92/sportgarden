@@ -69,7 +69,7 @@ export const bookings = sqliteTable("bookings", {
   startTime: integer("start_time", { mode: "timestamp" }).notNull(),
   endTime: integer("end_time", { mode: "timestamp" }).notNull(),
   status: text("status", {
-    enum: ["PENDING_APPROVAL", "CONFIRMED", "CANCELLED", "COMPLETED"],
+    enum: ["PENDING_APPROVAL", "CONFIRMED", "CANCELLED", "COMPLETED", "ATTENDED"],
   })
     .notNull()
     .default("PENDING_APPROVAL"),
@@ -285,6 +285,34 @@ export const cashMovements = sqliteTable("cash_movements", {
     .default(sql`(strftime('%s', 'now'))`),
 });
 
+// --- Cash Sessions (Caja Sesiones - Nueva Regla MP) ---
+export const cashSessions = sqliteTable("cash_sessions", {
+  id: text("id").primaryKey(),
+  openedAt: integer("opened_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+  closedAt: integer("closed_at", { mode: "timestamp" }),
+  status: text("status", { enum: ["OPEN", "CLOSED"] })
+    .notNull()
+    .default("OPEN"),
+  openedBy: text("opened_by").references(() => users.id),
+  closedBy: text("closed_by").references(() => users.id),
+});
+
+export const transactions = sqliteTable("transactions", {
+  id: text("id").primaryKey(),
+  cashSessionId: text("cash_session_id").references(() => cashSessions.id),
+  type: text("type", { enum: ["INCOME", "EXPENSE"] }).notNull(),
+  category: text("category").notNull(),
+  amount: real("amount").notNull(),
+  description: text("description"),
+  paymentMethod: text("payment_method").notNull().default("CASH"),
+  referenceId: text("reference_id"), // references bookingId
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
 // --- Pitch Subscriptions (Abonos de Canchas) ---
 export const pitchSubscriptions = sqliteTable("pitch_subscriptions", {
   id: text("id").primaryKey(),
@@ -321,6 +349,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   bookings: many(bookings),
   cashRegistersOpened: many(cashRegisters, { relationName: "openedBy" }),
   cashRegistersClosed: many(cashRegisters, { relationName: "closedBy" }),
+  cashSessionsOpened: many(cashSessions, { relationName: "cashSessionsOpenedBy" }),
+  cashSessionsClosed: many(cashSessions, { relationName: "cashSessionsClosedBy" }),
   pitchSubscriptions: many(pitchSubscriptions),
 }));
 
@@ -375,6 +405,7 @@ export const bookingsRelations = relations(bookings, ({ one, many }) => ({
     references: [guestRequests.bookingId],
   }),
   groupTransactions: many(groupTransactions),
+  transactions: many(transactions),
 }));
 
 export const groupsRelations = relations(groups, ({ many }) => ({
@@ -418,6 +449,34 @@ export const cashMovementsRelations = relations(cashMovements, ({ one }) => ({
   register: one(cashRegisters, {
     fields: [cashMovements.registerId],
     references: [cashRegisters.id],
+  }),
+}));
+
+export const cashSessionsRelations = relations(
+  cashSessions,
+  ({ one, many }) => ({
+    openedByUser: one(users, {
+      fields: [cashSessions.openedBy],
+      references: [users.id],
+      relationName: "cashSessionsOpenedBy",
+    }),
+    closedByUser: one(users, {
+      fields: [cashSessions.closedBy],
+      references: [users.id],
+      relationName: "cashSessionsClosedBy",
+    }),
+    transactions: many(transactions),
+  }),
+);
+
+export const transactionsRelations = relations(transactions, ({ one }) => ({
+  cashSession: one(cashSessions, {
+    fields: [transactions.cashSessionId],
+    references: [cashSessions.id],
+  }),
+  booking: one(bookings, {
+    fields: [transactions.referenceId],
+    references: [bookings.id],
   }),
 }));
 

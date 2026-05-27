@@ -51,7 +51,15 @@ export const onPost: RequestHandler = async (requestEvent) => {
       return;
     }
 
-    // 3. Crear la preferencia de pago a través de fetch server-to-server a Mercado Pago
+    // 3. Resolver host de forma segura con headers de reenvío
+    const headers = requestEvent.request.headers;
+    const proto = headers.get("x-forwarded-proto") || "https";
+    const host = headers.get("x-forwarded-host") || headers.get("host") || requestEvent.url.host;
+    const origin = host.includes("localhost") || host.includes("127.0.0.1")
+      ? "https://www.gardenclub.com.ar"
+      : `${proto}://${host}`;
+
+    // 4. Crear la preferencia de pago a través de fetch server-to-server a Mercado Pago
     const mpResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
       method: "POST",
       headers: {
@@ -68,12 +76,12 @@ export const onPost: RequestHandler = async (requestEvent) => {
           },
         ],
         back_urls: {
-          success: "https://evasion-chute-bonding.ngrok-free.dev/admin/club?booking=success",
-          failure: "https://evasion-chute-bonding.ngrok-free.dev/admin/club?booking=failure",
-          pending: "https://evasion-chute-bonding.ngrok-free.dev/admin/club?booking=pending",
+          success: `${origin}/admin/club?booking=success`,
+          failure: `${origin}/admin/club?booking=failure`,
+          pending: `${origin}/admin/club?booking=pending`,
         },
         auto_return: "approved",
-        notification_url: "https://evasion-chute-bonding.ngrok-free.dev/api/mercadopago/webhooks",
+        notification_url: `${origin}/api/mercadopago/webhooks`,
       }),
     });
 

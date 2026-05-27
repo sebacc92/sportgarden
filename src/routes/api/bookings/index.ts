@@ -238,7 +238,7 @@ export const useUserBookingAction = routeAction$(
         const proto = headers.get("x-forwarded-proto") || "https";
         const host = headers.get("x-forwarded-host") || headers.get("host") || requestEvent.url.host;
         const origin = host.includes("localhost") || host.includes("127.0.0.1")
-          ? "https://evasion-chute-bonding.ngrok-free.dev"
+          ? "https://www.gardenclub.com.ar"
           : `${proto}://${host}`;
 
         const response = await preference.create({
@@ -259,6 +259,7 @@ export const useUserBookingAction = routeAction$(
               pending: `${origin}/pago/pendiente`,
             },
             auto_return: "approved",
+            notification_url: `${origin}/api/mercadopago/webhooks`,
             statement_descriptor: "GARDEN CLUB",
           },
         });

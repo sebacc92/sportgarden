@@ -33,7 +33,7 @@ if (typeof globalThis.Headers !== "undefined" && !(globalThis.Headers.prototype 
 import type { RequestHandler } from "@builder.io/qwik-city";
 import { MercadoPagoConfig, Payment } from "mercadopago";
 import { getDB } from "~/db";
-import { bookings } from "~/db/schema";
+import { bookings, transactions, cashSessions } from "~/db/schema";
 import { eq } from "drizzle-orm";
 
 /**
@@ -153,6 +153,27 @@ export const onPost: RequestHandler = async (requestEvent) => {
           console.error(`[Webhook MP] Booking with ID '${externalReference}' not found in Turso DB.`);
         } else {
           console.log(`[Webhook MP] Booking '${externalReference}' successfully confirmed in Turso database.`);
+
+          // Log the digital payment in the transactions table
+          try {
+            const openSession = await db.query.cashSessions.findFirst({
+              where: eq(cashSessions.status, "OPEN"),
+            });
+
+            await db.insert(transactions).values({
+              id: crypto.randomUUID(),
+              cashSessionId: openSession ? openSession.id : null,
+              type: "INCOME",
+              category: "RESERVA_MP",
+              amount: Number(mpPayment.transaction_amount || 0),
+              description: `Pago digital MP - Reserva: ${externalReference.slice(0, 8)}`,
+              paymentMethod: mpPayment.payment_method_id || "MERCADOPAGO",
+              referenceId: externalReference,
+            });
+            console.log(`[Webhook MP] Digital transaction successfully recorded with session ID: ${openSession ? openSession.id : 'NULL'}`);
+          } catch (e) {
+            console.error(`[Webhook MP] Error logging transaction:`, e);
+          }
         }
 
         /* 

@@ -66,7 +66,7 @@ export const useCrearPreferencia = routeAction$(async (data, requestEvent) => {
     const proto = headers.get("x-forwarded-proto") || "https";
     const host = headers.get("x-forwarded-host") || headers.get("host") || requestEvent.url.host;
     const origin = host.includes("localhost") || host.includes("127.0.0.1")
-      ? "https://evasion-chute-bonding.ngrok-free.dev"
+      ? "https://www.gardenclub.com.ar"
       : `${proto}://${host}`;
 
     // 3. Crear instancia de Preferencia
@@ -90,6 +90,7 @@ export const useCrearPreferencia = routeAction$(async (data, requestEvent) => {
           pending: `${origin}/pago/pendiente`,
         },
         auto_return: "approved",
+        notification_url: `${origin}/api/mercadopago/webhooks`,
         statement_descriptor: "GARDEN CLUB",
       },
     });

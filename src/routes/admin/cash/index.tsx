@@ -13,8 +13,8 @@ import {
   Link,
 } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { cashRegisters, cashMovements, bookings, students } from "~/db/schema";
-import { eq, desc, inArray } from "drizzle-orm";
+import { cashRegisters, cashMovements, bookings, students, cashSessions, transactions } from "~/db/schema";
+import { eq, desc, inArray, isNull, and, gte, lte } from "drizzle-orm";
 import { Button, Modal } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
@@ -100,9 +100,20 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     }
   }
 
+  let digitalTransactions: any[] = [];
+  if (latestRegister) {
+    digitalTransactions = await db.query.transactions.findMany({
+      where: eq(transactions.cashSessionId, latestRegister.id),
+    });
+  }
+
+  const digitalIncomesTotal = digitalTransactions
+    .filter((t) => t.type === "INCOME")
+    .reduce((sum, t) => sum + t.amount, 0);
+
   const totalIncomes = allMovements
     .filter((m) => m.type === "INCOME")
-    .reduce((a, m) => a + m.amount, 0);
+    .reduce((a, m) => a + m.amount, 0) + digitalIncomesTotal;
   const totalExpenses = allMovements
     .filter((m) => m.type === "EXPENSE")
     .reduce((a, m) => a + m.amount, 0);
@@ -129,6 +140,34 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     else byMethod[m.paymentMethod].expenses += m.amount;
   }
 
+  // Incorporate digital transactions into payment method breakdown
+  for (const t of digitalTransactions) {
+    const method = t.paymentMethod || "MERCADOPAGO";
+    if (!byMethod[method]) {
+      byMethod[method] = { incomes: 0, expenses: 0 };
+    }
+    if (t.type === "INCOME") byMethod[method].incomes += t.amount;
+    else byMethod[method].expenses += t.amount;
+  }
+
+  // Check for unconfirmed Cuenta Corriente bookings for today
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+
+  const unconfirmedTodayBookings = await db.query.bookings.findMany({
+    where: and(
+      inArray(bookings.paymentMethod, ["CUENTA_CORRIENTE", "CURRENT_ACCOUNT"]),
+      inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL"]),
+      gte(bookings.startTime, startOfToday),
+      lte(bookings.startTime, endOfToday),
+    ),
+    with: {
+      pitch: true,
+    },
+  });
+
   return {
     latestRegister,
     movements: paginatedMovements,
@@ -138,6 +177,7 @@ export const useCashData = routeLoader$(async (requestEvent) => {
     byMethod,
     paymentMethods: availableMethods,
     movementCategories: resolveMovementCategories(settings?.movementCategories),
+    unconfirmedTodayBookings,
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalCount / limit),
@@ -152,11 +192,27 @@ export const useToggleRegisterAction = routeAction$(
     const { action, balance, registerId, notes } = data;
     if (action === "OPEN") {
       const id = crypto.randomUUID();
-      await db.insert(cashRegisters).values({
-        id,
-        openingBalance: Number(balance) || 0,
-        status: "OPEN",
-        notes: notes || null,
+      await db.transaction(async (tx) => {
+        // Insert register
+        await tx.insert(cashRegisters).values({
+          id,
+          openingBalance: Number(balance) || 0,
+          status: "OPEN",
+          notes: notes || null,
+        });
+
+        // Insert session in cashSessions
+        await tx.insert(cashSessions).values({
+          id,
+          openedAt: new Date(),
+          status: "OPEN",
+        });
+
+        // Assign pending digital transactions (cashSessionId IS NULL) to the new session
+        await tx
+          .update(transactions)
+          .set({ cashSessionId: id })
+          .where(isNull(transactions.cashSessionId));
       });
       return { success: true };
     } else if (action === "CLOSE") {
@@ -169,16 +225,28 @@ export const useToggleRegisterAction = routeAction$(
           // Ignorar error de parseo si el JSON es inválido
         }
       }
-      await db
-        .update(cashRegisters)
-        .set({
-          status: "CLOSED",
-          closingBalance: Number(balance) || 0,
-          closedAt: new Date(),
-          billCount: billCount ?? null,
-          notes: notes || null,
-        })
-        .where(eq(cashRegisters.id, registerId!));
+      await db.transaction(async (tx) => {
+        // Close register
+        await tx
+          .update(cashRegisters)
+          .set({
+            status: "CLOSED",
+            closingBalance: Number(balance) || 0,
+            closedAt: new Date(),
+            billCount: billCount ?? null,
+            notes: notes || null,
+          })
+          .where(eq(cashRegisters.id, registerId!));
+
+        // Close cashSession
+        await tx
+          .update(cashSessions)
+          .set({
+            status: "CLOSED",
+            closedAt: new Date(),
+          })
+          .where(eq(cashSessions.id, registerId!));
+      });
       return { success: true };
     }
     return { success: false };
@@ -220,6 +288,8 @@ export default component$(() => {
   const cashData = useCashData();
   const toggleAction = useToggleRegisterAction();
   const addMovementAction = useAddMovementAction();
+  const currentPage = cashData.value.pagination.currentPage;
+  const totalPages = cashData.value.pagination.totalPages;
   const isOpen = cashData.value.latestRegister?.status === "OPEN";
   const showCloseModal = useSignal(false);
   const isMovementModalOpen = useSignal(false);
@@ -282,6 +352,67 @@ export default component$(() => {
         </div>
 
         <CashSectionNav />
+
+        {cashData.value.unconfirmedTodayBookings &&
+          cashData.value.unconfirmedTodayBookings.length > 0 && (
+            <div class="rounded-2xl border border-yellow-200 bg-yellow-50 p-5 shadow-sm print:hidden">
+              <div class="flex items-start gap-4">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-100 text-yellow-800">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+                <div class="space-y-1">
+                  <h3 class="text-sm font-black text-yellow-800 uppercase tracking-wide">
+                    Atención: Turnos de Cuenta Corriente sin confirmar
+                  </h3>
+                  <p class="text-xs font-semibold leading-relaxed text-yellow-700">
+                    Tienes {cashData.value.unconfirmedTodayBookings.length} turno(s) de Cuenta Corriente programados para hoy sin confirmar. 
+                    Por favor, confirma la asistencia en el calendario para generar la deuda correspondiente antes de realizar el cierre de caja.
+                  </p>
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {cashData.value.unconfirmedTodayBookings.map((b: any) => (
+                      <Link
+                        key={b.id}
+                        href="/admin/calendar"
+                        class="inline-flex items-center gap-1.5 rounded-lg bg-yellow-100 px-3 py-1 text-[11px] font-bold text-yellow-800 hover:bg-yellow-200 transition-colors"
+                      >
+                        <span>
+                          {b.pitch?.name || "Cancha"} - {new Date(b.startTime).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}hs
+                        </span>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2.5"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path d="M5 12h14" />
+                          <path d="m12 5 7 7-7 7" />
+                        </svg>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
         {/* Header */}
         <div class="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm print:border-slate-300 print:shadow-none">
@@ -826,22 +957,20 @@ export default component$(() => {
               </div>
 
               {/* Pagination Footer */}
-              {cashData.value.pagination.totalPages > 1 && (
+              {totalPages > 1 && (
                 <div class="flex items-center justify-between border-t border-slate-100 bg-slate-50 p-4 print:hidden">
                   <div class="text-xs font-bold tracking-widest text-slate-400 uppercase">
-                    Página {cashData.value.pagination.currentPage} de{" "}
-                    {cashData.value.pagination.totalPages}
+                    Página {currentPage} de{" "}
+                    {totalPages}
                   </div>
                   <div class="flex gap-2">
                     <button
-                      disabled={cashData.value.pagination.currentPage === 1}
+                      disabled={currentPage === 1}
                       onClick$={() => {
                         const url = new URL(window.location.href);
                         url.searchParams.set(
                           "page",
-                          (
-                            cashData.value.pagination.currentPage - 1
-                          ).toString(),
+                          (currentPage - 1).toString(),
                         );
                         window.location.href = url.toString();
                       }}
@@ -850,17 +979,12 @@ export default component$(() => {
                       Anterior
                     </button>
                     <button
-                      disabled={
-                        cashData.value.pagination.currentPage ===
-                        cashData.value.pagination.totalPages
-                      }
+                      disabled={currentPage === totalPages}
                       onClick$={() => {
                         const url = new URL(window.location.href);
                         url.searchParams.set(
                           "page",
-                          (
-                            cashData.value.pagination.currentPage + 1
-                          ).toString(),
+                          (currentPage + 1).toString(),
                         );
                         window.location.href = url.toString();
                       }}

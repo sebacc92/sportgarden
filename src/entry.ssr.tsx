@@ -17,12 +17,24 @@ import {
 import Root from "./root";
 
 export default function (opts: RenderToStreamOptions) {
+  const urlStr = typeof opts.serverData?.url === "string" ? opts.serverData.url : "";
+  const isAdmin = urlStr.includes("/admin");
+
   return renderToStream(<Root />, {
     ...opts,
     // Use container attributes to set attributes on the html tag.
     containerAttributes: {
-      lang: "en-us",
+      lang: "es",
+      ...(isAdmin
+        ? {}
+        : {
+            style: "color-scheme: dark;",
+          }),
       ...opts.containerAttributes,
+      class: (isAdmin
+        ? (opts.containerAttributes?.class || "")
+        : `dark ${opts.containerAttributes?.class || ""}`
+      ).trim(),
     },
     serverData: {
       ...opts.serverData,

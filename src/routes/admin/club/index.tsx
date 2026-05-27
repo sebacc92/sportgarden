@@ -25,6 +25,15 @@ export const useMpCredentials = routeLoader$(async (requestEvent) => {
     isConnected: !!credentials,
     userId: credentials?.userId || null,
     publicKey: credentials?.publicKey || null,
+    createdAt: credentials?.createdAt
+      ? new Date(credentials.createdAt).toLocaleString("es-AR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null,
   };
 });
 
@@ -393,11 +402,16 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
                     >
                       <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
-                    <span>✓ Cuenta Vinculada</span>
+                    <span>Cuenta Vinculada</span>
                   </div>
                   {mpCredentials.value.userId && (
-                    <p class="mt-1.5 text-[11px] text-slate-500 font-semibold uppercase tracking-wider">
+                    <p class="mt-2 text-[11px] text-slate-600 font-bold uppercase tracking-wider">
                       ID de Vendedor: {mpCredentials.value.userId}
+                    </p>
+                  )}
+                  {mpCredentials.value.createdAt && (
+                    <p class="mt-1 text-[10px] text-slate-400 font-black uppercase tracking-wider">
+                      Vinculada el: {mpCredentials.value.createdAt}
                     </p>
                   )}
                   <button

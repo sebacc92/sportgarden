@@ -9,6 +9,7 @@ interface BookingDetailsModalProps {
   calendarData: any;
   addPaymentAction: any;
   updateStatusAction: any;
+  confirmAttendanceAction: any;
 }
 
 export const BookingDetailsModal = component$<BookingDetailsModalProps>(
@@ -19,6 +20,7 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>(
       calendarData,
       addPaymentAction,
       updateStatusAction,
+      confirmAttendanceAction,
     } = props;
 
     const showCancelOptions = useSignal(false);
@@ -754,7 +756,9 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>(
                                 ? "border-slate-300 bg-slate-200 text-slate-800"
                                 : status === "CANCELLED"
                                   ? "border-red-200 bg-red-100 text-red-800"
-                                  : "border-amber-200 bg-amber-100 text-amber-800",
+                                  : status === "ATTENDED"
+                                    ? "border-indigo-200 bg-indigo-100 text-indigo-800"
+                                    : "border-amber-200 bg-amber-100 text-amber-800",
                           )}
                         >
                           {status === "CONFIRMED"
@@ -763,13 +767,62 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>(
                               ? "Finalizada"
                               : status === "CANCELLED"
                                 ? "Anulada"
-                                : "Pendiente"}
+                                : status === "ATTENDED"
+                                  ? "Asistió"
+                                  : "Pendiente"}
                         </span>
                       );
                     })()}
                   </div>
 
                   <div class="flex flex-col gap-2">
+                    {/* Confirmar Asistencia (Cuenta Corriente) */}
+                    {(selectedBookingDetails.booking.paymentMethod === "CUENTA_CORRIENTE" ||
+                      selectedBookingDetails.booking.paymentMethod === "CURRENT_ACCOUNT") &&
+                      selectedBookingDetails.booking.status !== "ATTENDED" && (
+                        <Form action={confirmAttendanceAction} class="w-full">
+                          <input
+                            type="hidden"
+                            name="bookingId"
+                            value={selectedBookingDetails.booking.id}
+                          />
+                          <button
+                            type="submit"
+                            disabled={confirmAttendanceAction.isRunning}
+                            class="flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-xs font-black tracking-widest text-white uppercase shadow-lg transition-all active:scale-[0.98]"
+                            style="background-color: #6366F1 !important; color: #ffffff !important; cursor: pointer !important;"
+                          >
+                            {confirmAttendanceAction.isRunning ? (
+                              <>
+                                <svg
+                                  class="h-4 w-4 animate-spin text-white"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <circle
+                                    class="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    stroke-width="4"
+                                  ></circle>
+                                  <path
+                                    class="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                  ></path>
+                                </svg>
+                                Confirmando Asistencia...
+                              </>
+                            ) : (
+                              "Confirmar Asistencia"
+                            )}
+                          </button>
+                        </Form>
+                      )}
+
                     {/* Confirm Action */}
                     {selectedBookingDetails.booking.status ===
                       "PENDING_APPROVAL" && (

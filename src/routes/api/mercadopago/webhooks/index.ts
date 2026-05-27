@@ -21,7 +21,7 @@ if (typeof process === "undefined") {
 
 import type { RequestHandler } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { bookings, mercadoPagoCredentials } from "~/db/schema";
+import { bookings, mercadoPagoCredentials, transactions, cashSessions } from "~/db/schema";
 import { eq, or } from "drizzle-orm";
 
 export const onPost: RequestHandler = async (requestEvent) => {
@@ -34,15 +34,16 @@ export const onPost: RequestHandler = async (requestEvent) => {
 
     const action = body.action || "";
     const type = body.type || "";
+    const topic = body.topic || type || action;
     
     // Obtener el ID del pago
-    const paymentId = body.data?.id;
+    const paymentId = body.data?.id || body.id;
 
     // Regla de negocio estricta: Solo procesamos eventos de tipo pago
-    const isPaymentEvent = action === "payment.created" || action === "payment.updated" || type === "payment";
+    const isPaymentEvent = topic === "payment" || topic === "payment.created" || topic === "payment.updated";
     
     if (!isPaymentEvent || !paymentId) {
-      console.log(`[MercadoPago Webhook] Ignorando evento no relevante. Tipo: ${type}, Acción: ${action}, ID: ${paymentId}`);
+      console.log(`[MercadoPago Webhook] Ignorando evento no relevante. Tipo: ${type}, Acción: ${action}, Topic: ${topic}, ID: ${paymentId}`);
       send(200, "Event ignored");
       return;
     }
@@ -122,6 +123,27 @@ export const onPost: RequestHandler = async (requestEvent) => {
             .where(eq(bookings.id, booking.id));
 
           console.log(`[MercadoPago Webhook] Reserva ID: ${booking.id} actualizada exitosamente.`);
+
+          // Log the digital payment in the transactions table
+          try {
+            const openSession = await db.query.cashSessions.findFirst({
+              where: eq(cashSessions.status, "OPEN"),
+            });
+
+            await db.insert(transactions).values({
+              id: crypto.randomUUID(),
+              cashSessionId: openSession ? openSession.id : null,
+              type: "INCOME",
+              category: "RESERVA_MP",
+              amount: transactionAmount || booking.totalPrice,
+              description: `Pago digital MP - Reserva: ${booking.id.slice(0, 8)}`,
+              paymentMethod: "MERCADOPAGO",
+              referenceId: booking.id,
+            });
+            console.log(`[MercadoPago Webhook] Digital transaction successfully recorded with session ID: ${openSession ? openSession.id : 'NULL'}`);
+          } catch (e) {
+            console.error(`[MercadoPago Webhook] Error logging transaction:`, e);
+          }
         } else {
           console.warn(`[MercadoPago Webhook Warning]: No se encontró ninguna reserva asociada al pago ${paymentId} (Ref: ${externalReference}, Pref: ${preferenceId})`);
         }

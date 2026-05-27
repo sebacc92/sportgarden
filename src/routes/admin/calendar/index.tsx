@@ -25,8 +25,10 @@ import {
   cashRegisters,
   cashMovements,
   pitchOverlaps,
+  groups,
+  groupTransactions,
 } from "~/db/schema";
-import { eq, and, gte, lte, lt, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, lt, inArray, notInArray } from "drizzle-orm";
 import { isPitchAvailable } from "~/utils/availability";
 import { BookingListView } from "~/components/admin/booking-list-view";
 import { BookingTimelineView } from "~/components/admin/booking-timeline-view";
@@ -570,6 +572,63 @@ export const useAddBookingPaymentAction = routeAction$(
   }),
 );
 
+export const useConfirmAttendanceAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const booking = await db.query.bookings.findFirst({
+      where: eq(bookings.id, data.bookingId),
+    });
+
+    if (!booking) {
+      return { failed: true, message: "Reserva no encontrada." };
+    }
+
+    if (booking.status === "ATTENDED") {
+      return { failed: true, message: "La asistencia ya fue confirmada." };
+    }
+
+    await db.transaction(async (tx) => {
+      // 1. Update booking status to ATTENDED
+      await tx
+        .update(bookings)
+        .set({ status: "ATTENDED" })
+        .where(eq(bookings.id, booking.id));
+
+      // 2. Generate debt transaction in the customer's current account if there is a group and unpaid balance
+      if (booking.groupId) {
+        const debtAmount = booking.totalPrice - booking.paidAmount;
+        if (debtAmount > 0) {
+          // Insert debt charge in group transactions
+          await tx.insert(groupTransactions).values({
+            id: crypto.randomUUID(),
+            groupId: booking.groupId,
+            type: "CHARGE",
+            amount: debtAmount,
+            description: `Turno asistido: ${booking.id.slice(0, 8)}`,
+            bookingId: booking.id,
+          });
+
+          // Deduct from group balance to increase debt
+          const group = await tx.query.groups.findFirst({
+            where: eq(groups.id, booking.groupId),
+          });
+          if (group) {
+            await tx
+              .update(groups)
+              .set({ balance: group.balance - debtAmount })
+              .where(eq(groups.id, booking.groupId));
+          }
+        }
+      }
+    });
+
+    return { success: true };
+  },
+  zod$({
+    bookingId: z.string(),
+  }),
+);
+
 export const useCalendarData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const dateStr = requestEvent.url.searchParams.get("date");
@@ -580,12 +639,18 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     throw requestEvent.redirect(302, `?date=${todayStr}&view=${viewStr}`);
   }
 
-  // Auto-complete past bookings
+  // Auto-complete past bookings (excluding Cuenta Corriente turnos)
   const now = new Date();
   await db
     .update(bookings)
     .set({ status: "COMPLETED" })
-    .where(and(eq(bookings.status, "CONFIRMED"), lt(bookings.endTime, now)));
+    .where(
+      and(
+        eq(bookings.status, "CONFIRMED"),
+        lt(bookings.endTime, now),
+        notInArray(bookings.paymentMethod, ["CUENTA_CORRIENTE", "CURRENT_ACCOUNT"])
+      )
+    );
 
   const settings = await db.query.siteSettings.findFirst();
   const extraServices = (settings?.extraServices || []) as {
@@ -885,6 +950,7 @@ export default component$(() => {
   const updateStatusAction = useUpdateBookingStatusAction();
   const createBookingAction = useCreateAdminBookingAction();
   const addPaymentAction = useAddBookingPaymentAction();
+  const confirmAttendanceAction = useConfirmAttendanceAction();
   const nav = useNavigate();
 
   useStyles$(`
@@ -1329,6 +1395,7 @@ export default component$(() => {
         calendarData={calendarData.value}
         addPaymentAction={addPaymentAction}
         updateStatusAction={updateStatusAction}
+        confirmAttendanceAction={confirmAttendanceAction}
       />
 
       {/* Modal para Imprimir Agenda */}

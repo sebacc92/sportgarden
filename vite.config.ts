@@ -45,9 +45,6 @@ export default defineConfig(({ command, mode }): UserConfig => {
       tsconfigPaths({ root: "." }),
       tailwindcss(),
     ],
-    ssr: {
-      external: ["crypto", "node:crypto"],
-    },
     // This tells Vite which dependencies to pre-build in dev mode.
     optimizeDeps: {
       // Put problematic deps that break bundling here, mostly those with binaries.
@@ -76,7 +73,7 @@ export default defineConfig(({ command, mode }): UserConfig => {
         "Cache-Control": "public, max-age=0",
       },
       allowedHosts: [
-        "evasion-chute-bonding.ngrok-free.dev"
+        "https://www.gardenclub.com.ar/"
       ]
     },
     preview: {
