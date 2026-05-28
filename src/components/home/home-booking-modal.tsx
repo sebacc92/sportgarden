@@ -35,6 +35,126 @@ export type HomeBookingModalProps = {
   userAction: any;
 };
 
+export const isWithinOperatingHoursHelper = (
+  time: string,
+  dateStr: string | null,
+  settings: SiteSettingsShape,
+) => {
+  if (!dateStr) return false;
+
+  const isHoliday = (settings.holidays || []).some((h: any) => h.date === dateStr);
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const localDate = new Date(year, month - 1, day);
+  const dayOfWeek = isHoliday ? 7 : localDate.getDay();
+
+  const operatingHours = (() => {
+    try {
+      if (typeof settings?.operatingHours === "string") {
+        return JSON.parse(settings.operatingHours);
+      }
+      if (Array.isArray(settings?.operatingHours)) {
+        return settings.operatingHours;
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  })();
+
+  const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+  const isOpen = schedule ? schedule.isOpen : true;
+  if (!isOpen) return false;
+
+  const openTime = schedule?.openTime || "08:00";
+  const closeTime = schedule?.closeTime || "23:00";
+
+  const timeToMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const slotStartMin = timeToMinutes(time);
+  const openMin = timeToMinutes(openTime);
+  const closeMin = timeToMinutes(closeTime);
+
+  return slotStartMin >= openMin && slotStartMin < closeMin;
+};
+
+export const isSlotDisabledHelper = (
+  time: string,
+  dateStr: string | null,
+  durationStr: string,
+  occupiedSlots: any[],
+  settings: SiteSettingsShape,
+) => {
+  if (!dateStr) return true;
+
+  // 1. Check if the slot is in the past (for today)
+  const today = new Date();
+  const isToday = dateStr === today.toISOString().split("T")[0];
+  if (isToday) {
+    const [hours, minutes] = time.split(":").map(Number);
+    const slotTime = new Date();
+    slotTime.setHours(hours, minutes, 0, 0);
+    if (slotTime <= today) {
+      return true;
+    }
+  }
+
+  // 2. Check operating hours and duration boundaries
+  const isHoliday = (settings.holidays || []).some((h: any) => h.date === dateStr);
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const localDate = new Date(year, month - 1, day);
+  const dayOfWeek = isHoliday ? 7 : localDate.getDay();
+
+  const operatingHours = (() => {
+    try {
+      if (typeof settings?.operatingHours === "string") {
+        return JSON.parse(settings.operatingHours);
+      }
+      if (Array.isArray(settings?.operatingHours)) {
+        return settings.operatingHours;
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  })();
+
+  const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+  const isOpen = schedule ? schedule.isOpen : true;
+  if (!isOpen) return true;
+
+  const openTime = schedule?.openTime || "08:00";
+  const closeTime = schedule?.closeTime || "23:00";
+
+  const timeToMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const slotStartMin = timeToMinutes(time);
+  const openMin = timeToMinutes(openTime);
+  const closeMin = timeToMinutes(closeTime);
+  const durationMin = parseInt(durationStr, 10);
+  const slotEndMin = slotStartMin + durationMin;
+
+  // Must start on or after opening, and end on or before closing
+  if (slotStartMin < openMin || slotEndMin > closeMin) {
+    return true;
+  }
+
+  // 3. Check overlaps with occupied bookings
+  const start = new Date(`${dateStr}T${time}:00`).getTime();
+  const end = start + durationMin * 60000;
+
+  return occupiedSlots.some((slot) => {
+    const slotStart = new Date(slot.startTime).getTime();
+    const slotEnd = new Date(slot.endTime).getTime();
+    return start < slotEnd && end > slotStart;
+  });
+};
+
 export const HomeBookingModal = component$<HomeBookingModalProps>(
   ({
     isOpen,
@@ -219,116 +339,6 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       }
     });
 
-    const isWithinOperatingHours = (time: string) => {
-      if (!dateStr.value) return false;
-
-      const isHoliday = (settings.holidays || []).some((h: any) => h.date === dateStr.value);
-      const [year, month, day] = dateStr.value.split("-").map(Number);
-      const localDate = new Date(year, month - 1, day);
-      const dayOfWeek = isHoliday ? 7 : localDate.getDay();
-
-      const operatingHours = (() => {
-        try {
-          if (typeof settings?.operatingHours === "string") {
-            return JSON.parse(settings.operatingHours);
-          }
-          if (Array.isArray(settings?.operatingHours)) {
-            return settings.operatingHours;
-          }
-          return [];
-        } catch {
-          return [];
-        }
-      })();
-
-      const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
-      const isOpen = schedule ? schedule.isOpen : true;
-      if (!isOpen) return false;
-
-      const openTime = schedule?.openTime || "08:00";
-      const closeTime = schedule?.closeTime || "23:00";
-
-      const timeToMinutes = (t: string) => {
-        const [h, m] = t.split(":").map(Number);
-        return h * 60 + m;
-      };
-
-      const slotStartMin = timeToMinutes(time);
-      const openMin = timeToMinutes(openTime);
-      const closeMin = timeToMinutes(closeTime);
-
-      return slotStartMin >= openMin && slotStartMin < closeMin;
-    };
-
-    const isSlotDisabled = (time: string) => {
-      if (!dateStr.value) return true;
-
-      // 1. Check if the slot is in the past (for today)
-      const today = new Date();
-      const isToday = dateStr.value === today.toISOString().split("T")[0];
-      if (isToday) {
-        const [hours, minutes] = time.split(":").map(Number);
-        const slotTime = new Date();
-        slotTime.setHours(hours, minutes, 0, 0);
-        if (slotTime <= today) {
-          return true;
-        }
-      }
-
-      // 2. Check operating hours and duration boundaries
-      const isHoliday = (settings.holidays || []).some((h: any) => h.date === dateStr.value);
-      const [year, month, day] = dateStr.value.split("-").map(Number);
-      const localDate = new Date(year, month - 1, day);
-      const dayOfWeek = isHoliday ? 7 : localDate.getDay();
-
-      const operatingHours = (() => {
-        try {
-          if (typeof settings?.operatingHours === "string") {
-            return JSON.parse(settings.operatingHours);
-          }
-          if (Array.isArray(settings?.operatingHours)) {
-            return settings.operatingHours;
-          }
-          return [];
-        } catch {
-          return [];
-        }
-      })();
-
-      const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
-      const isOpen = schedule ? schedule.isOpen : true;
-      if (!isOpen) return true;
-
-      const openTime = schedule?.openTime || "08:00";
-      const closeTime = schedule?.closeTime || "23:00";
-
-      const timeToMinutes = (t: string) => {
-        const [h, m] = t.split(":").map(Number);
-        return h * 60 + m;
-      };
-
-      const slotStartMin = timeToMinutes(time);
-      const openMin = timeToMinutes(openTime);
-      const closeMin = timeToMinutes(closeTime);
-      const durationMin = parseInt(durationStr.value, 10);
-      const slotEndMin = slotStartMin + durationMin;
-
-      // Must start on or after opening, and end on or before closing
-      if (slotStartMin < openMin || slotEndMin > closeMin) {
-        return true;
-      }
-
-      // 3. Check overlaps with occupied bookings
-      const start = new Date(`${dateStr.value}T${time}:00`).getTime();
-      const end = start + durationMin * 60000;
-
-      return occupiedSlots.value.some((slot) => {
-        const slotStart = new Date(slot.startTime).getTime();
-        const slotEnd = new Date(slot.endTime).getTime();
-        return start < slotEnd && end > slotStart;
-      });
-    };
-
     // Auto-reset the selected time if it becomes disabled (e.g. by changing date or duration)
     useTask$((ctx) => {
       const date = ctx.track(() => dateStr.value);
@@ -336,13 +346,33 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       const duration = ctx.track(() => durationStr.value);
       const occupied = ctx.track(() => occupiedSlots.value);
 
-      if (time && isSlotDisabled(time)) {
+      if (!time || !date) return;
+
+      if (
+        isSlotDisabledHelper(
+          time,
+          date,
+          duration,
+          occupied,
+          settings,
+        )
+      ) {
         timeStr.value = "";
       }
     });
 
     const isStep2Enabled = useComputed$(() => {
-      return !!dateStr.value && !!timeStr.value && !isSlotDisabled(timeStr.value);
+      return (
+        !!dateStr.value &&
+        !!timeStr.value &&
+        !isSlotDisabledHelper(
+          timeStr.value,
+          dateStr.value,
+          durationStr.value,
+          occupiedSlots.value,
+          settings,
+        )
+      );
     });
 
     const isStep3Enabled = useComputed$(() => {
@@ -413,10 +443,17 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                 (t) =>
                   t >= period.from &&
                   t <= period.to &&
-                  isWithinOperatingHours(t),
+                  isWithinOperatingHoursHelper(t, dateStr.value, settings),
               );
               const availableInPeriod = slotsInPeriod.filter(
-                (t) => !isSlotDisabled(t),
+                (t) =>
+                  !isSlotDisabledHelper(
+                    t,
+                    dateStr.value,
+                    durationStr.value,
+                    occupiedSlots.value,
+                    settings,
+                  ),
               );
               if (slotsInPeriod.length === 0) return null;
               return (
@@ -435,7 +472,13 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                   <div class="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap sm:gap-1.5">
                     {slotsInPeriod.map((time) => {
                       const disabled =
-                        isSlotDisabled(time) || isCheckingAvailability.value;
+                        isSlotDisabledHelper(
+                          time,
+                          dateStr.value,
+                          durationStr.value,
+                          occupiedSlots.value,
+                          settings,
+                        ) || isCheckingAvailability.value;
                       const selected = timeStr.value === time;
                       return (
                         <button
@@ -770,16 +813,16 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
 
                     {((userAction.value as any)?.message ||
                       (guestAction.value as any)?.message) && (
-                      <Alert.Root
-                        look="alert"
-                        class="rounded-xl border border-red-500/20 bg-red-500/10 text-red-400"
-                      >
-                        <Alert.Description>
-                          {(userAction.value as any)?.message ||
-                            (guestAction.value as any)?.message}
-                        </Alert.Description>
-                      </Alert.Root>
-                    )}
+                        <Alert.Root
+                          look="alert"
+                          class="rounded-xl border border-red-500/20 bg-red-500/10 text-red-400"
+                        >
+                          <Alert.Description>
+                            {(userAction.value as any)?.message ||
+                              (guestAction.value as any)?.message}
+                          </Alert.Description>
+                        </Alert.Root>
+                      )}
 
                     {/* STEP 1: DATE AND TIME */}
                     <div
@@ -1188,10 +1231,10 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                           )}
                           {((settings?.extraServices as any[]) || []).length ===
                             0 && (
-                            <div class="col-span-full rounded-xl border border-dashed border-white/10 py-4 text-center text-sm text-slate-500">
-                              No hay servicios adicionales configurados.
-                            </div>
-                          )}
+                              <div class="col-span-full rounded-xl border border-dashed border-white/10 py-4 text-center text-sm text-slate-500">
+                                No hay servicios adicionales configurados.
+                              </div>
+                            )}
                         </div>
                       </div>
 
@@ -1238,47 +1281,47 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                             {(settings?.paymentMethods || []).filter(
                               (pm: any) => pm.isActive,
                             ).length === 0 && (
-                              <>
-                                <label
-                                  class={[
-                                    "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
-                                    paymentMethod.value === "CASH"
-                                      ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
-                                      : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
-                                  ]}
-                                >
-                                  <input
-                                    type="radio"
-                                    name="paymentMethod"
-                                    value="CASH"
-                                    checked={paymentMethod.value === "CASH"}
-                                    onInput$={() => (paymentMethod.value = "CASH")}
-                                    class="hidden"
-                                  />
-                                  <span class="text-lg mb-1">💵</span>
-                                  <span class="text-xs font-black tracking-wider uppercase">Efectivo</span>
-                                </label>
-                                <label
-                                  class={[
-                                    "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
-                                    paymentMethod.value === "TRANSFER"
-                                      ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
-                                      : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
-                                  ]}
-                                >
-                                  <input
-                                    type="radio"
-                                    name="paymentMethod"
-                                    value="TRANSFER"
-                                    checked={paymentMethod.value === "TRANSFER"}
-                                    onInput$={() => (paymentMethod.value = "TRANSFER")}
-                                    class="hidden"
-                                  />
-                                  <span class="text-lg mb-1">🏦</span>
-                                  <span class="text-xs font-black tracking-wider uppercase">Transferencia</span>
-                                </label>
-                              </>
-                            )}
+                                <>
+                                  <label
+                                    class={[
+                                      "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
+                                      paymentMethod.value === "CASH"
+                                        ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
+                                        : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
+                                    ]}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="paymentMethod"
+                                      value="CASH"
+                                      checked={paymentMethod.value === "CASH"}
+                                      onInput$={() => (paymentMethod.value = "CASH")}
+                                      class="hidden"
+                                    />
+                                    <span class="text-lg mb-1">💵</span>
+                                    <span class="text-xs font-black tracking-wider uppercase">Efectivo</span>
+                                  </label>
+                                  <label
+                                    class={[
+                                      "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
+                                      paymentMethod.value === "TRANSFER"
+                                        ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
+                                        : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
+                                    ]}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="paymentMethod"
+                                      value="TRANSFER"
+                                      checked={paymentMethod.value === "TRANSFER"}
+                                      onInput$={() => (paymentMethod.value = "TRANSFER")}
+                                      class="hidden"
+                                    />
+                                    <span class="text-lg mb-1">🏦</span>
+                                    <span class="text-xs font-black tracking-wider uppercase">Transferencia</span>
+                                  </label>
+                                </>
+                              )}
                           </div>
                         </div>
 
@@ -1534,7 +1577,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                               ? "bg-[#25D366] text-white shadow-[#25D366]/20 hover:bg-[#1ea952] active:scale-[0.98]"
                               : "bg-emerald-500 text-white shadow-emerald-500/25 hover:bg-emerald-600 active:scale-[0.98]",
                             (userAction.isRunning || guestAction.isRunning) &&
-                              "cursor-wait opacity-70",
+                            "cursor-wait opacity-70",
                           ]}
                         >
                           {userAction.isRunning || guestAction.isRunning ? (
@@ -1670,12 +1713,12 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                         >
                           {dateStr.value
                             ? new Date(
-                                dateStr.value + "T12:00:00",
-                              ).toLocaleDateString("es-AR", {
-                                weekday: "short",
-                                day: "numeric",
-                                month: "short",
-                              })
+                              dateStr.value + "T12:00:00",
+                            ).toLocaleDateString("es-AR", {
+                              weekday: "short",
+                              day: "numeric",
+                              month: "short",
+                            })
                             : "—"}
                         </span>
                       </div>
@@ -1862,10 +1905,10 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                   <span class="text-[10px] font-black tracking-wide text-emerald-400 uppercase leading-none mb-1">
                     {dateStr.value
                       ? new Date(dateStr.value + "T12:00:00").toLocaleDateString("es-AR", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                        })
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })
                       : ""} · {timeStr.value} hs
                   </span>
                 ) : (
