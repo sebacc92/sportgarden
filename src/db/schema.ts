@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, primaryKey } from "drizzle-orm/sqlite-core";
 
 // --- Users ---
 export const users = sqliteTable("users", {
@@ -17,11 +17,58 @@ export const users = sqliteTable("users", {
     .notNull()
     .default("INDIVIDUAL"),
   organizationName: text("organization_name"),
+  emailVerified: integer("email_verified", { mode: "timestamp" }),
+  image: text("image"),
   lastLoginAt: integer("last_login_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(strftime('%s', 'now'))`),
 });
+
+// --- Auth.js Tables ---
+export const accounts = sqliteTable(
+  "accounts",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("providerAccountId").notNull(),
+    refresh_token: text("refresh_token"),
+    access_token: text("access_token"),
+    expires_at: integer("expires_at"),
+    token_type: text("token_type"),
+    scope: text("scope"),
+    id_token: text("id_token"),
+    session_state: text("session_state"),
+  },
+  (account) => ({
+    compoundKey: primaryKey({
+      columns: [account.provider, account.providerAccountId],
+    }),
+  })
+);
+
+export const sessions = sqliteTable("sessions", {
+  sessionToken: text("sessionToken").primaryKey(),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expires: integer("expires", { mode: "timestamp" }).notNull(),
+});
+
+export const verificationTokens = sqliteTable(
+  "verification_tokens",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: integer("expires", { mode: "timestamp" }).notNull(),
+  },
+  (vt) => ({
+    compoundKey: primaryKey({ columns: [vt.identifier, vt.token] }),
+  })
+);
 
 // --- Pitches (Canchas) ---
 export const pitches = sqliteTable("pitches", {
@@ -352,6 +399,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   cashSessionsOpened: many(cashSessions, { relationName: "cashSessionsOpenedBy" }),
   cashSessionsClosed: many(cashSessions, { relationName: "cashSessionsClosedBy" }),
   pitchSubscriptions: many(pitchSubscriptions),
+  accounts: many(accounts),
+  sessions: many(sessions),
 }));
 
 export const pitchesRelations = relations(pitches, ({ many }) => ({
