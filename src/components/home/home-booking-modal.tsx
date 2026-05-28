@@ -22,6 +22,7 @@ export type SiteSettingsShape = {
   bankAlias?: string | null;
   whatsappNumber?: string | null;
   holidays?: { date: string; name: string }[];
+  operatingHours?: { day: number; isOpen: boolean; openTime: string; closeTime: string }[];
 };
 export type HomeBookingModalProps = {
   isOpen: Signal<boolean>;
@@ -218,9 +219,51 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       }
     });
 
+    const isWithinOperatingHours = (time: string) => {
+      if (!dateStr.value) return false;
+
+      const isHoliday = (settings.holidays || []).some((h: any) => h.date === dateStr.value);
+      const [year, month, day] = dateStr.value.split("-").map(Number);
+      const localDate = new Date(year, month - 1, day);
+      const dayOfWeek = isHoliday ? 7 : localDate.getDay();
+
+      const operatingHours = (() => {
+        try {
+          if (typeof settings?.operatingHours === "string") {
+            return JSON.parse(settings.operatingHours);
+          }
+          if (Array.isArray(settings?.operatingHours)) {
+            return settings.operatingHours;
+          }
+          return [];
+        } catch {
+          return [];
+        }
+      })();
+
+      const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+      const isOpen = schedule ? schedule.isOpen : true;
+      if (!isOpen) return false;
+
+      const openTime = schedule?.openTime || "08:00";
+      const closeTime = schedule?.closeTime || "23:00";
+
+      const timeToMinutes = (t: string) => {
+        const [h, m] = t.split(":").map(Number);
+        return h * 60 + m;
+      };
+
+      const slotStartMin = timeToMinutes(time);
+      const openMin = timeToMinutes(openTime);
+      const closeMin = timeToMinutes(closeTime);
+
+      return slotStartMin >= openMin && slotStartMin < closeMin;
+    };
+
     const isSlotDisabled = (time: string) => {
       if (!dateStr.value) return true;
 
+      // 1. Check if the slot is in the past (for today)
       const today = new Date();
       const isToday = dateStr.value === today.toISOString().split("T")[0];
       if (isToday) {
@@ -232,9 +275,52 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
         }
       }
 
+      // 2. Check operating hours and duration boundaries
+      const isHoliday = (settings.holidays || []).some((h: any) => h.date === dateStr.value);
+      const [year, month, day] = dateStr.value.split("-").map(Number);
+      const localDate = new Date(year, month - 1, day);
+      const dayOfWeek = isHoliday ? 7 : localDate.getDay();
+
+      const operatingHours = (() => {
+        try {
+          if (typeof settings?.operatingHours === "string") {
+            return JSON.parse(settings.operatingHours);
+          }
+          if (Array.isArray(settings?.operatingHours)) {
+            return settings.operatingHours;
+          }
+          return [];
+        } catch {
+          return [];
+        }
+      })();
+
+      const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+      const isOpen = schedule ? schedule.isOpen : true;
+      if (!isOpen) return true;
+
+      const openTime = schedule?.openTime || "08:00";
+      const closeTime = schedule?.closeTime || "23:00";
+
+      const timeToMinutes = (t: string) => {
+        const [h, m] = t.split(":").map(Number);
+        return h * 60 + m;
+      };
+
+      const slotStartMin = timeToMinutes(time);
+      const openMin = timeToMinutes(openTime);
+      const closeMin = timeToMinutes(closeTime);
+      const durationMin = parseInt(durationStr.value, 10);
+      const slotEndMin = slotStartMin + durationMin;
+
+      // Must start on or after opening, and end on or before closing
+      if (slotStartMin < openMin || slotEndMin > closeMin) {
+        return true;
+      }
+
+      // 3. Check overlaps with occupied bookings
       const start = new Date(`${dateStr.value}T${time}:00`).getTime();
-      const duration = parseInt(durationStr.value, 10);
-      const end = start + duration * 60000;
+      const end = start + durationMin * 60000;
 
       return occupiedSlots.value.some((slot) => {
         const slotStart = new Date(slot.startTime).getTime();
@@ -243,8 +329,20 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       });
     };
 
+    // Auto-reset the selected time if it becomes disabled (e.g. by changing date or duration)
+    useTask$((ctx) => {
+      const date = ctx.track(() => dateStr.value);
+      const time = ctx.track(() => timeStr.value);
+      const duration = ctx.track(() => durationStr.value);
+      const occupied = ctx.track(() => occupiedSlots.value);
+
+      if (time && isSlotDisabled(time)) {
+        timeStr.value = "";
+      }
+    });
+
     const isStep2Enabled = useComputed$(() => {
-      return !!dateStr.value && !!timeStr.value && !isOverlapping.value;
+      return !!dateStr.value && !!timeStr.value && !isSlotDisabled(timeStr.value);
     });
 
     const isStep3Enabled = useComputed$(() => {
@@ -312,7 +410,10 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
           <div class="space-y-4">
             {TIME_PERIODS.map((period) => {
               const slotsInPeriod = TIME_SLOT_OPTIONS.filter(
-                (t) => t >= period.from && t <= period.to,
+                (t) =>
+                  t >= period.from &&
+                  t <= period.to &&
+                  isWithinOperatingHours(t),
               );
               const availableInPeriod = slotsInPeriod.filter(
                 (t) => !isSlotDisabled(t),

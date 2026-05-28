@@ -41,6 +41,53 @@ const parseDateTime = (dateStr: string, timeStr: string) => {
   return new Date(`${dateStr}T${timeStr}:00`);
 };
 
+const isValidOperatingHours = (
+  dateStr: string,
+  timeStr: string,
+  durationMins: number,
+  settings: any,
+) => {
+  if (!settings) return true;
+
+  const isHoliday = (settings.holidays || []).some((h: any) => h.date === dateStr);
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const localDate = new Date(year, month - 1, day);
+  const dayOfWeek = isHoliday ? 7 : localDate.getDay();
+
+  const operatingHours = (() => {
+    try {
+      if (typeof settings.operatingHours === "string") {
+        return JSON.parse(settings.operatingHours);
+      }
+      if (Array.isArray(settings.operatingHours)) {
+        return settings.operatingHours;
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  })();
+
+  const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+  const isOpen = schedule ? schedule.isOpen : true;
+  if (!isOpen) return false;
+
+  const openTime = schedule?.openTime || "08:00";
+  const closeTime = schedule?.closeTime || "23:00";
+
+  const timeToMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+
+  const slotStartMin = timeToMinutes(timeStr);
+  const openMin = timeToMinutes(openTime);
+  const closeMin = timeToMinutes(closeTime);
+  const slotEndMin = slotStartMin + durationMins;
+
+  return slotStartMin >= openMin && slotEndMin <= closeMin;
+};
+
 import { calculateProportionalPrice } from "~/utils/pricing";
 
 // Action for Guest Users
@@ -79,6 +126,14 @@ export const useGuestBookingAction = routeAction$(
     }
 
     const settings = await db.query.siteSettings.findFirst();
+
+    // Verify operating hours
+    if (!isValidOperatingHours(data.date, data.time, data.duration, settings)) {
+      return requestEvent.fail(400, {
+        message: "El club está cerrado en el horario seleccionado (o la duración excede la hora de cierre).",
+      });
+    }
+
     const holidays =
       (settings?.holidays as any[])?.map((h: any) => h.date) || [];
 
@@ -180,6 +235,14 @@ export const useUserBookingAction = routeAction$(
     }
 
     const settings = await db.query.siteSettings.findFirst();
+
+    // Verify operating hours
+    if (!isValidOperatingHours(data.date, data.time, data.duration, settings)) {
+      return requestEvent.fail(400, {
+        message: "El club está cerrado en el horario seleccionado (o la duración excede la hora de cierre).",
+      });
+    }
+
     const holidays =
       (settings?.holidays as any[])?.map((h: any) => h.date) || [];
 
