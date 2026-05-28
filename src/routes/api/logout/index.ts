@@ -1,7 +1,7 @@
-import { routeAction$ } from "@builder.io/qwik-city";
+import type { RequestHandler } from "@builder.io/qwik-city";
 
-export const useLogoutAction = routeAction$(async (_, requestEvent) => {
-  requestEvent.cookie.delete("session", { path: "/" });
+export const onPost: RequestHandler = async (event) => {
+  event.cookie.delete("session", { path: "/" });
 
   // Delete all standard Auth.js cookies (both HTTP development and HTTPS production)
   const authjsCookies = [
@@ -15,8 +15,12 @@ export const useLogoutAction = routeAction$(async (_, requestEvent) => {
     "__Secure-authjs.state",
   ];
   for (const name of authjsCookies) {
-    requestEvent.cookie.delete(name, { path: "/" });
+    event.cookie.delete(name, { path: "/" });
   }
 
-  throw requestEvent.redirect(302, "/");
-});
+  throw event.redirect(302, "/");
+};
+
+export const onGet: RequestHandler = async (event) => {
+  return onPost(event);
+};

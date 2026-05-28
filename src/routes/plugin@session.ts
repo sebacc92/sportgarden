@@ -75,6 +75,14 @@ export const onRequest: RequestHandler = async (event) => {
   // Set the user in the shared map
   if (loggedInUser) {
     event.sharedMap.set("user", loggedInUser);
+
+    // Redirect logged-in users away from login and register pages to the home page
+    if (
+      url.pathname.startsWith("/auth/login") ||
+      url.pathname.startsWith("/auth/register")
+    ) {
+      throw event.redirect(302, "/");
+    }
   }
 
   // --- Protección de rutas /admin ---

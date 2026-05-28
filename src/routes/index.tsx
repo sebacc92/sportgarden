@@ -1,5 +1,9 @@
 import { component$, useSignal, $ } from "@builder.io/qwik";
-import type { DocumentHead } from "@builder.io/qwik-city";
+import { routeLoader$, routeAction$, zod$, z, type DocumentHead } from "@builder.io/qwik-city";
+import { getDB } from "~/db";
+import { products, orders } from "~/db/schema";
+import { eq, sql } from "drizzle-orm";
+import { StoreSection } from "~/components/home/store-section";
 import {
   useGuestBookingAction,
   useUserBookingAction,
@@ -37,6 +41,72 @@ export {
 };
 export { getDailyBookings } from "~/lib/home-page/loaders";
 
+// --- Store loaders & actions ---
+export const useActiveProducts = routeLoader$(async (requestEvent) => {
+  const db = getDB(requestEvent);
+  return await db.select().from(products).where(eq(products.isActive, true));
+});
+
+export const useCheckoutAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const orderId = `ord_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const items = JSON.parse(data.items) as Array<{ productId: string; name: string; price: number; quantity: number }>;
+
+    if (items.length === 0) {
+      return requestEvent.fail(400, { message: "El carrito está vacío." });
+    }
+
+    try {
+      // Validate stock for all products
+      for (const item of items) {
+        const prod = await db.query.products.findFirst({
+          where: eq(products.id, item.productId),
+        });
+        if (!prod) {
+          return requestEvent.fail(404, { message: `Producto "${item.name}" no encontrado.` });
+        }
+        if (prod.stock < item.quantity) {
+          return requestEvent.fail(400, { message: `Stock insuficiente para "${item.name}". Stock disponible: ${prod.stock}` });
+        }
+      }
+
+      // Deduct stock
+      for (const item of items) {
+        await db
+          .update(products)
+          .set({
+            stock: sql`stock - ${item.quantity}`,
+          })
+          .where(eq(products.id, item.productId));
+      }
+
+      // Save order
+      await db.insert(orders).values({
+        id: orderId,
+        customerName: data.customerName,
+        customerPhone: data.customerPhone,
+        customerEmail: data.customerEmail || null,
+        totalAmount: Number(data.totalAmount),
+        status: "PENDING",
+        items: items,
+      });
+
+      return { success: true, orderId };
+    } catch (err: any) {
+      console.error(err);
+      return requestEvent.fail(500, { message: "Error al registrar el pedido. Intente nuevamente." });
+    }
+  },
+  zod$({
+    customerName: z.string().min(1, "El nombre es obligatorio"),
+    customerPhone: z.string().min(1, "El teléfono es obligatorio"),
+    customerEmail: z.string().optional(),
+    items: z.string(),
+    totalAmount: z.string(),
+  })
+);
+
 export default component$(() => {
   const activePitches = usePitchesLoader();
   const user = useUserLoader();
@@ -45,6 +115,8 @@ export default component$(() => {
   const gallery = useGalleryLoader();
   const guestAction = useGuestBookingAction();
   const userAction = useUserBookingAction();
+  const productsData = useActiveProducts();
+  const checkoutAction = useCheckoutAction();
 
   const isModalOpen = useSignal(false);
   const selectedPitchId = useSignal("");
@@ -65,6 +137,7 @@ export default component$(() => {
         user={user.value}
         showGalleryLink={gallery.value.length > 0}
         showSchoolLink={(aiSettings.value?.schoolCategories || []).length > 0}
+        showStoreLink={aiSettings.value?.storeEnabled !== false && productsData.value.length > 0}
       />
 
       <HeroSlider slides={aiSettings.value?.heroSlides} />
@@ -90,6 +163,10 @@ export default component$(() => {
         categories={aiSettings.value?.schoolCategories || []}
         theme="dark"
       />
+
+      {aiSettings.value?.storeEnabled !== false && productsData.value.length > 0 && (
+        <StoreSection products={productsData.value} checkoutAction={checkoutAction} />
+      )}
 
       <ReelsSection reels={aiSettings.value?.reels || []} />
 

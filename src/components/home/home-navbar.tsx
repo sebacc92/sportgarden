@@ -18,10 +18,11 @@ type HomeNavbarProps = {
   user: HomeNavbarUser;
   showGalleryLink: boolean;
   showSchoolLink: boolean;
+  showStoreLink?: boolean;
 };
 
 export const HomeNavbar = component$<HomeNavbarProps>(
-  ({ user, showGalleryLink, showSchoolLink }) => {
+  ({ user, showGalleryLink, showSchoolLink, showStoreLink }) => {
     const isMobileMenuOpen = useSignal(false);
 
     useStylesScoped$(`
@@ -85,6 +86,14 @@ export const HomeNavbar = component$<HomeNavbarProps>(
                 class="transition-colors hover:text-emerald-400"
               >
                 Galería
+              </a>
+            )}
+            {showStoreLink && (
+              <a
+                href="#tienda"
+                class="transition-colors hover:text-emerald-400"
+              >
+                Tienda
               </a>
             )}
             <a
@@ -165,7 +174,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
                     </svg>
                     Mis Reservas
                   </Link>
-                  <form method="POST" action="/api/auth/logout">
+                  <form method="POST" action="/api/logout">
                     <button
                       type="submit"
                       class="flex w-full items-center gap-3 border-t border-white/5 px-4 py-3 text-sm text-red-400 transition-colors hover:bg-red-500/5 hover:text-red-300"
@@ -293,6 +302,17 @@ export const HomeNavbar = component$<HomeNavbarProps>(
                   Galería
                 </a>
               )}
+              {showStoreLink && (
+                <a
+                  href="#tienda"
+                  onClick$={() => {
+                    isMobileMenuOpen.value = false;
+                  }}
+                  class="rounded-xl px-4 py-3 text-lg font-bold tracking-wider text-slate-200 transition-colors hover:bg-white/5 hover:text-emerald-400 border-b border-white/5"
+                >
+                  Tienda
+                </a>
+              )}
               <a
                 href="#contacto"
                 onClick$={() => {
@@ -361,7 +381,7 @@ export const HomeNavbar = component$<HomeNavbarProps>(
                   >
                     Mis Reservas
                   </Link>
-                  <form method="POST" action="/api/auth/logout" class="mx-auto w-full max-w-xs">
+                  <form method="POST" action="/api/logout" class="mx-auto w-full max-w-xs">
                     <button
                       type="submit"
                       onClick$={() => {
@@ -376,9 +396,6 @@ export const HomeNavbar = component$<HomeNavbarProps>(
               ) : (
                 <Link
                   href="/auth/login"
-                  onClick$={() => {
-                    isMobileMenuOpen.value = false;
-                  }}
                   class="mx-auto flex w-full max-w-xs items-center justify-center rounded-xl border border-white/20 bg-white/5 px-6 py-3 text-base font-bold text-white transition-all hover:bg-white/10"
                 >
                   Iniciar Sesión

@@ -9,10 +9,11 @@ export const { onRequest, useSession, useSignIn, useSignOut } = QwikAuth$(
   (event) => {
     const db = getDB(event);
     return {
+      trustHost: true,
       providers: [
         Google({
-          clientId: event.env.get("AUTH_GOOGLE_ID"),
-          clientSecret: event.env.get("AUTH_GOOGLE_SECRET"),
+          clientId: event.env.get("AUTH_GOOGLE_ID") || "dummy_google_id",
+          clientSecret: event.env.get("AUTH_GOOGLE_SECRET") || "dummy_google_secret",
         }),
       ],
       adapter: DrizzleAdapter(db, {

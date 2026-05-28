@@ -171,6 +171,7 @@ export const instagramPosts = sqliteTable("instagram_posts", {
 export const siteSettings = sqliteTable("site_settings", {
   id: integer("id").primaryKey(), // We only use id = 1
   aiEnabled: integer("ai_enabled", { mode: "boolean" }).notNull().default(true),
+  storeEnabled: integer("store_enabled", { mode: "boolean" }).notNull().default(true),
   aiTone: text("ai_tone"),
   aiInstructions: text("ai_instructions"),
   aiKnowledge: text("ai_knowledge"),
@@ -574,6 +575,40 @@ export const mercadoPagoCredentials = sqliteTable("mercado_pago_credentials", {
     .notNull()
     .default(sql`(strftime('%s', 'now'))`),
   updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+// --- Store Products & Orders (E-commerce shop) ---
+export const products = sqliteTable("products", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  price: real("price").notNull(),
+  stock: integer("stock").notNull().default(0),
+  imageUrl: text("image_url"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(strftime('%s', 'now'))`),
+});
+
+export const orders = sqliteTable("orders", {
+  id: text("id").primaryKey(),
+  customerName: text("customer_name").notNull(),
+  customerPhone: text("customer_phone").notNull(),
+  customerEmail: text("customer_email"),
+  totalAmount: real("total_amount").notNull(),
+  status: text("status", { enum: ["PENDING", "COMPLETED", "CANCELLED"] })
+    .notNull()
+    .default("PENDING"),
+  items: text("items", { mode: "json" }).$type<Array<{
+    productId: string;
+    name: string;
+    price: number;
+    quantity: number;
+  }>>().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(strftime('%s', 'now'))`),
 });

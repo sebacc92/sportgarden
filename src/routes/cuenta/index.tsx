@@ -160,7 +160,7 @@ export default component$(() => {
             >
               Reservar Cancha
             </Link>
-            <form method="POST" action="/api/auth/logout">
+            <form method="POST" action="/api/logout">
               <button
                 type="submit"
                 class="rounded-full border border-white/5 bg-slate-900 px-6 py-3 text-xs font-black tracking-widest text-red-400 uppercase transition-all hover:bg-slate-800"
