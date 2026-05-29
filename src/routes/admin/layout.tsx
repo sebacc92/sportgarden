@@ -5,9 +5,9 @@ import {
   routeLoader$,
   server$,
 } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDB } from "~/db";
-import { siteSettings, users, cashRegisters } from "~/db/schema";
+import { siteSettings, users, cashRegisters, bookings } from "~/db/schema";
 import logo from "../../media/GardenClubFutbol8.png";
 import { LuUserCog, LuUsers } from "@qwikest/icons/lucide";
 
@@ -45,6 +45,22 @@ export const useOpenRegister = routeLoader$(async (requestEvent) => {
     ? { id: openRegister.id, openedAt: openRegister.openedAt.toISOString() }
     : null;
 });
+
+export const usePendingLeadsCount = routeLoader$(async (requestEvent) => {
+  try {
+    const db = getDB(requestEvent);
+    const countResult = await db
+      .select({
+        count: sql<number>`count(*)`
+      })
+      .from(bookings)
+      .where(eq(bookings.status, "PENDING_APPROVAL"));
+    return countResult[0]?.count ?? 0;
+  } catch (error) {
+    console.error("Error fetching pending leads count:", error);
+    return 0;
+  }
+});
 export const updateClubStatus = server$(async function (status: string) {
   const db = getDB(this);
   await db
@@ -60,6 +76,7 @@ export default component$(() => {
   const settings = useSiteSettings();
   const adminUser = useAdminUser();
   const openRegister = useOpenRegister();
+  const pendingLeadsCount = usePendingLeadsCount();
   const userRole = adminUser.value?.role ?? "GUEST";
 
   const navItems = [
@@ -86,6 +103,31 @@ export default component$(() => {
         </svg>
       ),
       roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"],
+    },
+    {
+      name: "Solicitudes",
+      href: "/admin/leads/",
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="shrink-0"
+        >
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+      roles: ["DEV", "OWNER", "MANAGER", "EMPLOYEE"],
+      badgeCount: pendingLeadsCount,
     },
     {
       name: "Perfil del Club",
@@ -553,6 +595,8 @@ export default component$(() => {
               isActive = loc.url.pathname.startsWith(item.href);
             }
 
+            const badgeCountVal = (item as any).badgeCount?.value ?? 0;
+
             return (
               <Link
                 key={item.name}
@@ -566,14 +610,26 @@ export default component$(() => {
                     : "hover:bg-white/5 hover:text-white",
                 ]}
               >
-                {item.icon}
+                <div class="relative flex items-center shrink-0">
+                  {item.icon}
+                  {isCollapsed.value && badgeCountVal > 0 && (
+                    <span class="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[8px] font-black text-white ring-2 ring-slate-950">
+                      {badgeCountVal}
+                    </span>
+                  )}
+                </div>
                 <span
                   class={[
-                    "ml-3 transition-opacity duration-200",
+                    "ml-3 flex-1 flex items-center justify-between transition-opacity duration-200",
                     isCollapsed.value ? "hidden opacity-0" : "opacity-100",
                   ]}
                 >
-                  {item.name}
+                  <span>{item.name}</span>
+                  {!isCollapsed.value && badgeCountVal > 0 && (
+                    <span class="ml-2 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white animate-pulse">
+                      {badgeCountVal}
+                    </span>
+                  )}
                 </span>
               </Link>
             );

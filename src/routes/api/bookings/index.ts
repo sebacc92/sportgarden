@@ -38,7 +38,7 @@ import { isPitchAvailable } from "~/utils/availability";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
-  return new Date(`${dateStr}T${timeStr}:00`);
+  return new Date(`${dateStr}T${timeStr}:00-03:00`);
 };
 
 const isValidOperatingHours = (

@@ -14,7 +14,6 @@ import {
   z,
   useNavigate,
   server$,
-  Form,
 } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import {
@@ -86,8 +85,8 @@ export const useUpdateBookingStatusAction = routeAction$(
           };
         }
         // Assuming date is in YYYY-MM-DD format
-        newStart = new Date(`${data.newDate}T${data.newStartTime}:00`);
-        newEnd = new Date(`${data.newDate}T${data.newEndTime}:00`);
+        newStart = new Date(`${data.newDate}T${data.newStartTime}:00-03:00`);
+        newEnd = new Date(`${data.newDate}T${data.newEndTime}:00-03:00`);
       }
 
       // Check conflict including overlaps
@@ -186,12 +185,12 @@ export const useCreateAdminBookingAction = routeAction$(
     const db = getDB(requestEvent);
 
     // Parse start date
-    const startDate = new Date(`${data.date}T12:00:00`);
+    const startDate = new Date(`${data.date}T12:00:00-03:00`);
 
     // Parse end date if recurring
     let endDate = startDate;
     if (data.isSubscription && data.endDate) {
-      endDate = new Date(`${data.endDate}T12:00:00`);
+      endDate = new Date(`${data.endDate}T12:00:00-03:00`);
 
       const maxDate = new Date(startDate);
       maxDate.setFullYear(maxDate.getFullYear() + 1);
@@ -347,8 +346,8 @@ export const useCreateAdminBookingAction = routeAction$(
 
       for (let i = 0; i < datesToBook.length; i++) {
         const item = datesToBook[i];
-        const startDateTime = new Date(`${item.date}T${item.startTime}:00`);
-        const endDateTime = new Date(`${item.date}T${item.endTime}:00`);
+        const startDateTime = new Date(`${item.date}T${item.startTime}:00-03:00`);
+        const endDateTime = new Date(`${item.date}T${item.endTime}:00-03:00`);
         const bookingId = i === 0 ? firstBookingId : crypto.randomUUID();
 
         // Validate operating hours
@@ -886,8 +885,8 @@ export const getAdminDailyBookings = server$(async function (
 ) {
   const db = getDB(this);
   if (!pitchId || !dateStr) return [];
-  const startOfDay = new Date(`${dateStr}T00:00:00`);
-  const endOfDay = new Date(`${dateStr}T23:59:59`);
+  const startOfDay = new Date(`${dateStr}T00:00:00-03:00`);
+  const endOfDay = new Date(`${dateStr}T23:59:59-03:00`);
   const { inArray, lt, or } = await import("drizzle-orm");
 
   // Get related pitch IDs (bidirectional)
@@ -1197,12 +1196,6 @@ export default component$(() => {
     return days;
   });
 
-  const pendingRequests = useComputed$(() => {
-    return (calendarData.value.bookings || []).filter(
-      (b: any) => b.booking?.status === "PENDING_APPROVAL",
-    );
-  });
-
   return (
     <div class="flex h-full flex-col overflow-hidden bg-slate-50 font-sans text-slate-900">
       <CalendarToolbar
@@ -1213,98 +1206,6 @@ export default component$(() => {
         onViewChange$={handleViewChange}
         onNewBooking$={handleNewBooking}
       />
-
-      {pendingRequests.value.length > 0 && (
-        <div class="no-print animate-fade-in shrink-0 px-6 pt-4">
-          <div class="flex flex-col justify-between gap-4 rounded-2xl border border-amber-500/20 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent p-4 shadow-sm backdrop-blur-md md:flex-row md:items-center">
-            <div class="flex items-start gap-3">
-              <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/15 text-amber-500 shadow-inner">
-                <span class="text-xl">⚡</span>
-              </div>
-              <div>
-                <h4 class="flex items-center gap-2 text-sm font-black tracking-widest text-amber-800 uppercase">
-                  Solicitudes de Invitados (Leads)
-                  <span class="animate-pulse rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-black text-white ring-2 ring-amber-500/20">
-                    {pendingRequests.value.length}
-                  </span>
-                </h4>
-                <p class="mt-0.5 text-xs font-semibold text-slate-500">
-                  Nuevos contactos pendientes de confirmación. Verifica
-                  disponibilidad y cordina seña/pago.
-                </p>
-              </div>
-            </div>
-
-            <div class="flex max-h-[140px] flex-1 flex-wrap justify-end gap-2.5 overflow-y-auto pr-1">
-              {pendingRequests.value.map((req: any) => {
-                const b = req.booking;
-                const g = req.guest;
-                const pitch = calendarData.value.pitches.find(
-                  (p: any) => p.id === b.pitchId,
-                );
-                const startTime = new Date(b.startTime);
-                const timeFormatted = startTime.toLocaleTimeString("es-AR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
-                const dateFormatted = startTime.toLocaleDateString("es-AR", {
-                  day: "numeric",
-                  month: "short",
-                });
-
-                const waMessage = `Hola ${g?.name || "Invitado"}! Te contactamos de ${clubSettings?.clubName || "Garden Club"} por tu solicitud de reserva para la cancha ${pitch?.name || "Cancha"} el día ${dateFormatted} a las ${timeFormatted}.`;
-                const waLink = `https://wa.me/${g?.phone?.replace(/\D/g, "")}?text=${encodeURIComponent(waMessage)}`;
-
-                return (
-                  <div
-                    key={b.id}
-                    class="flex w-full max-w-sm items-center justify-between gap-4 rounded-xl border border-amber-500/20 bg-white/80 p-3 text-xs font-semibold shadow-xs md:w-auto"
-                  >
-                    <div class="min-w-0 flex-1">
-                      <div class="truncate font-black text-slate-800">
-                        {g?.name || "Invitado"}
-                      </div>
-                      <div class="truncate text-[10px] font-medium text-slate-400">
-                        {pitch?.name} • {dateFormatted} {timeFormatted}
-                      </div>
-                    </div>
-
-                    <div class="flex shrink-0 items-center gap-1.5">
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        class="flex items-center justify-center rounded-lg border border-[#25D366]/20 bg-[#25D366]/10 p-2 text-[#1ea952] transition-all hover:bg-[#25D366]/20 active:scale-[0.95]"
-                        title="Contactar por WhatsApp"
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="16"
-                          height="16"
-                          class="h-4.5 w-4.5 fill-[#25D366]"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
-                        </svg>
-                      </a>
-
-                      <Form action={updateStatusAction}>
-                        <input type="hidden" name="bookingId" value={b.id} />
-                        <input type="hidden" name="status" value="CONFIRMED" />
-                        <button
-                          type="submit"
-                          class="rounded-lg bg-amber-500 px-3 py-1.5 text-[10px] font-black tracking-wider text-white uppercase shadow-sm shadow-amber-500/20 transition-all hover:bg-amber-600 active:scale-[0.95]"
-                        >
-                          Aprobar
-                        </button>
-                      </Form>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {calendarData.value.view === "day" ? (
         layoutMode.value === "list" ? (
@@ -1330,7 +1231,7 @@ export default component$(() => {
                 onEmptySlotDragEnd$={(pitchId, time, duration) => {
                   adminFormPitchId.value = pitchId;
                   adminFormDate.value = getBAFormatDate(
-                    new Date(selectedDateStr + "T12:00:00"),
+                    new Date(selectedDateStr + "T12:00:00-03:00"),
                   );
                   adminFormTime.value = time;
                   adminFormDuration.value = String(duration);
