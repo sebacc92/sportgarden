@@ -7,8 +7,9 @@ import {
   zod$,
 } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
-import { pitchSubscriptions, pitches } from "~/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { pitchSubscriptions, pitches, bookings } from "~/db/schema";
+import { eq, desc, and, gte } from "drizzle-orm";
+import { isPitchAvailable } from "~/utils/availability";
 import { Button } from "~/components/ui";
 
 export const useSubscriptionsData = routeLoader$(async (requestEvent) => {
@@ -42,17 +43,76 @@ export const useCreateSubscriptionAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    await db.insert(pitchSubscriptions).values({
-      id: crypto.randomUUID(),
-      pitchId: data.pitchId,
-      userId: data.ownerType === "USER" ? data.ownerId : null,
-      groupId: data.ownerType === "GROUP" ? data.ownerId : null,
-      dayOfWeek: Number(data.dayOfWeek),
-      startTime: data.startTime,
-      endTime: data.endTime,
-      startDate: new Date(data.startDate),
-      pricePerMatch: Number(data.pricePerMatch),
-      isActive: true,
+    const subId = crypto.randomUUID();
+    const startDate = new Date(`${data.startDate}T12:00:00-03:00`);
+    const endDate = new Date(startDate);
+    endDate.setFullYear(endDate.getFullYear() + 1);
+
+    const datesToBook: any[] = [];
+    const current = new Date(startDate);
+    
+    // Find the first date that matches dayOfWeek
+    while (current.getDay() !== Number(data.dayOfWeek)) {
+      current.setDate(current.getDate() + 1);
+    }
+
+    const userId = data.ownerType === "USER" ? data.ownerId : null;
+    const groupId = data.ownerType === "GROUP" ? data.ownerId : null;
+
+    let count = 0;
+    while (current <= endDate && count < 52) {
+      const startDateTime = new Date(`${current.toISOString().split("T")[0]}T${data.startTime}:00-03:00`);
+      const endDateTime = new Date(`${current.toISOString().split("T")[0]}T${data.endTime}:00-03:00`);
+
+      // Check availability
+      const { available } = await isPitchAvailable(db, {
+        pitchId: data.pitchId,
+        startTime: startDateTime,
+        endTime: endDateTime,
+      });
+
+      if (available) {
+        datesToBook.push({
+          id: crypto.randomUUID(),
+          userId,
+          groupId,
+          pitchId: data.pitchId,
+          startTime: startDateTime,
+          endTime: endDateTime,
+          status: "CONFIRMED",
+          bookingType: "FIXED",
+          isSubscription: true,
+          totalPrice: Number(data.pricePerMatch),
+          paidAmount: 0,
+          paymentStatus: "PENDING",
+          paymentMethod: "CASH",
+          notes: `subscription:${subId}`,
+        });
+      }
+      current.setDate(current.getDate() + 7);
+      count++;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.insert(pitchSubscriptions).values({
+        id: subId,
+        pitchId: data.pitchId,
+        userId,
+        groupId,
+        dayOfWeek: Number(data.dayOfWeek),
+        startTime: data.startTime,
+        endTime: data.endTime,
+        startDate: startDate,
+        pricePerMatch: Number(data.pricePerMatch),
+        isActive: true,
+      });
+
+      if (datesToBook.length > 0) {
+        const CHUNK_SIZE = 50;
+        for (let i = 0; i < datesToBook.length; i += CHUNK_SIZE) {
+          await tx.insert(bookings).values(datesToBook.slice(i, i + CHUNK_SIZE));
+        }
+      }
     });
 
     return { success: true };
@@ -78,13 +138,58 @@ export const useToggleSubscriptionAction = routeAction$(
     });
 
     if (sub) {
-      await db
-        .update(pitchSubscriptions)
-        .set({
-          isActive: !sub.isActive,
-          endDate: sub.isActive ? new Date() : null, // Set end date to now if cancelling
-        })
-        .where(eq(pitchSubscriptions.id, sub.id));
+      const newIsActive = !sub.isActive;
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(pitchSubscriptions)
+          .set({
+            isActive: newIsActive,
+            endDate: newIsActive ? null : new Date(),
+          })
+          .where(eq(pitchSubscriptions.id, sub.id));
+
+        const now = new Date();
+
+        if (!newIsActive) {
+          // Cancelling: Set all future un-paid bookings for this sub to CANCELLED
+          await tx
+            .update(bookings)
+            .set({ status: "CANCELLED" })
+            .where(
+              and(
+                eq(bookings.notes, `subscription:${sub.id}`),
+                gte(bookings.startTime, now),
+                eq(bookings.paymentStatus, "PENDING"),
+                eq(bookings.status, "CONFIRMED")
+              )
+            );
+        } else {
+          // Reactivating: Set future CANCELLED bookings back to CONFIRMED if available
+          const futureBookings = await tx.query.bookings.findMany({
+            where: and(
+              eq(bookings.notes, `subscription:${sub.id}`),
+              gte(bookings.startTime, now),
+              eq(bookings.status, "CANCELLED")
+            ),
+          });
+
+          for (const b of futureBookings) {
+            const { available } = await isPitchAvailable(tx, {
+              pitchId: b.pitchId,
+              startTime: b.startTime,
+              endTime: b.endTime,
+              excludeBookingId: b.id,
+            });
+            if (available) {
+              await tx
+                .update(bookings)
+                .set({ status: "CONFIRMED" })
+                .where(eq(bookings.id, b.id));
+            }
+          }
+        }
+      });
     }
 
     return { success: true };
@@ -108,6 +213,18 @@ export default component$(() => {
     "Viernes",
     "Sábado",
   ];
+
+  const timeOptions = Array.from({ length: 48 }, (_, i) => {
+    const h = Math.floor(i / 2);
+    const m = (i % 2) * 30;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  });
+
+  const formatDayOfWeek = (dayIdx: number) => {
+    const day = daysOfWeek[dayIdx];
+    if (day.endsWith("s")) return day;
+    return day + "s";
+  };
 
   return (
     <div class="min-h-full bg-slate-50 p-6 font-sans">
@@ -247,23 +364,39 @@ export default component$(() => {
                   <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
                     Hora Inicio *
                   </label>
-                  <input
-                    type="time"
+                  <select
                     name="startTime"
                     required
                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                  />
+                  >
+                    <option value="" disabled selected>
+                      --:-- hs
+                    </option>
+                    {timeOptions.map((t) => (
+                      <option key={t} value={t}>
+                        {`${t} hs`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
                     Hora Fin *
                   </label>
-                  <input
-                    type="time"
+                  <select
                     name="endTime"
                     required
                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                  />
+                  >
+                    <option value="" disabled selected>
+                      --:-- hs
+                    </option>
+                    {timeOptions.map((t) => (
+                      <option key={t} value={t}>
+                        {`${t} hs`}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -340,7 +473,7 @@ export default component$(() => {
                         </td>
                         <td class="p-4">
                           <div class="font-bold text-emerald-600">
-                            Todos los {daysOfWeek[sub.dayOfWeek]}s
+                            Todos los {formatDayOfWeek(sub.dayOfWeek)}
                           </div>
                           <div class="text-xs font-bold text-slate-500">
                             {sub.startTime} - {sub.endTime}

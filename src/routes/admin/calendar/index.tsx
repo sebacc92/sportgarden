@@ -26,6 +26,7 @@ import {
   pitchOverlaps,
   groups,
   groupTransactions,
+  pitchSubscriptions,
 } from "~/db/schema";
 import { eq, and, gte, lte, lt, inArray, notInArray } from "drizzle-orm";
 import { isPitchAvailable } from "~/utils/availability";
@@ -215,19 +216,18 @@ export const useCreateAdminBookingAction = routeAction$(
       endTime: string;
       price: number;
       pitchId: string;
+      subId?: string;
     }[] = [];
     const current = new Date(startDate);
     const globalPrice = Number(data.price);
+    const singleSubId = crypto.randomUUID();
+    let schedulesWithIds: any[] = [];
 
     if (data.isSubscription && data.subscriptionSchedules) {
-      const schedules = JSON.parse(data.subscriptionSchedules) as {
-        dayOfWeek: number;
-        startTime: string;
-        endTime: string;
-        price: number;
-        pitchId?: string;
-      }[];
-      if (schedules.length === 0) {
+      const parsedSchedules = JSON.parse(data.subscriptionSchedules) as any[];
+      schedulesWithIds = parsedSchedules.map(s => ({...s, subId: crypto.randomUUID()}));
+
+      if (schedulesWithIds.length === 0) {
         return {
           success: false,
           failed: true,
@@ -238,7 +238,7 @@ export const useCreateAdminBookingAction = routeAction$(
 
       while (current <= endDate) {
         const dayOfWeek = current.getDay();
-        const daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
+        const daySchedules = schedulesWithIds.filter((s) => s.dayOfWeek === dayOfWeek);
 
         for (const schedule of daySchedules) {
           datesToBook.push({
@@ -247,6 +247,7 @@ export const useCreateAdminBookingAction = routeAction$(
             endTime: schedule.endTime,
             price: schedule.price,
             pitchId: schedule.pitchId || data.pitchId,
+            subId: schedule.subId,
           });
         }
         current.setDate(current.getDate() + 1);
@@ -259,6 +260,7 @@ export const useCreateAdminBookingAction = routeAction$(
           endTime: data.endTime,
           price: globalPrice,
           pitchId: data.pitchId,
+          subId: data.isSubscription ? singleSubId : undefined,
         });
         if (data.isSubscription) {
           current.setDate(current.getDate() + 7);
@@ -419,7 +421,7 @@ export const useCreateAdminBookingAction = routeAction$(
           isSubscription: data.isSubscription,
           bookingType:
             data.bookingType || (data.isSubscription ? "FIXED" : "EVENTUAL"),
-          notes: data.notes || null,
+          notes: item.subId ? `subscription:${item.subId}` : (data.notes || null),
           extras: data.extras ? JSON.parse(data.extras) : null,
         });
 
@@ -463,6 +465,38 @@ export const useCreateAdminBookingAction = routeAction$(
           await tx
             .insert(bookings)
             .values(bookingsToInsert.slice(i, i + CHUNK_SIZE));
+        }
+      }
+
+      // If it's a subscription, we should insert the pitchSubscriptions records too
+      if (data.isSubscription) {
+        if (schedulesWithIds.length > 0) {
+          const subsToInsert = schedulesWithIds.map(s => ({
+            id: s.subId,
+            pitchId: s.pitchId || data.pitchId,
+            userId: finalUserId,
+            groupId: null, // the modal doesn't support groups right now, only users/guests
+            dayOfWeek: Number(s.dayOfWeek),
+            startTime: s.startTime,
+            endTime: s.endTime,
+            startDate: startDate,
+            pricePerMatch: Number(s.price),
+            isActive: true,
+          }));
+          await tx.insert(pitchSubscriptions).values(subsToInsert);
+        } else {
+          await tx.insert(pitchSubscriptions).values({
+            id: singleSubId,
+            pitchId: data.pitchId,
+            userId: finalUserId,
+            groupId: null,
+            dayOfWeek: startDate.getDay(),
+            startTime: data.startTime,
+            endTime: data.endTime,
+            startDate: startDate,
+            pricePerMatch: globalPrice,
+            isActive: true,
+          });
         }
       }
 
@@ -665,8 +699,8 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
   // Create selectedDate in BA timezone (UTC-3)
   const selectedDate = new Date(`${dateStr}T12:00:00-03:00`);
 
-  let startDate = new Date(selectedDate);
-  let endDate = new Date(selectedDate);
+  let startDate: Date;
+  let endDate: Date;
 
   if (viewStr === "week") {
     startDate = getStartOfWeek(selectedDate);
