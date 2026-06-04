@@ -176,6 +176,8 @@ export const useGuestBookingAction = routeAction$(
     return {
       success: true,
       bookingId,
+      amountToCharge: data.paymentMethod === "PAYWAY" ? totalPrice : 0,
+      paymentMethod: data.paymentMethod,
       message:
         "¡Reserva recibida! Un agente se pondrá en contacto contigo pronto por WhatsApp",
     };

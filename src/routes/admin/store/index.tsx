@@ -25,50 +25,8 @@ export const useStoreData = routeLoader$(async (requestEvent) => {
   }
 
   // Load products & orders sorted by latest
-  let allProducts = await db.select().from(products).orderBy(desc(products.createdAt));
-  
-  // Auto-seed demo products if empty
-  if (allProducts.length === 0) {
-    await db.insert(products).values([
-      {
-        id: "prod_demo_1",
-        name: "Camiseta Oficial Titular",
-        description: "Edición exclusiva Sport Garden. Calidad premium dry-fit, disponible en talles S, M, L y XL.",
-        price: 12500,
-        stock: 15,
-        imageUrl: "https://images.unsplash.com/photo-1577223625856-7afda1116f6b?q=80&w=600&auto=format&fit=crop",
-        isActive: true,
-      },
-      {
-        id: "prod_demo_2",
-        name: "Pelota de Competición",
-        description: "Costuras termo-selladas y control de rebote profesional para partidos oficiales de F5 y F6.",
-        price: 8500,
-        stock: 8,
-        imageUrl: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=600&auto=format&fit=crop",
-        isActive: true,
-      },
-      {
-        id: "prod_demo_3",
-        name: "Bebida Isotónica SG",
-        description: "Hidratación máxima de 500ml para rendir al máximo en la cancha. Sabores variados.",
-        price: 1800,
-        stock: 50,
-        imageUrl: "https://images.unsplash.com/photo-1622483767028-3f66f32aef97?q=80&w=600&auto=format&fit=crop",
-        isActive: true,
-      },
-      {
-        id: "prod_demo_4",
-        name: "Medias de Fútbol Pro",
-        description: "Soporte elástico y compresión ergonómica reforzada para máxima comodidad y sujeción.",
-        price: 3200,
-        stock: 25,
-        imageUrl: "https://images.unsplash.com/photo-1582966772680-860e372bb558?q=80&w=600&auto=format&fit=crop",
-        isActive: true,
-      }
-    ]);
-    allProducts = await db.select().from(products).orderBy(desc(products.createdAt));
-  }
+  const allProducts = await db.select().from(products).orderBy(desc(products.createdAt));
+
 
   const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
   
@@ -445,19 +403,21 @@ export default component$(() => {
                       </svg>
                     </button>
 
-                    <Form action={deleteAction}>
-                      <input type="hidden" name="id" value={product.id} />
-                      <button
-                        type="submit"
-                        class="rounded-xl border border-red-500/10 bg-red-500/5 p-2.5 text-red-400 transition-all hover:bg-red-500/10"
-                        title="Eliminar"
-                        stoppropagation:click
-                      >
-                        <svg class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </Form>
+                    <button
+                      type="button"
+                      onClick$={async () => {
+                        if (window.confirm("¿Estás seguro de que deseas eliminar este producto?")) {
+                          await deleteAction.submit({ id: product.id });
+                        }
+                      }}
+                      class="rounded-xl border border-red-500/10 bg-red-500/5 p-2.5 text-red-400 transition-all hover:bg-red-500/10"
+                      title="Eliminar"
+                      stoppropagation:click
+                    >
+                      <svg class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>

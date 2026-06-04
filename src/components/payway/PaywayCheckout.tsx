@@ -17,6 +17,7 @@ declare global {
 export interface PaywayCheckoutProps {
   publicApiKey: string;
   amount: number;
+  environment?: "SANDBOX" | "PRODUCTION";
   onSuccess$: PropFunction<(token: string, paymentMethodId: number) => void>;
   onError$: PropFunction<(message: string) => void>;
 }
@@ -64,35 +65,12 @@ export default component$<PaywayCheckoutProps>((props) => {
     }
   });
 
-  // Dynamically load the Decidir/Payway SDK script only when component mounts
-  useVisibleTask$(({ cleanup }) => {
-    const scriptId = "payway-decidir-sdk";
-    if (document.getElementById(scriptId)) {
+  // Minimal check: if the SDK was already loaded from a previous render cycle,
+  // mark it as ready immediately so we don't wait for the declarative <script> onLoad$.
+  useVisibleTask$(() => {
+    if (window.Decidir || window.decidir) {
       sdkLoaded.value = true;
-      return;
     }
-
-    const script = document.createElement("script");
-    script.id = scriptId;
-    script.src = "https://api-sandbox.payway.com.ar/djs/v2/decidir.js";
-    script.async = true;
-    script.onload = () => {
-      sdkLoaded.value = true;
-      console.log("[Payway SDK]: Decidir.js dynamically loaded successfully.");
-    };
-    script.onerror = () => {
-      console.error("[Payway SDK]: Failed to load Decidir.js library.");
-      errorMessage.value = "No se pudo cargar la librería de pagos Payway. Reintente por favor.";
-    };
-    document.body.appendChild(script);
-
-    cleanup(() => {
-      const existingScript = document.getElementById(scriptId);
-      if (existingScript) {
-        existingScript.remove();
-      }
-      sdkLoaded.value = false;
-    });
   });
 
   // Handle Form Submission & Tokenization
@@ -118,7 +96,10 @@ export default component$<PaywayCheckoutProps>((props) => {
       let decidirInstance = window.decidir;
       if (!decidirInstance && window.Decidir) {
         // Fallback constructor instantiation if window.decidir is not pre-populated
-        decidirInstance = new window.Decidir("https://api-sandbox.payway.com.ar/api/v2");
+        const endpoint = props.environment === "PRODUCTION"
+          ? "https://live.decidir.com/api/v2"
+          : "https://sandbox.decidir.com/api/v2";
+        decidirInstance = new window.Decidir(endpoint);
       }
 
       if (!decidirInstance) {
@@ -164,6 +145,25 @@ export default component$<PaywayCheckoutProps>((props) => {
 
   return (
     <div class="space-y-8 select-none">
+      {/* Declarative SDK injection — avoids Chrome ORB (Opaque Response Blocking)
+          that blocks dynamically created cross-origin scripts from localhost.
+          The SDK JS is identical for sandbox and production; the environment
+          is selected later when instantiating: new window.Decidir(endpoint). */}
+      {!sdkLoaded.value && (
+        <script
+          src="https://live.decidir.com/static/v2/decidir.js"
+          async
+          onLoad$={() => {
+            sdkLoaded.value = true;
+            console.log(`[Payway SDK]: Decidir.js loaded (env: ${props.environment || "SANDBOX"})`);
+          }}
+          onError$={() => {
+            errorMessage.value = "No se pudo cargar la pasarela de pago Payway. Reintente por favor.";
+            console.error("[Payway SDK]: Failed to load Decidir.js via declarative script tag.");
+          }}
+        />
+      )}
+
       {/* 3D-Like Premium Live Credit Card Preview */}
       <div class="perspective-1000 mx-auto w-full max-w-[340px] h-[210px] sm:max-w-[380px]">
         <div
