@@ -7,6 +7,7 @@ import { StoreSection } from "~/components/home/store-section";
 import {
   useGuestBookingAction,
   useUserBookingAction,
+  useConfirmarPagoPayway,
 } from "./api/bookings/index";
 import {
   usePitchesLoader,
@@ -31,7 +32,7 @@ import { HomeBookingModal } from "~/components/home/home-booking-modal";
 import { SchoolSection } from "~/components/home/school-section";
 import { SectionDivider } from "~/components/home/section-divider";
 
-export { useGuestBookingAction, useUserBookingAction };
+export { useGuestBookingAction, useUserBookingAction, useConfirmarPagoPayway };
 export {
   usePitchesLoader,
   useUserLoader,
@@ -115,6 +116,7 @@ export default component$(() => {
   const gallery = useGalleryLoader();
   const guestAction = useGuestBookingAction();
   const userAction = useUserBookingAction();
+  const confirmarPagoPaywayAction = useConfirmarPagoPayway();
   const productsData = useActiveProducts();
   const checkoutAction = useCheckoutAction();
 
@@ -204,6 +206,7 @@ export default component$(() => {
         settings={aiSettings.value ?? {}}
         guestAction={guestAction}
         userAction={userAction}
+        confirmarPagoPaywayAction={confirmarPagoPaywayAction}
       />
 
       <HomeFooter settings={aiSettings.value ?? {}} />

@@ -143,3 +143,35 @@ function mapValidationErrorToSpanish(code: string, originalDescription: string, 
 
   return originalDescription || "Los datos de la tarjeta son incorrectos. Por favor verifíquelos.";
 }
+
+export interface PaywayCredentials {
+  paywaySiteId: string | null;
+  paywayPublicKey: string | null;
+  paywayPrivateKey: string | null;
+  paywayEnvironment: "SANDBOX" | "PRODUCTION";
+}
+
+export async function createPaymentIntent(
+  amount: number,
+  bookingId: string,
+  credentials: PaywayCredentials
+): Promise<{ paymentUrl: string; token: string }> {
+  // Skeleton implementation
+  console.log("createPaymentIntent skeleton called with:", { amount, bookingId, credentials });
+  return {
+    paymentUrl: `https://payway-mock-checkout.com/pay?bookingId=${bookingId}`,
+    token: `mock_token_${Math.random().toString(36).substring(2, 11)}`,
+  };
+}
+
+export async function processPaywayWebhook(
+  payload: any
+): Promise<{ success: boolean; bookingId?: string; status?: string }> {
+  // Skeleton implementation
+  console.log("processPaywayWebhook skeleton called with payload:", payload);
+  return {
+    success: true,
+    bookingId: payload?.bookingId || payload?.site_transaction_id,
+    status: payload?.status || "APPROVED",
+  };
+}

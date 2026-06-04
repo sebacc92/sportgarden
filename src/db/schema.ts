@@ -205,6 +205,15 @@ export const siteSettings = sqliteTable("site_settings", {
   mpPublicKey: text("mp_public_key"),
   mpTokenExpiresAt: integer("mp_token_expires_at", { mode: "timestamp" }),
 
+  // Payway Integration
+  paywaySiteId: text("payway_site_id"),
+  paywayPublicKey: text("payway_public_key"),
+  paywayPrivateKey: text("payway_private_key"),
+  paywayEnvironment: text("payway_environment", { enum: ["SANDBOX", "PRODUCTION"] })
+    .default("SANDBOX"),
+  isPaywayActive: integer("is_payway_active", { mode: "boolean" })
+    .default(false),
+
   updatedAt: integer("updated_at", { mode: "timestamp" }),
 });
 

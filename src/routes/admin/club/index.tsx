@@ -112,6 +112,11 @@ export const useSaveClubSettingsAction = routeAction$(
         operatingHours: JSON.parse(data.operatingHours as string),
         services: JSON.parse(data.services as string),
         holidays: JSON.parse(data.holidays as string),
+        paywaySiteId: data.paywaySiteId || null,
+        paywayPublicKey: data.paywayPublicKey || null,
+        paywayPrivateKey: data.paywayPrivateKey || null,
+        paywayEnvironment: data.paywayEnvironment,
+        isPaywayActive: data.isPaywayActive,
         updatedAt: new Date(),
       })
       .where(eq(siteSettings.id, 1));
@@ -126,6 +131,11 @@ export const useSaveClubSettingsAction = routeAction$(
     operatingHours: z.string(), // JSON array
     services: z.string(), // JSON array
     holidays: z.string(), // JSON array
+    paywaySiteId: z.string().optional().nullable(),
+    paywayPublicKey: z.string().optional().nullable(),
+    paywayPrivateKey: z.string().optional().nullable(),
+    paywayEnvironment: z.enum(["SANDBOX", "PRODUCTION"]).default("SANDBOX"),
+    isPaywayActive: z.preprocess((val) => val === "true" || val === true, z.boolean()).default(false),
   }),
 );
 
@@ -183,6 +193,11 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
   const clubAddress = useSignal(props.settings?.clubAddress || "");
   const clubPhone = useSignal(props.settings?.clubPhone || "");
   const bankAlias = useSignal(props.settings?.bankAlias || "");
+  const paywaySiteId = useSignal(props.settings?.paywaySiteId || "");
+  const paywayPublicKey = useSignal(props.settings?.paywayPublicKey || "");
+  const paywayPrivateKey = useSignal(props.settings?.paywayPrivateKey || "");
+  const paywayEnvironment = useSignal(props.settings?.paywayEnvironment || "SANDBOX");
+  const isPaywayActive = useSignal(props.settings?.isPaywayActive || false);
 
   const store = useStore(
     {
@@ -350,6 +365,7 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
             { id: "services", label: "Servicios", icon: "🌟" },
             { id: "holidays", label: "Feriados", icon: "📅" },
             { id: "mercadopago", label: "Mercado Pago", icon: "💳" },
+            { id: "payway", label: "Payway", icon: "🔌" },
           ].map((tab) => {
             const isActive = activeTab.value === tab.id;
             return (
@@ -715,6 +731,102 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Tab: Payway */}
+        <div class={activeTab.value === "payway" ? "space-y-6 animate-fade-in max-w-xl" : "hidden"}>
+          <div>
+            <h3 class="text-sm font-bold tracking-wider text-emerald-600 uppercase">
+              Credenciales Payway
+            </h3>
+            <p class="mt-1 text-xs font-medium text-slate-500">
+              Configura la pasarela de pagos alternativa Payway (Decidir v2) con credenciales estáticas por comercio.
+            </p>
+          </div>
+
+          <div class="space-y-5 rounded-2xl border border-slate-200/80 bg-slate-50/50 p-6 shadow-sm">
+            {/* Activar pasarela toggle */}
+            <div class="flex items-center justify-between border-b border-slate-200/60 pb-4">
+              <div>
+                <label class="block text-sm font-black text-slate-800">
+                  Activar Payway
+                </label>
+                <p class="text-xs text-slate-500">
+                  Habilita Payway como pasarela de pago activa para reservas.
+                </p>
+              </div>
+              <label class="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  name="isPaywayActive"
+                  value="true"
+                  checked={isPaywayActive.value}
+                  onChange$={(e, el) => {
+                    isPaywayActive.value = el.checked;
+                  }}
+                  class="peer sr-only"
+                />
+                <div class="peer h-6 w-11 rounded-full bg-slate-200 after:absolute after:top-[2px] after:left-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-emerald-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none font-bold"></div>
+              </label>
+            </div>
+
+            {/* Site ID */}
+            <div>
+              <label class="mb-2 block text-sm font-black text-slate-800">
+                Site ID
+              </label>
+              <input
+                type="text"
+                name="paywaySiteId"
+                bind:value={paywaySiteId}
+                class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                placeholder="Ej: 00123456"
+              />
+            </div>
+
+            {/* Public Key */}
+            <div>
+              <label class="mb-2 block text-sm font-black text-slate-800">
+                Public Key
+              </label>
+              <input
+                type="text"
+                name="paywayPublicKey"
+                bind:value={paywayPublicKey}
+                class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                placeholder="Ej: d8a8fbca-..."
+              />
+            </div>
+
+            {/* Private API Key */}
+            <div>
+              <label class="mb-2 block text-sm font-black text-slate-800">
+                Private API Key
+              </label>
+              <input
+                type="password"
+                name="paywayPrivateKey"
+                bind:value={paywayPrivateKey}
+                class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                placeholder="••••••••••••••••••••••••••••••••"
+              />
+            </div>
+
+            {/* Entorno / Environment */}
+            <div>
+              <label class="mb-2 block text-sm font-black text-slate-800">
+                Entorno
+              </label>
+              <select
+                name="paywayEnvironment"
+                bind:value={paywayEnvironment}
+                class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-semibold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              >
+                <option value="SANDBOX">Sandbox (Pruebas)</option>
+                <option value="PRODUCTION">Producción</option>
+              </select>
+            </div>
           </div>
         </div>
 

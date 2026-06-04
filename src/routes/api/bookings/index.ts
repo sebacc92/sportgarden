@@ -36,6 +36,7 @@ import { getDB } from "~/db";
 import { bookings, guestRequests, pitches, mercadoPagoCredentials } from "~/db/schema";
 import { isPitchAvailable } from "~/utils/availability";
 import { MercadoPagoConfig, Preference } from "mercadopago";
+import { processPaywayPayment } from "~/lib/payway";
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
   return new Date(`${dateStr}T${timeStr}:00-03:00`);
@@ -265,18 +266,18 @@ export const useUserBookingAction = routeAction$(
         pitch.depositType === "FIXED"
           ? pitch.depositAmount
           : (pitch.depositAmount / 100) * totalPrice;
-      paymentMethod = "MERCADOPAGO";
+      paymentMethod = data.paymentMethod || "MERCADOPAGO";
       bookingStatus = "PENDING_APPROVAL";
     } else if (data.paymentOption === "TOTAL") {
       amountToCharge = totalPrice;
-      paymentMethod = "MERCADOPAGO";
+      paymentMethod = data.paymentMethod || "MERCADOPAGO";
       bookingStatus = "PENDING_APPROVAL";
     }
 
     const bookingId = crypto.randomUUID();
     let checkoutUrl: string | null = null;
 
-    if (amountToCharge > 0) {
+    if (amountToCharge > 0 && paymentMethod === "MERCADOPAGO") {
       // 1. Obtener las credenciales de la base de datos para el ID "1" si existen
       const [credentials] = await db
         .select()
@@ -347,13 +348,13 @@ export const useUserBookingAction = routeAction$(
       totalPrice,
       paidAmount: 0,
       paymentStatus: "PENDING",
-      paymentMethod: data.paymentMethod || paymentMethod,
+      paymentMethod: paymentMethod,
       extras: data.extras
         ? data.extras.map((e: string) => JSON.parse(e))
         : null,
     });
 
-    return { success: true, bookingId, checkoutUrl };
+    return { success: true, bookingId, checkoutUrl, amountToCharge, paymentMethod };
   },
   zod$({
     pitchId: z.string().min(1),
@@ -363,5 +364,79 @@ export const useUserBookingAction = routeAction$(
     paymentOption: z.enum(["LATER", "SENA", "TOTAL"]),
     paymentMethod: z.string().optional(),
     extras: z.array(z.string()).optional(),
+  }),
+);
+
+export const useConfirmarPagoPayway = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+
+    const booking = await db.query.bookings.findFirst({
+      where: eq(bookings.id, data.bookingId),
+    });
+
+    if (!booking) {
+      return requestEvent.fail(404, {
+        message: "Reserva no encontrada.",
+      });
+    }
+
+    // Generate unique transaction ID using app prefix
+    const siteTransactionId = `sgf_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+
+    const paymentRequest = {
+      site_transaction_id: siteTransactionId,
+      token: data.token,
+      payment_method_id: data.paymentMethodId,
+      amount: data.amount,
+      currency: "ARS" as const,
+      installments: 1,
+      description: `Reserva Cancha - Ref ${data.bookingId}`,
+      establishment_name: "Sport Garden Club",
+    };
+
+    try {
+      const result = await processPaywayPayment(paymentRequest, requestEvent.env);
+
+      if (result.status === "approved") {
+        const newPaidAmount = (booking.paidAmount || 0) + data.amount;
+        const newPaymentStatus = newPaidAmount >= booking.totalPrice ? "PAID" : "PARTIAL";
+
+        await db
+          .update(bookings)
+          .set({
+            status: "CONFIRMED",
+            paidAmount: newPaidAmount,
+            paymentStatus: newPaymentStatus,
+            paymentId: String(result.id),
+            preferenceId: result.site_transaction_id,
+          })
+          .where(eq(bookings.id, data.bookingId));
+
+        return {
+          success: true,
+          paymentId: result.id,
+          site_transaction_id: result.site_transaction_id,
+          amount: result.amount,
+          date: result.date,
+          ticket: result.status_details?.ticket || "N/A",
+        };
+      } else {
+        return requestEvent.fail(400, {
+          message: `El pago no fue aprobado. Estado: ${result.status}`,
+        });
+      }
+    } catch (error: any) {
+      console.error("[Payway Booking Payment Action Error]:", error);
+      return requestEvent.fail(error.status || 500, {
+        message: error.message || "Ocurrió un error inesperado al procesar el pago con la entidad emisora.",
+      });
+    }
+  },
+  zod$({
+    bookingId: z.string().min(1),
+    token: z.string().min(1),
+    paymentMethodId: z.coerce.number(),
+    amount: z.coerce.number().positive(),
   }),
 );

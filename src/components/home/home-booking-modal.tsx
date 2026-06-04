@@ -11,6 +11,7 @@ import type { InferSelectModel } from "drizzle-orm";
 import { pitches } from "~/db/schema";
 import { Button, Modal, Alert } from "~/components/ui";
 import { calculateProportionalPrice } from "~/utils/pricing";
+import PaywayCheckout from "~/components/payway/PaywayCheckout";
 import { getDailyBookings } from "~/lib/home-page/loaders";
 import { TIME_SLOT_OPTIONS } from "~/lib/home-page/constants";
 import type { HomeNavbarUser } from "./home-navbar";
@@ -23,6 +24,8 @@ export type SiteSettingsShape = {
   whatsappNumber?: string | null;
   holidays?: { date: string; name: string }[];
   operatingHours?: { day: number; isOpen: boolean; openTime: string; closeTime: string }[];
+  paywayPublicKey?: string | null;
+  isPaywayActive?: boolean | null;
 };
 export type HomeBookingModalProps = {
   isOpen: Signal<boolean>;
@@ -33,6 +36,7 @@ export type HomeBookingModalProps = {
   settings: SiteSettingsShape;
   guestAction: any;
   userAction: any;
+  confirmarPagoPaywayAction: any;
 };
 
 export const isWithinOperatingHoursHelper = (
@@ -165,6 +169,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     settings,
     guestAction,
     userAction,
+    confirmarPagoPaywayAction,
   }) => {
     const getLocalDateString = (offset = 0) => {
       const d = new Date();
@@ -188,6 +193,12 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     const paymentOption = useSignal("LATER");
 
     const durationStr = useSignal("60");
+
+    // Payway modal flow signals
+    const showPaywayModal = useSignal(false);
+    const paywayBookingId = useSignal<string | null>(null);
+    const paywayAmount = useSignal<number>(0);
+    const paywayPaymentSuccess = useSignal(false);
 
     // Form inputs state for validation to enable steps
     const guestName = useSignal("");
@@ -329,12 +340,18 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       }
     });
 
-    // Redirect to Mercado Pago if the user selected online payment (checkoutUrl is generated)
+    // Redirect to Mercado Pago or show Payway Modal if online payment is chosen
     useTask$((ctx) => {
       const actionResult = ctx.track(() => userAction.value);
-      if (actionResult?.success && actionResult?.checkoutUrl) {
-        if (typeof window !== "undefined") {
-          window.location.href = actionResult.checkoutUrl;
+      if (actionResult?.success) {
+        if (actionResult.checkoutUrl) {
+          if (typeof window !== "undefined") {
+            window.location.href = actionResult.checkoutUrl;
+          }
+        } else if (actionResult.paymentMethod === "PAYWAY" && actionResult.amountToCharge > 0) {
+          paywayBookingId.value = actionResult.bookingId;
+          paywayAmount.value = actionResult.amountToCharge;
+          showPaywayModal.value = true;
         }
       }
     });
@@ -526,7 +543,8 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     );
 
     return (
-      <Modal.Root bind:show={isOpen}>
+      <>
+        <Modal.Root bind:show={isOpen}>
         <Modal.Panel class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/10 bg-[#0b1710] p-4 text-white shadow-2xl sm:p-7">
           <div class="mb-6 flex items-center justify-between border-b border-white/5 pb-4">
             <div>
@@ -561,7 +579,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
           </div>
 
           <div>
-            {guestAction.value?.success || userAction.value?.success ? (
+            {guestAction.value?.success || (userAction.value?.success && (userAction.value.paymentMethod !== "PAYWAY" || userAction.value.amountToCharge === 0 || paywayPaymentSuccess.value)) ? (
               <div class="mx-auto max-w-md py-8">
                 {guestAction.value?.success ? (
                   /* Guest success - amber themed with WhatsApp CTA */
@@ -699,6 +717,37 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                         ¡Te esperamos en el club!
                       </p>
                     </div>
+                    {confirmarPagoPaywayAction.value?.success && (
+                      <div class="rounded-2xl border border-white/5 bg-slate-950/60 p-5 text-left space-y-3 font-mono text-xs text-slate-400 animate-fade-in">
+                        <p class="text-[10px] font-black tracking-widest text-slate-500 uppercase border-b border-white/5 pb-2">
+                          Comprobante de Pago (Payway)
+                        </p>
+                        <div class="flex justify-between">
+                          <span>ID TRANSACCIÓN:</span>
+                          <span class="font-bold text-white">{confirmarPagoPaywayAction.value.paymentId}</span>
+                        </div>
+                        <div class="flex justify-between">
+                          <span>REF INTERNA:</span>
+                          <span class="font-bold text-white">{confirmarPagoPaywayAction.value.site_transaction_id}</span>
+                        </div>
+                        <div class="flex justify-between">
+                          <span>Nº TICKET:</span>
+                          <span class="font-bold text-white">{confirmarPagoPaywayAction.value.ticket}</span>
+                        </div>
+                        <div class="flex justify-between">
+                          <span>FECHA:</span>
+                          <span class="font-bold text-white">
+                            {new Date(confirmarPagoPaywayAction.value.date).toLocaleString("es-AR")}
+                          </span>
+                        </div>
+                        <div class="border-t border-white/5 pt-3 flex justify-between text-sm">
+                          <span class="font-bold text-slate-300">MONTO DEBITADO:</span>
+                          <span class="font-black text-emerald-400">
+                            ${confirmarPagoPaywayAction.value.amount.toLocaleString("es-AR")} ARS
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     <Button
                       onClick$={onClose}
                       look="secondary"
@@ -1246,9 +1295,10 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                             Método de Pago Preferido
                           </label>
                           <div class="grid grid-cols-2 gap-2">
-                            {(settings?.paymentMethods || [])
-                              .filter((pm: any) => pm.isActive)
-                              .map((pm: any) => {
+                            {[
+                              ...(settings?.paymentMethods || []).filter((pm: any) => pm.isActive),
+                              ...(settings?.isPaywayActive ? [{ id: "PAYWAY", name: "Tarjeta (Payway)", isActive: true }] : [])
+                            ].map((pm: any) => {
                                 const isSelected = paymentMethod.value === pm.id;
                                 const icon = pm.id.toLowerCase().includes("cash") || pm.id.toLowerCase().includes("efectivo")
                                   ? "💵"
@@ -1278,9 +1328,9 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                                   </label>
                                 );
                               })}
-                            {(settings?.paymentMethods || []).filter(
+                            {((settings?.paymentMethods || []).filter(
                               (pm: any) => pm.isActive,
-                            ).length === 0 && (
+                            ).length === 0 && !settings?.isPaywayActive) && (
                                 <>
                                   <label
                                     class={[
@@ -1984,6 +2034,105 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
           )}
         </Modal.Panel>
       </Modal.Root>
-    );
-  },
-);
+
+      {showPaywayModal.value && (
+        <Modal.Root bind:show={showPaywayModal}>
+          <Modal.Panel class="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-[#0b1710] p-4 text-white shadow-2xl sm:p-7">
+            <div class="mb-6 flex items-center justify-between border-b border-white/5 pb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <Modal.Title class="text-lg font-black tracking-tight text-white border-0 p-0">
+                    Pago Seguro con Tarjeta
+                  </Modal.Title>
+                  <Modal.Description class="text-xs font-semibold text-slate-400 mt-1">
+                    Procesado de forma cifrada a través de Payway
+                  </Modal.Description>
+                </div>
+              </div>
+              <Modal.Close
+                onClick$={() => {
+                  showPaywayModal.value = false;
+                }}
+                class="rounded-full border border-white/5 bg-slate-900/60 p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2.5"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </Modal.Close>
+            </div>
+
+            {confirmarPagoPaywayAction.value?.message && (
+              <Alert.Root
+                look="alert"
+                class="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400"
+              >
+                <Alert.Description>
+                  {confirmarPagoPaywayAction.value.message}
+                </Alert.Description>
+              </Alert.Root>
+            )}
+
+            <div class="relative">
+              {confirmarPagoPaywayAction.isRunning && (
+                <div class="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-2xl bg-[#0b1710]/95 backdrop-blur-sm transition-all duration-300">
+                  <div class="h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+                  <p class="mt-4 text-sm font-bold text-white">Liquidando Pago...</p>
+                  <p class="mt-1 text-center text-xs text-slate-400 max-w-xs leading-relaxed">
+                    Estamos procesando la autorización de su tarjeta de manera segura. Por favor, no recargue ni cierre esta ventana.
+                  </p>
+                </div>
+              )}
+
+              <PaywayCheckout
+                publicApiKey={settings.paywayPublicKey || "019e6f79-1a83-71d9-98fc-53bb42253"}
+                amount={paywayAmount.value}
+                onSuccess$={$(async (token: string, paymentMethodId: number) => {
+                  const res = await confirmarPagoPaywayAction.submit({
+                    bookingId: paywayBookingId.value!,
+                    token,
+                    paymentMethodId,
+                    amount: paywayAmount.value,
+                  });
+                  if (res.status === 200 && res.value?.success) {
+                    paywayPaymentSuccess.value = true;
+                    showPaywayModal.value = false;
+                  }
+                })}
+                onError$={$(async (msg: string) => {
+                  console.error("Payway tokenization failed:", msg);
+                })}
+              />
+            </div>
+          </Modal.Panel>
+        </Modal.Root>
+      )}
+    </>
+  );
+});
