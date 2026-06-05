@@ -1,40 +1,12 @@
 {
   "version": "7",
-  "dialect": "sqlite",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "6",
-      "when": 1779290716603,
-      "tag": "0000_normal_the_enforcers",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1779832310556,
-      "tag": "0001_new_mac_gargan",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1779911775880,
-      "tag": "0002_blushing_ultimo",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1780498275186,
-      "tag": "0003_nasty_proudstar",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1780498394696,
-      "tag": "0004_mixed_timeslip",
+      "version": "7",
+      "when": 1780650492452,
+      "tag": "0000_busy_vampiro",
       "breakpoints": true
     }
   ]

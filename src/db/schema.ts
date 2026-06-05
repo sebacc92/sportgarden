@@ -1,32 +1,41 @@
-import { sql, relations } from "drizzle-orm";
-import { sqliteTable, text, integer, real, primaryKey } from "drizzle-orm/sqlite-core";
+import { relations } from "drizzle-orm";
+import { pgTable, text, integer, doublePrecision, primaryKey, timestamp, boolean, jsonb, pgEnum } from "drizzle-orm/pg-core";
+
+// --- Enums ---
+export const roleEnum = pgEnum("user_role", ["DEV", "OWNER", "MANAGER", "EMPLOYEE", "REGISTERED", "GUEST"]);
+export const clientTypeEnum = pgEnum("client_type", ["INDIVIDUAL", "GROUP", "SCHOOL"]);
+export const pitchTypeEnum = pgEnum("pitch_type", ["F5", "F6", "F9"]);
+export const depositTypeEnum = pgEnum("deposit_type", ["PERCENTAGE", "FIXED"]);
+export const bookingStatusEnum = pgEnum("booking_status", ["PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "ATTENDED"]);
+export const bookingTypeEnum = pgEnum("booking_type", ["EVENTUAL", "FIXED", "BIRTHDAY", "TOURNAMENT", "SCHOOL"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["PENDING", "PARTIAL", "PAID"]);
+export const paywayEnvironmentEnum = pgEnum("payway_environment", ["SANDBOX", "PRODUCTION"]);
+export const groupTransactionTypeEnum = pgEnum("group_transaction_type", ["CHARGE", "PAYMENT"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["PENDING", "PAID"]);
+export const cashRegisterStatusEnum = pgEnum("cash_register_status", ["OPEN", "CLOSED"]);
+export const cashMovementTypeEnum = pgEnum("cash_movement_type", ["INCOME", "EXPENSE"]);
+export const clubStatusEnum = pgEnum("club_status", ["AUTO", "OPEN", "CLOSED"]);
+export const chatMessageRoleEnum = pgEnum("chat_message_role", ["user", "assistant", "system"]);
+export const orderStatusEnum = pgEnum("order_status", ["PENDING", "COMPLETED", "CANCELLED"]);
 
 // --- Users ---
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey(), // We can use UUIDs or nanoids
+export const users = pgTable("users", {
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
-  email: text("email").unique(), // Can be null if it's just a guest who provided a phone
-  password: text("password"), // Hashed password, null for guests
+  email: text("email").unique(),
+  password: text("password"),
   phone: text("phone"),
-  role: text("role", {
-    enum: ["DEV", "OWNER", "MANAGER", "EMPLOYEE", "REGISTERED", "GUEST"],
-  })
-    .notNull()
-    .default("GUEST"),
-  clientType: text("client_type", { enum: ["INDIVIDUAL", "GROUP", "SCHOOL"] })
-    .notNull()
-    .default("INDIVIDUAL"),
+  role: roleEnum("role").notNull().default("GUEST"),
+  clientType: clientTypeEnum("client_type").notNull().default("INDIVIDUAL"),
   organizationName: text("organization_name"),
-  emailVerified: integer("email_verified", { mode: "timestamp" }),
+  emailVerified: timestamp("email_verified", { mode: "date" }),
   image: text("image"),
-  lastLoginAt: integer("last_login_at", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  lastLoginAt: timestamp("last_login_at", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
 // --- Auth.js Tables ---
-export const accounts = sqliteTable(
+export const accounts = pgTable(
   "accounts",
   {
     userId: text("userId")
@@ -50,20 +59,20 @@ export const accounts = sqliteTable(
   })
 );
 
-export const sessions = sqliteTable("sessions", {
+export const sessions = pgTable("sessions", {
   sessionToken: text("sessionToken").primaryKey(),
   userId: text("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  expires: integer("expires", { mode: "timestamp" }).notNull(),
+  expires: timestamp("expires", { mode: "date" }).notNull(),
 });
 
-export const verificationTokens = sqliteTable(
+export const verificationTokens = pgTable(
   "verification_tokens",
   {
     identifier: text("identifier").notNull(),
     token: text("token").notNull(),
-    expires: integer("expires", { mode: "timestamp" }).notNull(),
+    expires: timestamp("expires", { mode: "date" }).notNull(),
   },
   (vt) => ({
     compoundKey: primaryKey({ columns: [vt.identifier, vt.token] }),
@@ -71,28 +80,25 @@ export const verificationTokens = sqliteTable(
 );
 
 // --- Pitches (Canchas) ---
-export const pitches = sqliteTable("pitches", {
+export const pitches = pgTable("pitches", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  type: text("type", { enum: ["F5", "F6", "F9"] }).notNull(),
-  isCovered: integer("is_covered", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  isLit: integer("is_lit", { mode: "boolean" }).notNull().default(false),
-  pricePerHour: real("price_per_hour").notNull(),
-  peakHourStart: text("peak_hour_start"), // ej: "18:00"
-  peakPricePerHour: real("peak_price_per_hour"),
-  depositType: text("deposit_type", { enum: ["PERCENTAGE", "FIXED"] })
-    .notNull()
-    .default("PERCENTAGE"),
-  depositAmount: real("deposit_amount").notNull().default(0), // % or fixed amount depending on depositType
-  notes: text("notes"), // Free text for admin notes/clarifications
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  type: pitchTypeEnum("type").notNull(),
+  isCovered: boolean("is_covered").notNull().default(false),
+  isLit: boolean("is_lit").notNull().default(false),
+  pricePerHour: doublePrecision("price_per_hour").notNull(),
+  peakHourStart: text("peak_hour_start"),
+  peakPricePerHour: doublePrecision("peak_price_per_hour"),
+  depositType: depositTypeEnum("deposit_type").notNull().default("PERCENTAGE"),
+  depositAmount: doublePrecision("deposit_amount").notNull().default(0),
+  notes: text("notes"),
+  isActive: boolean("is_active").notNull().default(true),
   imageUrl: text("image_url"),
   sport: text("sport").notNull().default("Fútbol"),
   surface: text("surface").notNull().default("Sintético"),
 });
-export const pitchOverlaps = sqliteTable("pitch_overlaps", {
+
+export const pitchOverlaps = pgTable("pitch_overlaps", {
   id: text("id").primaryKey(),
   pitchId: text("pitch_id")
     .notNull()
@@ -103,48 +109,31 @@ export const pitchOverlaps = sqliteTable("pitch_overlaps", {
 });
 
 // --- Bookings (Reservas) ---
-export const bookings = sqliteTable("bookings", {
+export const bookings = pgTable("bookings", {
   id: text("id").primaryKey(),
-  userId: text("user_id").references(() => users.id), // Can be null if guest request is not yet linked to a user
-  groupId: text("group_id"), // Reference to groups.id
-  isSubscription: integer("is_subscription", { mode: "boolean" }).default(
-    false,
-  ),
+  userId: text("user_id").references(() => users.id),
+  groupId: text("group_id"),
+  isSubscription: boolean("is_subscription").default(false),
   pitchId: text("pitch_id")
     .notNull()
     .references(() => pitches.id),
-  startTime: integer("start_time", { mode: "timestamp" }).notNull(),
-  endTime: integer("end_time", { mode: "timestamp" }).notNull(),
-  status: text("status", {
-    enum: ["PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "ATTENDED"],
-  })
-    .notNull()
-    .default("PENDING_APPROVAL"),
-  bookingType: text("booking_type", {
-    enum: ["EVENTUAL", "FIXED", "BIRTHDAY", "TOURNAMENT", "SCHOOL"],
-  })
-    .notNull()
-    .default("EVENTUAL"),
-  totalPrice: real("total_price").notNull(),
-  paidAmount: real("paid_amount").notNull().default(0),
-  paymentStatus: text("payment_status", {
-    enum: ["PENDING", "PARTIAL", "PAID"],
-  })
-    .notNull()
-    .default("PENDING"),
+  startTime: timestamp("start_time", { mode: "date" }).notNull(),
+  endTime: timestamp("end_time", { mode: "date" }).notNull(),
+  status: bookingStatusEnum("status").notNull().default("PENDING_APPROVAL"),
+  bookingType: bookingTypeEnum("booking_type").notNull().default("EVENTUAL"),
+  totalPrice: doublePrecision("total_price").notNull(),
+  paidAmount: doublePrecision("paid_amount").notNull().default(0),
+  paymentStatus: paymentStatusEnum("payment_status").notNull().default("PENDING"),
   preferenceId: text("preference_id"),
   paymentId: text("payment_id"),
   paymentMethod: text("payment_method").notNull().default("CASH"),
   notes: text("notes"),
-  extras: text("extras", { mode: "json" }), // array of extra service names
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  extras: jsonb("extras").$type<string[]>(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
 // --- Guest Requests (Solicitudes de Invitados) ---
-// Temporary contact info for users without an account requesting a booking
-export const guestRequests = sqliteTable("guest_requests", {
+export const guestRequests = pgTable("guest_requests", {
   id: text("id").primaryKey(),
   bookingId: text("booking_id")
     .notNull()
@@ -152,13 +141,11 @@ export const guestRequests = sqliteTable("guest_requests", {
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   email: text("email"),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
 // --- Instagram Posts ---
-export const instagramPosts = sqliteTable("instagram_posts", {
+export const instagramPosts = pgTable("instagram_posts", {
   id: text("id").primaryKey(),
   permalink: text("permalink").notNull(),
   mediaUrl: text("media_url").notNull(),
@@ -168,10 +155,10 @@ export const instagramPosts = sqliteTable("instagram_posts", {
 });
 
 // --- Settings & AI ---
-export const siteSettings = sqliteTable("site_settings", {
-  id: integer("id").primaryKey(), // We only use id = 1
-  aiEnabled: integer("ai_enabled", { mode: "boolean" }).notNull().default(true),
-  storeEnabled: integer("store_enabled", { mode: "boolean" }).notNull().default(true),
+export const siteSettings = pgTable("site_settings", {
+  id: integer("id").primaryKey(),
+  aiEnabled: boolean("ai_enabled").notNull().default(true),
+  storeEnabled: boolean("store_enabled").notNull().default(true),
   aiTone: text("ai_tone"),
   aiInstructions: text("ai_instructions"),
   aiKnowledge: text("ai_knowledge"),
@@ -184,224 +171,194 @@ export const siteSettings = sqliteTable("site_settings", {
   clubName: text("club_name"),
   clubAddress: text("club_address"),
   clubPhone: text("club_phone"),
-  clubStatus: text("club_status").notNull().default("AUTO"), // 'AUTO', 'OPEN', 'CLOSED'
-  operatingHours: text("operating_hours", { mode: "json" }), // array of { day: 0-6, isOpen: boolean, openTime: string, closeTime: string }
-  services: text("services", { mode: "json" }), // array of strings
-  extraServices: text("extra_services", { mode: "json" }), // array of { name: string, price: number, icon: string }
+  clubStatus: clubStatusEnum("club_status").notNull().default("AUTO"),
+  operatingHours: jsonb("operating_hours").$type<Array<{ day: number; isOpen: boolean; openTime: string; closeTime: string }>>(),
+  services: jsonb("services").$type<string[]>(),
+  extraServices: jsonb("extra_services").$type<Array<{ name: string; price: number; icon: string }>>(),
   bankAlias: text("bank_alias"),
-  galleryImages: text("gallery_images", { mode: "json" }), // array of image URLs (max 20)
-  reels: text("reels", { mode: "json" }), // array of { id: string, videoUrl: string, posterUrl: string, caption?: string }
-  schoolCategories: text("school_categories", { mode: "json" }), // array of { id: string, name: string, teacher: string }
-  paymentMethods: text("payment_methods", { mode: "json" }), // array of { id: string, name: string, isActive: boolean }
-  movementCategories: text("movement_categories", { mode: "json" }), // array of { id: string, name: string, type: 'INCOME' | 'EXPENSE', icon: string }
-  holidays: text("holidays", { mode: "json" }), // array of { date: string, name: string }
-  landingTexts: text("landing_texts", { mode: "json" }),
-  heroSlides: text("hero_slides", { mode: "json" }),
-  promoPopup: text("promo_popup", { mode: "json" }),
+  galleryImages: jsonb("gallery_images").$type<string[]>(),
+  reels: jsonb("reels").$type<Array<{ id: string; videoUrl: string; posterUrl: string; caption?: string }>>(),
+  schoolCategories: jsonb("school_categories").$type<Array<{ id: string; name: string; teacher: string }>>(),
+  paymentMethods: jsonb("payment_methods").$type<Array<{ id: string; name: string; isActive: boolean }>>(),
+  movementCategories: jsonb("movement_categories").$type<Array<{ id: string; name: string; type: 'INCOME' | 'EXPENSE'; icon: string }>>(),
+  holidays: jsonb("holidays").$type<Array<{ date: string; name: string }>>(),
+  landingTexts: jsonb("landing_texts"),
+  heroSlides: jsonb("hero_slides"),
+  promoPopup: jsonb("promo_popup"),
 
   // MercadoPago Integration
   mpAccessToken: text("mp_access_token"),
   mpRefreshToken: text("mp_refresh_token"),
   mpPublicKey: text("mp_public_key"),
-  mpTokenExpiresAt: integer("mp_token_expires_at", { mode: "timestamp" }),
+  mpTokenExpiresAt: timestamp("mp_token_expires_at", { mode: "date" }),
 
   // Payway Integration
   paywaySiteId: text("payway_site_id"),
   paywayPublicKey: text("payway_public_key"),
   paywayPrivateKey: text("payway_private_key"),
-  paywayEnvironment: text("payway_environment", { enum: ["SANDBOX", "PRODUCTION"] })
-    .default("SANDBOX"),
-  isPaywayActive: integer("is_payway_active", { mode: "boolean" })
-    .default(false),
+  paywayEnvironment: paywayEnvironmentEnum("payway_environment").default("SANDBOX"),
+  isPaywayActive: boolean("is_payway_active").default(false),
 
-  updatedAt: integer("updated_at", { mode: "timestamp" }),
+  updatedAt: timestamp("updated_at", { mode: "date" }),
 });
 
-export const chatSessions = sqliteTable("chat_sessions", {
+export const chatSessions = pgTable("chat_sessions", {
   id: text("id").primaryKey(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  lastActive: integer("last_active", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull(),
+  lastActive: timestamp("last_active", { mode: "date" }).notNull(),
 });
 
-export const chatMessages = sqliteTable("chat_messages", {
+export const chatMessages = pgTable("chat_messages", {
   id: text("id").primaryKey(),
   sessionId: text("session_id")
     .references(() => chatSessions.id)
     .notNull(),
-  role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
+  role: chatMessageRoleEnum("role").notNull(),
   content: text("content").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull(),
 });
 
 // --- Groups (Cuentas Corrientes) ---
-export const groups = sqliteTable("groups", {
+export const groups = pgTable("groups", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   contactName: text("contact_name"),
   contactPhone: text("contact_phone"),
   contactEmail: text("contact_email"),
-  balance: real("balance").notNull().default(0), // Positive means group has credit, negative means debt
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  balance: doublePrecision("balance").notNull().default(0),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-export const groupTransactions = sqliteTable("group_transactions", {
+export const groupTransactions = pgTable("group_transactions", {
   id: text("id").primaryKey(),
   groupId: text("group_id")
     .notNull()
     .references(() => groups.id),
-  type: text("type", { enum: ["CHARGE", "PAYMENT"] }).notNull(),
-  amount: real("amount").notNull(), // Absolute amount
+  type: groupTransactionTypeEnum("type").notNull(),
+  amount: doublePrecision("amount").notNull(),
   description: text("description"),
-  bookingId: text("booking_id").references(() => bookings.id), // If type=CHARGE from a booking
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  bookingId: text("booking_id").references(() => bookings.id),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
 // --- Escuelita (Individual Subscriptions) ---
-export const students = sqliteTable("students", {
+export const students = pgTable("students", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
-  birthDate: integer("birth_date", { mode: "timestamp" }),
+  birthDate: timestamp("birth_date", { mode: "date" }),
   guardianName: text("guardian_name"),
   guardianPhone: text("guardian_phone"),
   guardianEmail: text("guardian_email"),
-  category: text("category"), // Ej: "2010/2011"
-  monthlyFee: real("monthly_fee").notNull().default(0),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  category: text("category"),
+  monthlyFee: doublePrecision("monthly_fee").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-export const studentSubscriptions = sqliteTable("student_subscriptions", {
+export const studentSubscriptions = pgTable("student_subscriptions", {
   id: text("id").primaryKey(),
   studentId: text("student_id")
     .notNull()
     .references(() => students.id),
-  month: integer("month").notNull(), // 1-12
+  month: integer("month").notNull(),
   year: integer("year").notNull(),
-  price: real("price").notNull(),
-  status: text("status", { enum: ["PENDING", "PAID"] })
-    .notNull()
-    .default("PENDING"),
-  dueDate: integer("due_date", { mode: "timestamp" }),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  price: doublePrecision("price").notNull(),
+  status: subscriptionStatusEnum("status").notNull().default("PENDING"),
+  dueDate: timestamp("due_date", { mode: "date" }),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-export const studentPayments = sqliteTable("student_payments", {
+export const studentPayments = pgTable("student_payments", {
   id: text("id").primaryKey(),
   subscriptionId: text("subscription_id")
     .notNull()
     .references(() => studentSubscriptions.id),
-  amount: real("amount").notNull(),
-  paymentMethod: text("payment_method"), // "CASH", "TRANSFER", etc.
-  paymentDate: integer("payment_date", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  amount: doublePrecision("amount").notNull(),
+  paymentMethod: text("payment_method"),
+  paymentDate: timestamp("payment_date", { mode: "date" }).notNull().defaultNow(),
 });
 
 // --- Cash Management (Caja) ---
-export const cashRegisters = sqliteTable("cash_registers", {
+export const cashRegisters = pgTable("cash_registers", {
   id: text("id").primaryKey(),
-  openedAt: integer("opened_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
-  closedAt: integer("closed_at", { mode: "timestamp" }),
-  openingBalance: real("opening_balance").notNull().default(0),
-  closingBalance: real("closing_balance"),
-  status: text("status", { enum: ["OPEN", "CLOSED"] })
-    .notNull()
-    .default("OPEN"),
+  openedAt: timestamp("opened_at", { mode: "date" }).notNull().defaultNow(),
+  closedAt: timestamp("closed_at", { mode: "date" }),
+  openingBalance: doublePrecision("opening_balance").notNull().default(0),
+  closingBalance: doublePrecision("closing_balance"),
+  status: cashRegisterStatusEnum("status").notNull().default("OPEN"),
   openedBy: text("opened_by").references(() => users.id),
   closedBy: text("closed_by").references(() => users.id),
-  // Arqueo de billetes al cierre: { "100": 5, "500": 10, ... }
-  billCount: text("bill_count", { mode: "json" }).$type<
-    Record<string, number>
-  >(),
-  notes: text("notes"), // Observaciones del turno
+  billCount: jsonb("bill_count").$type<Record<string, number>>(),
+  notes: text("notes"),
 });
 
-export const cashMovements = sqliteTable("cash_movements", {
+export const cashMovements = pgTable("cash_movements", {
   id: text("id").primaryKey(),
   registerId: text("register_id")
     .notNull()
     .references(() => cashRegisters.id),
-  type: text("type", { enum: ["INCOME", "EXPENSE"] }).notNull(),
+  type: cashMovementTypeEnum("type").notNull(),
   category: text("category").notNull(),
-  amount: real("amount").notNull(),
+  amount: doublePrecision("amount").notNull(),
   description: text("description"),
   paymentMethod: text("payment_method").notNull().default("CASH"),
-  referenceId: text("reference_id"), // ID to booking, student_payment, group_transaction depending on category
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  referenceId: text("reference_id"),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-// --- Cash Sessions (Caja Sesiones - Nueva Regla MP) ---
-export const cashSessions = sqliteTable("cash_sessions", {
+// --- Cash Sessions ---
+export const cashSessions = pgTable("cash_sessions", {
   id: text("id").primaryKey(),
-  openedAt: integer("opened_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
-  closedAt: integer("closed_at", { mode: "timestamp" }),
-  status: text("status", { enum: ["OPEN", "CLOSED"] })
-    .notNull()
-    .default("OPEN"),
+  openedAt: timestamp("opened_at", { mode: "date" }).notNull().defaultNow(),
+  closedAt: timestamp("closed_at", { mode: "date" }),
+  status: cashRegisterStatusEnum("status").notNull().default("OPEN"),
   openedBy: text("opened_by").references(() => users.id),
   closedBy: text("closed_by").references(() => users.id),
 });
 
-export const transactions = sqliteTable("transactions", {
+export const transactions = pgTable("transactions", {
   id: text("id").primaryKey(),
   cashSessionId: text("cash_session_id").references(() => cashSessions.id),
-  type: text("type", { enum: ["INCOME", "EXPENSE"] }).notNull(),
+  type: cashMovementTypeEnum("type").notNull(),
   category: text("category").notNull(),
-  amount: real("amount").notNull(),
+  amount: doublePrecision("amount").notNull(),
   description: text("description"),
   paymentMethod: text("payment_method").notNull().default("CASH"),
-  referenceId: text("reference_id"), // references bookingId
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  referenceId: text("reference_id"),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-// --- Pitch Subscriptions (Abonos de Canchas) ---
-export const pitchSubscriptions = sqliteTable("pitch_subscriptions", {
+// --- Pitch Subscriptions ---
+export const pitchSubscriptions = pgTable("pitch_subscriptions", {
   id: text("id").primaryKey(),
   pitchId: text("pitch_id")
     .notNull()
     .references(() => pitches.id),
-  userId: text("user_id").references(() => users.id), // Abono a nombre de un usuario
-  groupId: text("group_id").references(() => groups.id), // O abono a nombre de un grupo
-  dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  startTime: text("start_time").notNull(), // "19:00"
-  endTime: text("end_time").notNull(), // "20:00"
-  startDate: integer("start_date", { mode: "timestamp" }).notNull(),
-  endDate: integer("end_date", { mode: "timestamp" }), // If null, it's indefinitely recurring
-  pricePerMatch: real("price_per_match").notNull(),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  userId: text("user_id").references(() => users.id),
+  groupId: text("group_id").references(() => groups.id),
+  dayOfWeek: integer("day_of_week").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  startDate: timestamp("start_date", { mode: "date" }).notNull(),
+  endDate: timestamp("end_date", { mode: "date" }),
+  pricePerMatch: doublePrecision("price_per_match").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-// --- Pitch Pricing Rules (Precios Dinámicos) ---
-export const pitchPricingRules = sqliteTable("pitch_pricing_rules", {
+// --- Pitch Pricing Rules ---
+export const pitchPricingRules = pgTable("pitch_pricing_rules", {
   id: text("id").primaryKey(),
   pitchId: text("pitch_id")
     .notNull()
     .references(() => pitches.id, { onDelete: "cascade" }),
-  dayOfWeek: integer("day_of_week").notNull(), // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  startTime: text("start_time").notNull(), // format "HH:MM"
-  endTime: text("end_time").notNull(), // format "HH:MM"
-  price: real("price").notNull(),
+  dayOfWeek: integer("day_of_week").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  price: doublePrecision("price").notNull(),
 });
 
+// --- Relations ---
 export const usersRelations = relations(users, ({ many }) => ({
   bookings: many(bookings),
   cashRegistersOpened: many(cashRegisters, { relationName: "openedBy" }),
@@ -571,53 +528,58 @@ export const studentSubscriptionsRelations = relations(
   }),
 );
 
+export const accountsRelations = relations(accounts, ({ one }) => ({
+  user: one(users, {
+    fields: [accounts.userId],
+    references: [users.id],
+  }),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
+}));
+
+
 // --- Mercado Pago Credentials (OAuth Integration) ---
-export const mercadoPagoCredentials = sqliteTable("mercado_pago_credentials", {
-  id: text("id").primaryKey(), // local administrator, club, or tenant identifier
+export const mercadoPagoCredentials = pgTable("mercado_pago_credentials", {
+  id: text("id").primaryKey(),
   accessToken: text("access_token").notNull(),
   refreshToken: text("refresh_token").notNull(),
-  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
   publicKey: text("public_key").notNull(),
-  userId: text("user_id").notNull(), // Mercado Pago seller user_id
-  liveMode: integer("live_mode", { mode: "boolean" }).notNull().default(false),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  userId: text("user_id").notNull(),
+  liveMode: boolean("live_mode").notNull().default(false),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });
 
 // --- Store Products & Orders (E-commerce shop) ---
-export const products = sqliteTable("products", {
+export const products = pgTable("products", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  price: real("price").notNull(),
+  price: doublePrecision("price").notNull(),
   stock: integer("stock").notNull().default(0),
   imageUrl: text("image_url"),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
-export const orders = sqliteTable("orders", {
+export const orders = pgTable("orders", {
   id: text("id").primaryKey(),
   customerName: text("customer_name").notNull(),
   customerPhone: text("customer_phone").notNull(),
   customerEmail: text("customer_email"),
-  totalAmount: real("total_amount").notNull(),
-  status: text("status", { enum: ["PENDING", "COMPLETED", "CANCELLED"] })
-    .notNull()
-    .default("PENDING"),
-  items: text("items", { mode: "json" }).$type<Array<{
+  totalAmount: doublePrecision("total_amount").notNull(),
+  status: orderStatusEnum("status").notNull().default("PENDING"),
+  items: jsonb("items").$type<Array<{
     productId: string;
     name: string;
     price: number;
     quantity: number;
   }>>().notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(strftime('%s', 'now'))`),
+  createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });

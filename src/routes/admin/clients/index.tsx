@@ -6,7 +6,7 @@ import {
   useNavigate,
   type DocumentHead,
 } from "@builder.io/qwik-city";
-import { eq, inArray, desc, sql, like, or, and } from "drizzle-orm";
+import { eq, inArray, desc, sql, ilike, or, and } from "drizzle-orm";
 import { getDB } from "~/db";
 import { users } from "~/db/schema";
 import { LuSearch, LuChevronLeft, LuChevronRight } from "@qwikest/icons/lucide";
@@ -45,9 +45,9 @@ export const useClientsData = routeLoader$(async (requestEvent) => {
   );
   const searchWhere = search
     ? or(
-        like(users.name, `%${search}%`),
-        like(users.email, `%${search}%`),
-        like(users.phone, `%${search}%`),
+        ilike(users.name, `%${search}%`),
+        ilike(users.email, `%${search}%`),
+        ilike(users.phone, `%${search}%`),
       )
     : undefined;
 

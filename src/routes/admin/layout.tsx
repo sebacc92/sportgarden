@@ -65,7 +65,7 @@ export const updateClubStatus = server$(async function (status: string) {
   const db = getDB(this);
   await db
     .update(siteSettings)
-    .set({ clubStatus: status, updatedAt: new Date() })
+    .set({ clubStatus: status as "OPEN" | "CLOSED" | "AUTO", updatedAt: new Date() })
     .where(eq(siteSettings.id, 1));
   return { success: true };
 });
