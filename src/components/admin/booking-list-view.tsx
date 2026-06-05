@@ -12,7 +12,7 @@ type BookingEntry = {
     pitchId: string;
     startTime: Date;
     endTime: Date;
-    status: "PENDING_APPROVAL" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
+    status: "PENDING_APPROVAL" | "PENDING_PAYMENT" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
     totalPrice: number;
     paidAmount: number;
     paymentStatus: string;
@@ -31,6 +31,7 @@ export type BookingListViewProps = {
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING_APPROVAL: "bg-amber-400",
+  PENDING_PAYMENT: "bg-orange-500",
   CONFIRMED: "bg-emerald-500",
   CANCELLED: "bg-red-400",
   COMPLETED: "bg-slate-400",
@@ -38,6 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUS_TEXT: Record<string, string> = {
   PENDING_APPROVAL: "bg-amber-100 text-amber-800 border border-amber-300",
+  PENDING_PAYMENT: "bg-orange-100 text-orange-800 border border-orange-300",
   CONFIRMED: "bg-emerald-100 text-emerald-800 border border-emerald-300",
   CANCELLED: "bg-red-100 text-red-800 border border-red-300",
   COMPLETED: "bg-slate-100 text-slate-800 border border-slate-300",
@@ -45,6 +47,7 @@ const STATUS_TEXT: Record<string, string> = {
 
 const STATUS_ROW: Record<string, string> = {
   PENDING_APPROVAL: "bg-amber-50 hover:bg-amber-100/60",
+  PENDING_PAYMENT: "bg-orange-50 hover:bg-orange-100/60",
   CONFIRMED: "bg-emerald-50 hover:bg-emerald-100/60",
   CANCELLED: "bg-red-50 hover:bg-red-100/60",
   COMPLETED: "bg-slate-50 hover:bg-slate-100/60",
@@ -185,13 +188,15 @@ export const BookingListView = component$<BookingListViewProps>(
                                   STATUS_TEXT[booking.status],
                                 ]}
                               >
-                                {booking.status === "PENDING_APPROVAL"
+                                 {booking.status === "PENDING_APPROVAL"
                                   ? "Por confirmar"
-                                  : booking.status === "CONFIRMED"
-                                    ? "Confirmado"
-                                    : booking.status === "CANCELLED"
-                                      ? "Cancelado"
-                                      : "Completado"}
+                                  : booking.status === "PENDING_PAYMENT"
+                                    ? "Pendiente Pago"
+                                    : booking.status === "CONFIRMED"
+                                      ? "Confirmado"
+                                      : booking.status === "CANCELLED"
+                                        ? "Cancelado"
+                                        : "Completado"}
                               </span>
                             </td>
 

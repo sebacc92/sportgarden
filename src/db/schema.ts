@@ -116,7 +116,7 @@ export const bookings = sqliteTable("bookings", {
   startTime: integer("start_time", { mode: "timestamp" }).notNull(),
   endTime: integer("end_time", { mode: "timestamp" }).notNull(),
   status: text("status", {
-    enum: ["PENDING_APPROVAL", "CONFIRMED", "CANCELLED", "COMPLETED", "ATTENDED"],
+    enum: ["PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED", "ATTENDED"],
   })
     .notNull()
     .default("PENDING_APPROVAL"),

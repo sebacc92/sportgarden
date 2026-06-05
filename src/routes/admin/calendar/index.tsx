@@ -171,7 +171,7 @@ export const useUpdateBookingStatusAction = routeAction$(
   },
   zod$({
     bookingId: z.string(),
-    status: z.enum(["PENDING_APPROVAL", "CONFIRMED", "CANCELLED", "COMPLETED"]),
+    status: z.enum(["PENDING_APPROVAL", "PENDING_PAYMENT", "CONFIRMED", "CANCELLED", "COMPLETED"]),
     cancellationOption: z
       .enum(["RETURN", "KEEP", "TRANSFER_NEXT_WEEK", "TRANSFER_CUSTOM"])
       .optional(),

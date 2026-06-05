@@ -98,6 +98,13 @@ const ALL_STATUSES = [
     active: "bg-amber-400 text-white border-amber-500",
   },
   {
+    key: "PENDING_PAYMENT",
+    label: "Pendiente Pago",
+    dot: "bg-orange-500",
+    chip: "bg-orange-100 text-orange-800 border-orange-300",
+    active: "bg-orange-500 text-white border-orange-600",
+  },
+  {
     key: "CANCELLED",
     label: "Cancelado",
     dot: "bg-red-400",
@@ -119,6 +126,7 @@ const STATUS_ACTIVE_STYLE: Record<
 > = {
   CONFIRMED: { bg: "#10b981", text: "#fff", border: "#059669" },
   PENDING_APPROVAL: { bg: "#fbbf24", text: "#fff", border: "#f59e0b" },
+  PENDING_PAYMENT: { bg: "#f97316", text: "#fff", border: "#ea580c" },
   CANCELLED: { bg: "#ef4444", text: "#fff", border: "#dc2626" },
   COMPLETED: { bg: "#475569", text: "#fff", border: "#334155" },
 };
@@ -139,6 +147,8 @@ const TYPE_CARD: Record<string, string> = {
 const STATUS_CARD: Record<string, string> = {
   PENDING_APPROVAL:
     "bg-amber-50 border-l-amber-500 border-y-amber-200 border-r-amber-200 text-amber-900",
+  PENDING_PAYMENT:
+    "bg-orange-50 border-l-orange-500 border-y-orange-200 border-r-orange-200 text-orange-900",
   CONFIRMED:
     "bg-emerald-50 border-l-emerald-500 border-y-emerald-200 border-r-emerald-200 text-emerald-900",
   CANCELLED:

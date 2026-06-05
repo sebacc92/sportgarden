@@ -96,7 +96,7 @@ export const getDailyBookings = server$(async function (this: RequestEventBase, 
       inArray(bookings.pitchId, relatedIds),
       gte(bookings.startTime, startOfDay),
       lt(bookings.startTime, endOfDay),
-      inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"]),
+      inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]),
     ),
     columns: {
       startTime: true,

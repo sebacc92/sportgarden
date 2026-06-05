@@ -42,7 +42,7 @@ export async function isPitchAvailable(
     inArray(bookings.pitchId, relatedPitchIds),
     lt(bookings.startTime, endTime),
     gt(bookings.endTime, startTime),
-    inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"]),
+    inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]),
   ];
 
   if (excludeBookingId) {

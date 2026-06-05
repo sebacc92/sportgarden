@@ -4,9 +4,10 @@ import {
   $,
   useTask$,
   useComputed$,
+  useVisibleTask$,
 } from "@builder.io/qwik";
 import type { QRL, Signal } from "@builder.io/qwik";
-import { Form, Link } from "@builder.io/qwik-city";
+import { Link } from "@builder.io/qwik-city";
 import type { InferSelectModel } from "drizzle-orm";
 import { pitches } from "~/db/schema";
 import { Button, Modal, Alert } from "~/components/ui";
@@ -94,16 +95,11 @@ export const isSlotDisabledHelper = (
 ) => {
   if (!dateStr) return true;
 
-  // 1. Check if the slot is in the past (for today)
-  const today = new Date();
-  const isToday = dateStr === today.toISOString().split("T")[0];
-  if (isToday) {
-    const [hours, minutes] = time.split(":").map(Number);
-    const slotTime = new Date();
-    slotTime.setHours(hours, minutes, 0, 0);
-    if (slotTime <= today) {
-      return true;
-    }
+  // 1. Check if the slot is in the past
+  const now = new Date();
+  const slotDateTime = new Date(`${dateStr}T${time}:00-03:00`);
+  if (slotDateTime <= now) {
+    return true;
   }
 
   // 2. Check operating hours and duration boundaries
@@ -160,6 +156,25 @@ export const isSlotDisabledHelper = (
   });
 };
 
+export const isTransfer = (method: string | undefined | null) => {
+  if (!method) return false;
+  const m = method.toUpperCase();
+  return m === "TRANSFER" || m === "TRANSFERENCIA" || m.includes("TRANSFER") || m.includes("BANK");
+};
+
+export const isTransferMethod = (id: string, name: string) => {
+  const idLower = id.toLowerCase();
+  const nameLower = name.toLowerCase();
+  return (
+    idLower.includes("transfer") ||
+    nameLower.includes("transfer") ||
+    idLower.includes("cbu") ||
+    nameLower.includes("cbu") ||
+    idLower.includes("alias") ||
+    nameLower.includes("alias")
+  );
+};
+
 export const HomeBookingModal = component$<HomeBookingModalProps>(
   ({
     isOpen,
@@ -206,6 +221,40 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     const guestPhone = useSignal("");
     const guestEmail = useSignal("");
 
+    const copiedSignal = useSignal(false);
+    const timeLeft = useSignal(15 * 60);
+
+    const copyAlias = $((alias: string) => {
+      if (!alias) return;
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        navigator.clipboard.writeText(alias).then(() => {
+          copiedSignal.value = true;
+          setTimeout(() => {
+            copiedSignal.value = false;
+          }, 2000);
+        });
+      }
+    });
+
+    const formatTimeLeft = (seconds: number) => {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    };
+
+    useVisibleTask$(({ cleanup }) => {
+      const timer = setInterval(() => {
+        if (userAction.value?.success && isTransfer(userAction.value.paymentMethod)) {
+          if (timeLeft.value > 0) {
+            timeLeft.value--;
+          } else {
+            clearInterval(timer);
+          }
+        }
+      }, 1000);
+      cleanup(() => clearInterval(timer));
+    });
+
     const toggleExtra = $((extra: { name: string; price: number }) => {
       const exists = selectedExtras.value.find((e) => e.name === extra.name);
       if (exists) {
@@ -247,6 +296,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
         paywayBookingId.value = null;
         paywayAmount.value = 0;
         paywayPaymentSuccess.value = false;
+        timeLeft.value = 15 * 60;
         return;
       }
       ctx.track(() => selectedPitchId.value);
@@ -259,6 +309,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       paywayBookingId.value = null;
       paywayAmount.value = 0;
       paywayPaymentSuccess.value = false;
+      timeLeft.value = 15 * 60;
     });
 
     useTask$((ctx) => {
@@ -600,181 +651,393 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
             {((guestAction.value?.success && (guestAction.value.paymentMethod !== "PAYWAY" || guestAction.value.amountToCharge === 0 || paywayPaymentSuccess.value)) || (userAction.value?.success && (userAction.value.paymentMethod !== "PAYWAY" || userAction.value.amountToCharge === 0 || paywayPaymentSuccess.value))) ? (
               <div class="mx-auto max-w-md py-8">
                 {guestAction.value?.success && !paywayPaymentSuccess.value ? (
-                  /* Guest success - amber themed with WhatsApp CTA */
-                  <div class="space-y-5">
-                    <div class="text-center">
-                      <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-400 shadow-lg">
-                        <svg
-                          viewBox="0 0 24 24"
-                          class="h-8 w-8 fill-[#25D366]"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
-                        </svg>
-                      </div>
-                      <h3 class="text-xl font-black text-white">
-                        ¡Solicitud Enviada!
-                      </h3>
-                      <p class="mt-1 text-xs font-medium text-slate-400">
-                        Te contactaremos pronto para confirmar tu turno.
-                      </p>
-                    </div>
-
-                    <div class="overflow-hidden rounded-2xl border border-white/8 bg-slate-900/60">
-                      <div class="border-b border-white/5 px-4 pt-4 pb-3">
-                        <p class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
-                          Próximos pasos
+                  isTransfer(guestAction.value.paymentMethod) ? (
+                    /* Guest Transfer Success screen - amber/orange themed */
+                    <div class="space-y-5">
+                      <div class="text-center">
+                        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-400 shadow-lg">
+                          <svg
+                            viewBox="0 0 24 24"
+                            class="h-8 w-8 fill-amber-450"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="currentColor" />
+                          </svg>
+                        </div>
+                        <h3 class="text-xl font-black text-white">
+                          ¡Solicitud Enviada!
+                        </h3>
+                        <p class="mt-1 text-xs font-bold uppercase tracking-wider text-amber-400">
+                          Pendiente de Aprobación
                         </p>
                       </div>
-                      <div class="space-y-3 p-4">
-                        <div class="flex items-center gap-3">
-                          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-[10px] font-black text-amber-400">
-                            1
+
+                      <div class="overflow-hidden rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-4">
+                        <div class="flex items-center justify-between border-b border-amber-500/10 pb-2">
+                          <span class="text-[10px] font-black tracking-widest text-amber-400 uppercase">
+                            Instrucciones de Pago
+                          </span>
+                          <span class="text-xs font-black text-white">
+                            Total: ${dynamicPrice.value}
+                          </span>
+                        </div>
+                        
+                        <div class="space-y-2">
+                          <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-300">Copiar alias de transferencia:</span>
+                            {copiedSignal.value && (
+                              <span class="text-[10px] font-bold text-emerald-400 animate-pulse">¡Copiado!</span>
+                            )}
                           </div>
-                          <p class="text-xs font-medium text-slate-300">
-                            Tu reserva quedó en estado{" "}
-                            <span class="font-bold text-amber-400">
-                              Pendiente
-                            </span>{" "}
-                            en nuestro sistema.
+                          <div class="flex items-center gap-2">
+                            <div class="flex-1 rounded-xl border border-amber-500/10 bg-slate-950/60 py-2.5 px-3 font-mono text-sm font-black text-amber-400 text-center select-all">
+                              {settings?.bankAlias || "No configurado"}
+                            </div>
+                            <button
+                              type="button"
+                              onClick$={() => copyAlias(settings?.bankAlias || "")}
+                              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-400 transition-all hover:bg-amber-500/20 active:scale-95"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-4.5 w-4.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                stroke-width="2.5"
+                              >
+                                <path
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                          <p class="text-[10px] leading-relaxed text-slate-450">
+                            Para confirmar tu reserva, realiza la transferencia bancaria al alias y luego envía el comprobante por WhatsApp.
                           </p>
                         </div>
-                        <div class="flex items-center gap-3">
-                          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#25D366]/10">
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        {settings?.whatsappNumber && (
+                          <a
+                            href={`https://wa.me/${(settings.whatsappNumber || "").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                              `Hola! Envíe una solicitud de reserva por Transferencia:\n- ID Reserva: ${guestAction.value?.bookingId || ""}\n- Nombre: ${guestName.value}\n- Cancha: ${selectedPitch.value?.name || ""}\n- Fecha: ${dateStr.value.split("-").reverse().join("/")}\n- Horario: ${timeStr.value} (${durationStr.value} min)\n- Total: $${dynamicPrice.value}\n\nAdjunto el comprobante de transferencia.`
+                            )}`}
+                            target="_blank"
+                            class="flex items-center justify-center gap-2 rounded-xl border border-[#25D366]/20 bg-[#25D366]/10 py-3 text-xs font-black tracking-wider text-[#4ADE80] uppercase transition-all hover:bg-[#25D366]/20"
+                          >
+                            <svg class="h-4 w-4 fill-[#25D366]" viewBox="0 0 24 24">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                            </svg>
+                            WhatsApp
+                          </a>
+                        )}
+                        <Button
+                          onClick$={onClose}
+                          look="secondary"
+                          class={[
+                            "rounded-xl border border-white/5 bg-slate-800 py-3 text-xs font-bold tracking-wider text-white uppercase transition-all hover:bg-slate-700",
+                            !settings?.whatsappNumber && "col-span-2",
+                          ]}
+                        >
+                          Entendido
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Guest success - amber themed with WhatsApp CTA */
+                    <div class="space-y-5">
+                      <div class="text-center">
+                        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-400 shadow-lg">
+                          <svg
+                            viewBox="0 0 24 24"
+                            class="h-8 w-8 fill-[#25D366]"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                          </svg>
+                        </div>
+                        <h3 class="text-xl font-black text-white">
+                          ¡Solicitud Enviada!
+                        </h3>
+                        <p class="mt-1 text-xs font-medium text-slate-400">
+                          Te contactaremos pronto para confirmar tu turno.
+                        </p>
+                      </div>
+
+                      <div class="overflow-hidden rounded-2xl border border-white/8 bg-slate-900/60">
+                        <div class="border-b border-white/5 px-4 pt-4 pb-3">
+                          <p class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                            Próximos pasos
+                          </p>
+                        </div>
+                        <div class="space-y-3 p-4">
+                          <div class="flex items-center gap-3">
+                            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-[10px] font-black text-amber-400">
+                              1
+                            </div>
+                            <p class="text-xs font-medium text-slate-300">
+                              Tu reserva quedó en estado{" "}
+                              <span class="font-bold text-amber-400">
+                                Pendiente
+                              </span>{" "}
+                              en nuestro sistema.
+                            </p>
+                          </div>
+                          <div class="flex items-center gap-3">
+                            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#25D366]/10">
+                              <svg
+                                class="h-3 w-3 fill-[#25D366]"
+                                viewBox="0 0 24 24"
+                              >
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                              </svg>
+                            </div>
+                            <p class="text-xs font-medium text-slate-300">
+                              Te escribimos por{" "}
+                              <span class="font-bold text-[#4ADE80]">
+                                WhatsApp
+                              </span>{" "}
+                              para coordinar el pago y confirmar.
+                            </p>
+                          </div>
+                          <div class="flex items-center gap-3">
+                            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-black text-emerald-400">
+                              ✓
+                            </div>
+                            <p class="text-xs font-medium text-slate-300">
+                              ¡Listo! El turno queda{" "}
+                              <span class="font-bold text-emerald-400">
+                                Confirmado
+                              </span>
+                              .
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        {settings?.whatsappNumber && (
+                          <a
+                            href={`https://wa.me/${settings.whatsappNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent("Hola! Acabo de enviar una solicitud de reserva desde la web.")}`}
+                            target="_blank"
+                            class="flex items-center justify-center gap-2 rounded-xl border border-[#25D366]/20 bg-[#25D366]/10 py-3 text-xs font-black tracking-wider text-[#4ADE80] uppercase transition-all hover:bg-[#25D366]/20"
+                          >
                             <svg
-                              class="h-3 w-3 fill-[#25D366]"
+                              class="h-4 w-4 fill-[#25D366]"
                               viewBox="0 0 24 24"
                             >
                               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                             </svg>
-                          </div>
-                          <p class="text-xs font-medium text-slate-300">
-                            Te escribimos por{" "}
-                            <span class="font-bold text-[#4ADE80]">
-                              WhatsApp
-                            </span>{" "}
-                            para coordinar el pago y confirmar.
-                          </p>
-                        </div>
-                        <div class="flex items-center gap-3">
-                          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-black text-emerald-400">
-                            ✓
-                          </div>
-                          <p class="text-xs font-medium text-slate-300">
-                            ¡Listo! El turno queda{" "}
-                            <span class="font-bold text-emerald-400">
-                              Confirmado
-                            </span>
-                            .
-                          </p>
-                        </div>
+                            WhatsApp
+                          </a>
+                        )}
+                        <Button
+                          onClick$={onClose}
+                          look="secondary"
+                          class={[
+                            "rounded-xl border border-white/5 bg-slate-800 py-3 text-xs font-bold tracking-wider text-white uppercase transition-all hover:bg-slate-700",
+                            !settings?.whatsappNumber && "col-span-2",
+                          ]}
+                        >
+                          Entendido
+                        </Button>
                       </div>
                     </div>
-
-                    <div class="grid grid-cols-2 gap-3">
-                      {settings?.whatsappNumber && (
-                        <a
-                          href={`https://wa.me/${settings.whatsappNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent("Hola! Acabo de enviar una solicitud de reserva desde la web.")}`}
-                          target="_blank"
-                          class="flex items-center justify-center gap-2 rounded-xl border border-[#25D366]/20 bg-[#25D366]/10 py-3 text-xs font-black tracking-wider text-[#4ADE80] uppercase transition-all hover:bg-[#25D366]/20"
-                        >
+                  )
+                ) : (
+                  userAction.value?.success && isTransfer(userAction.value.paymentMethod) ? (
+                    /* Registered user Transfer Success screen - pending payment countdown */
+                    <div class="space-y-5 text-center">
+                      <div>
+                        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-orange-500/20 bg-orange-500/10 text-orange-400 shadow-lg shadow-orange-955">
                           <svg
-                            class="h-4 w-4 fill-[#25D366]"
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-8 w-8 animate-pulse text-orange-450"
+                            fill="none"
                             viewBox="0 0 24 24"
+                            stroke="currentColor"
                           >
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2"
+                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
                           </svg>
-                          WhatsApp
-                        </a>
+                        </div>
+                        <h3 class="text-xl font-black text-white">
+                          ¡Turno Reservado!
+                        </h3>
+                        <p class="mt-1 text-xs font-bold uppercase tracking-wider text-orange-400">
+                          Pendiente de Pago
+                        </p>
+                      </div>
+
+                      <div class="rounded-2xl border border-orange-500/20 bg-orange-500/10 p-4 text-center">
+                        <p class="text-sm font-bold text-orange-300 mb-1">
+                          ⏰ Tiempo Límite de Pago
+                        </p>
+                        <div class="text-3xl font-black tracking-widest text-white font-mono animate-pulse">
+                          {formatTimeLeft(timeLeft.value)}
+                        </div>
+                        <p class="mt-2 text-[10px] leading-relaxed text-slate-300 font-medium">
+                          Realiza la transferencia bancaria y envía el comprobante antes de que expire el tiempo para asegurar tu lugar.
+                        </p>
+                      </div>
+
+                      <div class="overflow-hidden rounded-2xl border border-white/8 bg-slate-900/60 p-4 text-left space-y-4">
+                        <div class="flex items-center justify-between border-b border-white/5 pb-2">
+                          <span class="text-[10px] font-black tracking-widest text-slate-400 uppercase">
+                            Instrucciones de Pago
+                          </span>
+                          <span class="text-xs font-black text-emerald-400">
+                            Monto: ${paymentOption.value === "SENA" ? senaAmount.value : dynamicPrice.value}
+                          </span>
+                        </div>
+
+                        <div class="space-y-2">
+                          <div class="flex items-center justify-between">
+                            <span class="text-xs text-slate-350">Copiar alias de transferencia:</span>
+                            {copiedSignal.value && (
+                              <span class="text-[10px] font-bold text-emerald-400 animate-pulse">¡Copiado!</span>
+                            )}
+                          </div>
+                          <div class="flex items-center gap-2">
+                            <div class="flex-1 rounded-xl border border-white/5 bg-slate-950/60 py-2.5 px-3 font-mono text-sm font-black text-emerald-400 text-center select-all">
+                              {settings?.bankAlias || "No configurado"}
+                            </div>
+                            <button
+                              type="button"
+                              onClick$={() => copyAlias(settings?.bankAlias || "")}
+                              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-slate-800 text-white transition-all hover:bg-slate-700 active:scale-95"
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-4.5 w-4.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                stroke-width="2.5"
+                              >
+                                <path
+                                  stroke-linecap="round"
+                                  stroke-linejoin="round"
+                                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                        {settings?.whatsappNumber && (
+                          <a
+                            href={`https://wa.me/${(settings.whatsappNumber || "").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
+                              `Hola! Realicé la transferencia para mi reserva:\n- ID Reserva: ${userAction.value?.bookingId || ""}\n- Nombre: ${user?.name || ""}\n- Cancha: ${selectedPitch.value?.name || ""}\n- Fecha: ${dateStr.value.split("-").reverse().join("/")}\n- Horario: ${timeStr.value} (${durationStr.value} min)\n- Opción: ${paymentOption.value === "SENA" ? `Seña ($${senaAmount.value})` : `Total ($${dynamicPrice.value})`}\n\nAdjunto el comprobante de transferencia.`
+                            )}`}
+                            target="_blank"
+                            class="flex items-center justify-center gap-2 rounded-xl border border-[#25D366]/20 bg-[#25D366]/10 py-3.5 text-xs font-black tracking-wider text-[#4ADE80] uppercase transition-all hover:bg-[#25D366]/20"
+                          >
+                            <svg class="h-4 w-4 fill-[#25D366]" viewBox="0 0 24 24">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                            </svg>
+                            Enviar Comprobante
+                          </a>
+                        )}
+                        <Button
+                          onClick$={onClose}
+                          look="secondary"
+                          class={[
+                            "rounded-xl border border-white/5 bg-slate-800 py-3.5 font-bold tracking-wider text-white uppercase transition-all hover:bg-slate-700",
+                            !settings?.whatsappNumber && "col-span-2",
+                          ]}
+                        >
+                          Cerrar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Registered user success - emerald themed */
+                    <div class="space-y-5 text-center">
+                      <div>
+                        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 shadow-lg shadow-emerald-950">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-8 w-8"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2.5"
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        </div>
+                        <h3 class="text-xl font-black text-white">
+                          ¡Reserva Confirmada!
+                        </h3>
+                        <p class="mt-1 text-xs font-medium text-slate-400">
+                          Tu turno fue agendado exitosamente.
+                        </p>
+                      </div>
+                      <div class="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-left text-emerald-300">
+                        <p class="mb-1 text-sm font-bold">
+                          ✅ Confirmación Instantánea
+                        </p>
+                        <p class="text-xs font-medium text-slate-300">
+                          {user
+                            ? "¡Excelente! Tu turno ha sido agendado bajo tu usuario. ¡Te esperamos en el club!"
+                            : "¡Excelente! Tu turno ha sido agendado y confirmado. ¡Te esperamos en el club!"}
+                        </p>
+                      </div>
+                      {confirmarPagoPaywayAction.value?.success && (
+                        <div class="rounded-2xl border border-white/5 bg-slate-950/60 p-5 text-left space-y-3 font-mono text-xs text-slate-400 animate-fade-in">
+                          <p class="text-[10px] font-black tracking-widest text-slate-500 uppercase border-b border-white/5 pb-2">
+                            Comprobante de Pago (Payway)
+                          </p>
+                          <div class="flex justify-between">
+                            <span>ID TRANSACCIÓN:</span>
+                            <span class="font-bold text-white">{confirmarPagoPaywayAction.value.paymentId}</span>
+                          </div>
+                          <div class="flex justify-between">
+                            <span>REF INTERNA:</span>
+                            <span class="font-bold text-white">{confirmarPagoPaywayAction.value.site_transaction_id}</span>
+                          </div>
+                          <div class="flex justify-between">
+                            <span>Nº TICKET:</span>
+                            <span class="font-bold text-white">{confirmarPagoPaywayAction.value.ticket}</span>
+                          </div>
+                          <div class="flex justify-between">
+                            <span>FECHA:</span>
+                            <span class="font-bold text-white">
+                              {new Date(confirmarPagoPaywayAction.value.date).toLocaleString("es-AR")}
+                            </span>
+                          </div>
+                          <div class="border-t border-white/5 pt-3 flex justify-between text-sm">
+                            <span class="font-bold text-slate-300">MONTO DEBITADO:</span>
+                            <span class="font-black text-emerald-400">
+                              ${confirmarPagoPaywayAction.value.amount.toLocaleString("es-AR")} ARS
+                            </span>
+                          </div>
+                        </div>
                       )}
                       <Button
                         onClick$={onClose}
                         look="secondary"
-                        class={[
-                          "rounded-xl border border-white/5 bg-slate-800 py-3 text-xs font-bold tracking-wider text-white uppercase transition-all hover:bg-slate-700",
-                          !settings?.whatsappNumber && "col-span-2",
-                        ]}
+                        class="w-full rounded-xl border border-white/5 bg-slate-800 py-3.5 font-bold tracking-wider text-white uppercase transition-all hover:bg-slate-700"
                       >
-                        Entendido
+                        Entendido / Cerrar
                       </Button>
                     </div>
-                  </div>
-                ) : (
-                  /* Registered user success - emerald themed */
-                  <div class="space-y-5 text-center">
-                    <div>
-                      <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 shadow-lg shadow-emerald-950">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          class="h-8 w-8"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            stroke-width="2.5"
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                      </div>
-                      <h3 class="text-xl font-black text-white">
-                        ¡Reserva Confirmada!
-                      </h3>
-                      <p class="mt-1 text-xs font-medium text-slate-400">
-                        Tu turno fue agendado exitosamente.
-                      </p>
-                    </div>
-                    <div class="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-left text-emerald-300">
-                      <p class="mb-1 text-sm font-bold">
-                        ✅ Confirmación Instantánea
-                      </p>
-                      <p class="text-xs font-medium text-slate-300">
-                        {user
-                          ? "¡Excelente! Tu turno ha sido agendado bajo tu usuario. ¡Te esperamos en el club!"
-                          : "¡Excelente! Tu turno ha sido agendado y confirmado. ¡Te esperamos en el club!"}
-                      </p>
-                    </div>
-                    {confirmarPagoPaywayAction.value?.success && (
-                      <div class="rounded-2xl border border-white/5 bg-slate-950/60 p-5 text-left space-y-3 font-mono text-xs text-slate-400 animate-fade-in">
-                        <p class="text-[10px] font-black tracking-widest text-slate-500 uppercase border-b border-white/5 pb-2">
-                          Comprobante de Pago (Payway)
-                        </p>
-                        <div class="flex justify-between">
-                          <span>ID TRANSACCIÓN:</span>
-                          <span class="font-bold text-white">{confirmarPagoPaywayAction.value.paymentId}</span>
-                        </div>
-                        <div class="flex justify-between">
-                          <span>REF INTERNA:</span>
-                          <span class="font-bold text-white">{confirmarPagoPaywayAction.value.site_transaction_id}</span>
-                        </div>
-                        <div class="flex justify-between">
-                          <span>Nº TICKET:</span>
-                          <span class="font-bold text-white">{confirmarPagoPaywayAction.value.ticket}</span>
-                        </div>
-                        <div class="flex justify-between">
-                          <span>FECHA:</span>
-                          <span class="font-bold text-white">
-                            {new Date(confirmarPagoPaywayAction.value.date).toLocaleString("es-AR")}
-                          </span>
-                        </div>
-                        <div class="border-t border-white/5 pt-3 flex justify-between text-sm">
-                          <span class="font-bold text-slate-300">MONTO DEBITADO:</span>
-                          <span class="font-black text-emerald-400">
-                            ${confirmarPagoPaywayAction.value.amount.toLocaleString("es-AR")} ARS
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    <Button
-                      onClick$={onClose}
-                      look="secondary"
-                      class="w-full rounded-xl border border-white/5 bg-slate-800 py-3.5 font-bold tracking-wider text-white uppercase transition-all hover:bg-slate-700"
-                    >
-                      Entendido / Cerrar
-                    </Button>
-                  </div>
+                  )
                 )}
               </div>
             ) : (
@@ -860,9 +1123,8 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                     })}
                   </div>
 
-                  <Form
+                  <form
                     id="booking-form"
-                    action={(user ? userAction : guestAction) as any}
                     class="space-y-6"
                     preventdefault:submit
                     onSubmit$={$(async () => {
@@ -1424,13 +1686,21 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                           </label>
                           <div class="grid grid-cols-2 gap-2">
                             {[
-                              ...(settings?.paymentMethods || []).filter((pm: any) => pm.isActive && pm.id !== "COHEN" && (user || pm.id !== "CURRENT_ACCOUNT")),
+                              ...(settings?.paymentMethods || []).filter((pm: any) => {
+                                if (!pm.isActive) return false;
+                                if (pm.id === "COHEN") return false;
+                                if (!user && pm.id === "CURRENT_ACCOUNT") return false;
+                                if (isTransferMethod(pm.id, pm.name)) {
+                                  return !!(settings?.bankAlias && settings.bankAlias.trim() !== "");
+                                }
+                                return true;
+                              }),
                               ...(settings?.isPaywayActive ? [{ id: "PAYWAY", name: "Tarjeta (Payway)", isActive: true }] : [])
                             ].map((pm: any) => {
                                 const isSelected = paymentMethod.value === pm.id;
                                 const icon = pm.id.toLowerCase().includes("cash") || pm.id.toLowerCase().includes("efectivo")
                                   ? "💵"
-                                  : pm.id.toLowerCase().includes("transfer")
+                                  : isTransferMethod(pm.id, pm.name)
                                     ? "🏦"
                                     : "💳";
                                 return (
@@ -1479,49 +1749,72 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                                     <span class="text-lg mb-1">💵</span>
                                     <span class="text-xs font-black tracking-wider uppercase">Efectivo</span>
                                   </label>
-                                  <label
-                                    class={[
-                                      "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
-                                      paymentMethod.value === "TRANSFER"
-                                        ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
-                                        : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
-                                    ]}
-                                  >
-                                    <input
-                                      type="radio"
-                                      name="paymentMethod"
-                                      value="TRANSFER"
-                                      checked={paymentMethod.value === "TRANSFER"}
-                                      onInput$={() => (paymentMethod.value = "TRANSFER")}
-                                      class="hidden"
-                                    />
-                                    <span class="text-lg mb-1">🏦</span>
-                                    <span class="text-xs font-black tracking-wider uppercase">Transferencia</span>
-                                  </label>
+                                  {settings?.bankAlias && settings.bankAlias.trim() !== "" && (
+                                    <label
+                                      class={[
+                                        "flex flex-col items-center justify-center cursor-pointer rounded-2xl border p-3.5 text-center transition-all select-none active:scale-[0.98]",
+                                        paymentMethod.value === "TRANSFER"
+                                          ? "border-emerald-500 bg-emerald-500/10 text-white shadow-md shadow-emerald-950/20"
+                                          : "border-white/8 bg-slate-900/50 text-slate-400 hover:border-white/20 hover:bg-slate-800",
+                                      ]}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name="paymentMethod"
+                                        value="TRANSFER"
+                                        checked={paymentMethod.value === "TRANSFER"}
+                                        onInput$={() => (paymentMethod.value = "TRANSFER")}
+                                        class="hidden"
+                                      />
+                                      <span class="text-lg mb-1">🏦</span>
+                                      <span class="text-xs font-black tracking-wider uppercase">Transferencia</span>
+                                    </label>
+                                  )}
                                 </>
                               )}
                           </div>
                         </div>
 
-                        {/* Alias Display for Transfer - only for registered users */}
-                        {paymentMethod.value === "TRANSFER" && user && (
-                          <div class="space-y-2 rounded-xl border border-emerald-500/10 bg-emerald-500/5 p-4">
-                            <p class="text-xs text-emerald-200">
-                              Envía la transferencia al alias oficial del club:
-                            </p>
-                            <div class="rounded-lg border border-emerald-500/10 bg-slate-900/80 p-2.5 text-center text-base font-black text-emerald-400 select-all">
-                              {settings?.bankAlias || "No configurado"}
+                        {/* Alias Display for Transfer with copy utility */}
+                        {isTransfer(paymentMethod.value) && (
+                          <div class="space-y-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 animate-fade-in">
+                            <div class="flex items-center justify-between">
+                              <p class="text-xs font-semibold text-emerald-300">
+                                Alias de Transferencia Bancaria
+                              </p>
+                              {copiedSignal.value && (
+                                <span class="text-[10px] font-bold text-emerald-400 animate-pulse">
+                                  ¡Copiado!
+                                </span>
+                              )}
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <div class="flex-1 rounded-xl border border-emerald-500/10 bg-slate-950/60 py-2.5 px-3 font-mono text-sm font-black text-emerald-400 text-center select-all">
+                                {settings?.bankAlias || "No configurado"}
+                              </div>
+                              <button
+                                type="button"
+                                onClick$={() => copyAlias(settings?.bankAlias || "")}
+                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 transition-all hover:bg-emerald-500/20 active:scale-95"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  class="h-4.5 w-4.5"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  stroke-width="2.5"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                                  />
+                                </svg>
+                              </button>
                             </div>
                             <p class="text-[10px] leading-relaxed text-slate-400">
-                              Una vez realizada, puedes enviar el comprobante
-                              por WhatsApp al{" "}
-                              <a
-                                href={`https://wa.me/${settings?.whatsappNumber?.replace(/[^0-9]/g, "")}`}
-                                target="_blank"
-                                class="font-bold text-emerald-400 underline hover:text-emerald-300"
-                              >
-                                {settings?.whatsappNumber || "No configurado"}
-                              </a>
+                              Una vez confirmada la solicitud, deberás transferir a esta cuenta y enviar el comprobante.
                             </p>
                           </div>
                         )}
@@ -1814,7 +2107,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                       </>
                       )}
                     </div>
-                  </Form>
+                  </form>
                 </div>
 
                 {/* RIGHT COLUMN: GORGEOUS STICKY SUMMARY CARD (DESKTOP) */}

@@ -5,7 +5,7 @@ export type BookingSlotProps = {
   id: string;
   startTime: Date;
   endTime: Date;
-  status: "PENDING_APPROVAL" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
+  status: "PENDING_APPROVAL" | "PENDING_PAYMENT" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
   customerName: string;
   customerPhone?: string | null;
   pitchName?: string;
@@ -38,6 +38,8 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
   const statusColors = {
     PENDING_APPROVAL:
       "bg-amber-50 border-amber-200 text-amber-900 shadow-amber-900/5",
+    PENDING_PAYMENT:
+      "bg-orange-50 border-orange-200 text-orange-900 shadow-orange-900/5",
     CONFIRMED:
       "bg-emerald-50 border-emerald-200 text-emerald-900 shadow-emerald-900/5",
     CANCELLED: "bg-red-50 border-red-200 text-red-900 shadow-red-900/5",
@@ -50,6 +52,7 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
 
   const statusBadgeColors = {
     PENDING_APPROVAL: "bg-amber-100 text-amber-700",
+    PENDING_PAYMENT: "bg-orange-100 text-orange-700",
     CONFIRMED: "bg-emerald-100 text-emerald-700",
     CANCELLED: "bg-red-100 text-red-700",
     COMPLETED: "bg-slate-200 text-slate-700",
@@ -150,11 +153,13 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
       >
         {props.status === "PENDING_APPROVAL"
           ? "PEND"
-          : props.status === "CONFIRMED"
-            ? "CONF"
-            : props.status === "CANCELLED"
-              ? "CANC"
-              : "COMP"}
+          : props.status === "PENDING_PAYMENT"
+            ? "PAGO"
+            : props.status === "CONFIRMED"
+              ? "CONF"
+              : props.status === "CANCELLED"
+                ? "CANC"
+                : "COMP"}
       </div>
     </div>
   );

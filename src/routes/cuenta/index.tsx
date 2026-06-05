@@ -82,6 +82,12 @@ export default component$(() => {
             Pendiente
           </span>
         );
+      case "PENDING_PAYMENT":
+        return (
+          <span class="rounded-full border border-orange-500/20 bg-orange-500/15 px-3 py-1 text-xs font-bold tracking-wider text-orange-400 uppercase">
+            Pendiente Pago
+          </span>
+        );
       case "CANCELLED":
         return (
           <span class="rounded-full border border-red-500/20 bg-red-500/15 px-3 py-1 text-xs font-bold tracking-wider text-red-400 uppercase">

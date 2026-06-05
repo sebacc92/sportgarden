@@ -93,6 +93,7 @@ export const useSiteSettings = routeLoader$(async (requestEvent) => {
     clientId: requestEvent.env.get("MP_CLIENT_ID") || "",
     redirectUri: requestEvent.env.get("MP_REDIRECT_URI") || "",
     isConnected: !!credentials || !!settings?.mpAccessToken,
+    enableDisconnect: requestEvent.env.get("ENABLE_MP_DISCONNECT") === "true",
   };
 
   return { ...settings, mpEnv };
@@ -706,18 +707,20 @@ export const ClubProfileSettings = component$((props: { settings: any }) => {
                     Vinculada el: {mpCredentials.value.createdAt}
                   </p>
                 )}
-                <button
-                  type="button"
-                  onClick$={async () => {
-                    if (confirm("¿Estás seguro de que deseas desconectar la cuenta de Mercado Pago?")) {
-                      await disconnectAction.submit({});
-                    }
-                  }}
-                  disabled={disconnectAction.isRunning}
-                  class="mt-4 block w-full text-center text-xs font-bold text-red-500 hover:text-red-700 transition-colors focus:outline-none disabled:opacity-50 active:scale-95"
-                >
-                  {disconnectAction.isRunning ? "Desconectando..." : "Desconectar cuenta"}
-                </button>
+                {props.settings.mpEnv?.enableDisconnect && (
+                  <button
+                    type="button"
+                    onClick$={async () => {
+                      if (confirm("¿Estás seguro de que deseas desconectar la cuenta de Mercado Pago?")) {
+                        await disconnectAction.submit({});
+                      }
+                    }}
+                    disabled={disconnectAction.isRunning}
+                    class="mt-4 block w-full text-center text-xs font-bold text-red-500 hover:text-red-700 transition-colors focus:outline-none disabled:opacity-50 active:scale-95"
+                  >
+                    {disconnectAction.isRunning ? "Desconectando..." : "Desconectar cuenta"}
+                  </button>
+                )}
               </div>
             ) : (
               <div class="space-y-4 py-2">

@@ -258,12 +258,28 @@ export const useUserBookingAction = routeAction$(
       holidays,
     );
 
-    // Calculate paid amount based on preference
     let amountToCharge = 0;
     let paymentMethod = "CASH";
-    let bookingStatus: "CONFIRMED" | "PENDING_APPROVAL" = "CONFIRMED";
+    let bookingStatus: "CONFIRMED" | "PENDING_APPROVAL" | "PENDING_PAYMENT" = "CONFIRMED";
 
-    if (data.paymentOption === "SENA") {
+    const isTransfer = (method: string | undefined | null) => {
+      if (!method) return false;
+      const m = method.toUpperCase();
+      return m === "TRANSFER" || m === "TRANSFERENCIA" || m.includes("TRANSFER") || m.includes("BANK");
+    };
+
+    if (data.paymentMethod && isTransfer(data.paymentMethod)) {
+      paymentMethod = data.paymentMethod;
+      bookingStatus = "PENDING_PAYMENT";
+      if (data.paymentOption === "SENA") {
+        amountToCharge =
+          pitch.depositType === "FIXED"
+            ? pitch.depositAmount
+            : (pitch.depositAmount / 100) * totalPrice;
+      } else {
+        amountToCharge = totalPrice;
+      }
+    } else if (data.paymentOption === "SENA") {
       amountToCharge =
         pitch.depositType === "FIXED"
           ? pitch.depositAmount

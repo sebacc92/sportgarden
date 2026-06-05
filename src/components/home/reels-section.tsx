@@ -36,7 +36,7 @@ export const ReelsSection = component$<ReelsSectionProps>(({ reels }) => {
         </div>
 
         {/* Dynamic Reels Grid */}
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10 lg:gap-12 justify-center justify-items-center w-full">
+        <div class="flex flex-wrap justify-center gap-10 lg:gap-12 w-full">
           {reels.map((reel) => (
             <div key={reel.id} class="relative w-full max-w-[320px]">
               <div

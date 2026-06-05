@@ -60,6 +60,9 @@ export const useClientsData = routeLoader$(async (requestEvent) => {
     orderBy: [desc(users.createdAt)],
     limit: limitNum,
     offset: offsetNum,
+    with: {
+      accounts: true,
+    },
   });
 
   const countResult = await db
@@ -174,6 +177,9 @@ export default component$(() => {
                 <th class="px-6 py-4 text-xs font-black tracking-widest whitespace-nowrap text-slate-400 uppercase">
                   Tipo
                 </th>
+                <th class="px-6 py-4 text-xs font-black tracking-widest whitespace-nowrap text-slate-400 uppercase">
+                  Registro
+                </th>
                 <th class="px-6 py-4 text-right text-xs font-black tracking-widest whitespace-nowrap text-slate-400 uppercase">
                   Fecha Registro
                 </th>
@@ -211,6 +217,21 @@ export default component$(() => {
                           : "Invitado"}
                       </span>
                     </td>
+                    <td class="px-6 py-4 text-sm">
+                      {client.role === "REGISTERED" ? (
+                        (client as any).accounts?.some((acc: any) => acc.provider === "google") ? (
+                          <span class="inline-flex items-center rounded bg-rose-50 border border-rose-200 px-2 py-0.5 text-[10px] font-black tracking-widest uppercase text-rose-700">
+                            Google
+                          </span>
+                        ) : (
+                          <span class="inline-flex items-center rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-black tracking-widest uppercase text-emerald-700">
+                            Manual
+                          </span>
+                        )
+                      ) : (
+                        <span class="text-xs text-slate-400">-</span>
+                      )}
+                    </td>
                     <td class="px-6 py-4 text-right text-sm font-medium text-slate-500">
                       {client.createdAt
                         ? new Date(client.createdAt).toLocaleDateString("es-AR")
@@ -221,7 +242,7 @@ export default component$(() => {
               ) : (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={7}
                     class="px-6 py-12 text-center font-medium text-slate-400"
                   >
                     No se encontraron clientes.
