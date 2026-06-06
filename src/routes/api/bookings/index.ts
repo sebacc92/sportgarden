@@ -36,6 +36,7 @@ import { bookings, guestRequests, pitches, mercadoPagoCredentials, siteSettings 
 import { isPitchAvailable } from "~/utils/availability";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { processPaywayPayment } from "~/lib/payway";
+import { toBALocalISOString } from "~/routes/admin/calendar/utils";
 
 const parseDateTime = (dateStr: string, timeStr: string) => {
   return new Date(`${dateStr}T${timeStr}:00-03:00`);
@@ -167,8 +168,8 @@ export const useGuestBookingAction = routeAction$(
       snakize({
         id: bookingId,
         pitchId: data.pitchId,
-        startTime: startTimeDate.toISOString(),
-        endTime: endTimeDate.toISOString(),
+        startTime: toBALocalISOString(startTimeDate),
+        endTime: toBALocalISOString(endTimeDate),
         status: "PENDING_APPROVAL",
         totalPrice,
         paidAmount: 0,
@@ -405,8 +406,8 @@ export const useUserBookingAction = routeAction$(
         id: bookingId,
         userId,
         pitchId: data.pitchId,
-        startTime: startTimeDate.toISOString(),
-        endTime: endTimeDate.toISOString(),
+        startTime: toBALocalISOString(startTimeDate),
+        endTime: toBALocalISOString(endTimeDate),
         status: bookingStatus,
         totalPrice,
         paidAmount: 0,

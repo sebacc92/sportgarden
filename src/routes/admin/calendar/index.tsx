@@ -1276,7 +1276,12 @@ export default component$(() => {
   useVisibleTask$(({ cleanup }) => {
     const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseAnonKey) return;
+    
+    console.log("[Realtime SDK] Initializing realtime subscription...");
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error("[Realtime SDK] Missing PUBLIC_SUPABASE_URL or PUBLIC_SUPABASE_ANON_KEY env variables on the client!");
+      return;
+    }
 
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -1344,7 +1349,7 @@ export default component$(() => {
           table: "bookings",
         },
         async (payload) => {
-          console.log("[Realtime SDK]", payload);
+          console.log("[Realtime SDK] Event received:", payload);
 
           if (payload.eventType === "INSERT") {
             if (isSoundEnabled.value) {
@@ -1397,7 +1402,9 @@ export default component$(() => {
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log("[Realtime SDK] Subscription status:", status, err || "");
+      });
 
     cleanup(() => {
       supabaseClient.removeChannel(channel);
