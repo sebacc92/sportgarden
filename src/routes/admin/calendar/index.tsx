@@ -718,6 +718,37 @@ export const useConfirmAttendanceAction = routeAction$(
     bookingId: z.string(),
   }),
 );
+export const fetchRealtimeBookingDetails = server$(async function (bookingId: string, userId: string | null) {
+  const adminId = this.cookie.get("auth_session")?.value;
+  if (!adminId) {
+    throw new Error("Unauthorized");
+  }
+  const db = getDB(this);
+
+  let user = null;
+  if (userId) {
+    const { data: userData } = await db
+      .from(users)
+      .select("id, name, phone")
+      .eq("id", userId)
+      .maybeSingle();
+    if (userData) {
+      user = camelize<any>(userData);
+    }
+  }
+
+  let guest = null;
+  const { data: guestData } = await db
+    .from(guestRequests)
+    .select("id, booking_id, name, phone")
+    .eq("booking_id", bookingId)
+    .maybeSingle();
+  if (guestData) {
+    guest = camelize<any>(guestData);
+  }
+
+  return { user, guest };
+});
 
 export const useCalendarData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
@@ -1305,38 +1336,13 @@ export default component$(() => {
         updatedAt: raw.updated_at,
       };
 
-      let user = null;
-      if (b.userId) {
-        const { data: userData } = await supabaseClient
-          .from("users")
-          .select("id, name, phone")
-          .eq("id", b.userId)
-          .maybeSingle();
-        if (userData) {
-          user = {
-            id: userData.id,
-            name: userData.name,
-            phone: userData.phone,
-          };
-        }
+      try {
+        const details = await fetchRealtimeBookingDetails(b.id, b.userId);
+        return { booking: b, user: details.user, guest: details.guest };
+      } catch (err) {
+        console.error("[Realtime SDK] Failed to fetch booking details:", err);
+        return { booking: b, user: null, guest: null };
       }
-
-      let guest = null;
-      const { data: guestData } = await supabaseClient
-        .from("guest_requests")
-        .select("id, booking_id, name, phone")
-        .eq("booking_id", b.id)
-        .maybeSingle();
-      if (guestData) {
-        guest = {
-          id: guestData.id,
-          bookingId: guestData.booking_id,
-          name: guestData.name,
-          phone: guestData.phone,
-        };
-      }
-
-      return { booking: b, user, guest };
     };
 
     const channel = supabaseClient
