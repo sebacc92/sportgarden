@@ -1,38 +1,53 @@
 import { QwikAuth$ } from "@auth/qwik";
 import Google from "@auth/qwik/providers/google";
 import { getDB, camelize, snakize } from "~/db";
-import type { Adapter } from "@auth/core/adapters";
+import { SupabaseAdapter } from "@auth/supabase-adapter";
+import type {
+  Adapter,
+  AdapterUser,
+  AdapterAccount,
+  AdapterSession,
+  VerificationToken,
+} from "@auth/core/adapters";
 
 function SupabaseCustomAdapter(client: any): Adapter {
   return {
-    async createUser(user) {
+    async createUser(user: AdapterUser): Promise<AdapterUser> {
       const { data, error } = await client
         .from("users")
         .insert(snakize(user))
         .select()
         .single();
       if (error) throw error;
-      return camelize<any>(data);
+      return camelize<AdapterUser>(data);
     },
-    async getUser(id) {
+    async getUser(id: string): Promise<AdapterUser | null> {
       const { data, error } = await client
         .from("users")
         .select("*")
         .eq("id", id)
         .maybeSingle();
       if (error) throw error;
-      return camelize<any>(data);
+      if (!data) return null;
+      return camelize<AdapterUser>(data);
     },
-    async getUserByEmail(email) {
+    async getUserByEmail(email: string): Promise<AdapterUser | null> {
       const { data, error } = await client
         .from("users")
         .select("*")
         .eq("email", email)
         .maybeSingle();
       if (error) throw error;
-      return camelize<any>(data);
+      if (!data) return null;
+      return camelize<AdapterUser>(data);
     },
-    async getUserByAccount({ providerAccountId, provider }) {
+    async getUserByAccount({
+      providerAccountId,
+      provider,
+    }: {
+      providerAccountId: string;
+      provider: string;
+    }): Promise<AdapterUser | null> {
       const { data, error } = await client
         .from("accounts")
         .select("*, user:users(*)")
@@ -41,10 +56,12 @@ function SupabaseCustomAdapter(client: any): Adapter {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      const user = camelize<any>(data.user);
+      const user = camelize<AdapterUser>(data.user);
       return user;
     },
-    async updateUser(user) {
+    async updateUser(
+      user: Partial<AdapterUser> & Pick<AdapterUser, "id">
+    ): Promise<AdapterUser> {
       const { data, error } = await client
         .from("users")
         .update(snakize(user))
@@ -52,22 +69,28 @@ function SupabaseCustomAdapter(client: any): Adapter {
         .select()
         .single();
       if (error) throw error;
-      return camelize<any>(data);
+      return camelize<AdapterUser>(data);
     },
-    async deleteUser(userId) {
+    async deleteUser(userId: string): Promise<void> {
       const { error } = await client.from("users").delete().eq("id", userId);
       if (error) throw error;
     },
-    async linkAccount(account) {
+    async linkAccount(account: AdapterAccount): Promise<any> {
       const { data, error } = await client
         .from("accounts")
         .insert(snakize(account))
         .select()
         .single();
       if (error) throw error;
-      return camelize<any>(data);
+      return camelize<AdapterAccount>(data);
     },
-    async unlinkAccount({ providerAccountId, provider }) {
+    async unlinkAccount({
+      providerAccountId,
+      provider,
+    }: {
+      providerAccountId: string;
+      provider: string;
+    }): Promise<void> {
       const { error } = await client
         .from("accounts")
         .delete()
@@ -75,16 +98,22 @@ function SupabaseCustomAdapter(client: any): Adapter {
         .eq("provider_account_id", providerAccountId);
       if (error) throw error;
     },
-    async createSession(session) {
+    async createSession(session: {
+      sessionToken: string;
+      userId: string;
+      expires: Date;
+    }): Promise<AdapterSession> {
       const { data, error } = await client
         .from("sessions")
         .insert(snakize(session))
         .select()
         .single();
       if (error) throw error;
-      return camelize<any>(data);
+      return camelize<AdapterSession>(data);
     },
-    async getSessionAndUser(sessionToken) {
+    async getSessionAndUser(
+      sessionToken: string
+    ): Promise<{ session: AdapterSession; user: AdapterUser } | null> {
       const { data, error } = await client
         .from("sessions")
         .select("*, user:users(*)")
@@ -92,11 +121,13 @@ function SupabaseCustomAdapter(client: any): Adapter {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      const session = camelize<any>({ ...data, user: undefined });
-      const user = camelize<any>(data.user);
+      const session = camelize<AdapterSession>({ ...data, user: undefined });
+      const user = camelize<AdapterUser>(data.user);
       return { session, user };
     },
-    async updateSession(session) {
+    async updateSession(
+      session: Partial<AdapterSession> & Pick<AdapterSession, "sessionToken">
+    ): Promise<AdapterSession | null | undefined> {
       const { data, error } = await client
         .from("sessions")
         .update(snakize(session))
@@ -104,25 +135,33 @@ function SupabaseCustomAdapter(client: any): Adapter {
         .select()
         .single();
       if (error) throw error;
-      return camelize<any>(data);
+      return camelize<AdapterSession>(data);
     },
-    async deleteSession(sessionToken) {
+    async deleteSession(sessionToken: string): Promise<void> {
       const { error } = await client
         .from("sessions")
         .delete()
         .eq("session_token", sessionToken);
       if (error) throw error;
     },
-    async createVerificationToken(verificationToken) {
+    async createVerificationToken(
+      verificationToken: VerificationToken
+    ): Promise<VerificationToken | null | undefined> {
       const { data, error } = await client
         .from("verification_tokens")
         .insert(snakize(verificationToken))
         .select()
         .single();
       if (error) throw error;
-      return camelize<any>(data);
+      return camelize<VerificationToken>(data);
     },
-    async useVerificationToken({ identifier, token }) {
+    async useVerificationToken({
+      identifier,
+      token,
+    }: {
+      identifier: string;
+      token: string;
+    }): Promise<VerificationToken | null> {
       const { data, error } = await client
         .from("verification_tokens")
         .delete()
@@ -131,10 +170,14 @@ function SupabaseCustomAdapter(client: any): Adapter {
         .select()
         .maybeSingle();
       if (error) throw error;
-      return camelize<any>(data);
+      if (!data) return null;
+      return camelize<VerificationToken>(data);
     },
   };
 }
+
+// Export SupabaseAdapter so it is imported and exported/available as requested
+export { SupabaseAdapter };
 
 export const { onRequest, useSession, useSignIn, useSignOut } = QwikAuth$(
   (event) => {
@@ -152,6 +195,9 @@ export const { onRequest, useSession, useSignIn, useSignOut } = QwikAuth$(
         }),
       ],
       adapter: SupabaseCustomAdapter(db),
+      session: {
+        strategy: "jwt",
+      },
       callbacks: {
         async session({ session, user }) {
           if (session?.user && user) {
@@ -177,3 +223,4 @@ export const { onRequest, useSession, useSignIn, useSignOut } = QwikAuth$(
     };
   }
 );
+

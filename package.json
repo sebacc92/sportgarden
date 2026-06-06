@@ -58,6 +58,7 @@
     "vite-tsconfig-paths": "6.1.1"
   },
   "dependencies": {
+    "@auth/supabase-adapter": "^1.11.2",
     "@supabase/supabase-js": "^2.107.0",
     "@vercel/blob": "^2.3.3",
     "bcryptjs": "^3.0.3",
