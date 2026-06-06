@@ -1,5 +1,6 @@
 import { bookings, pitchOverlaps, siteSettings } from "~/db/schema";
 import { camelize } from "~/db";
+import { getBADayOfWeek, getBAHoursAndMinutes } from "~/routes/admin/calendar/utils";
 
 /**
  * Checks if a pitch (and its overlapping counterparts) is available for a given time range.
@@ -74,11 +75,13 @@ export async function isPitchAvailable(
   let hasSchoolConflict = false;
   if (settings && settings.schoolCategories) {
     const schoolCategories = settings.schoolCategories as any[];
-    const reqDay = startTime.getDay(); // 0-6
+    const reqDay = getBADayOfWeek(startTime); // 0-6 in Buenos Aires time
     // Time to string (e.g., "15:30")
     const pad = (n: number) => n.toString().padStart(2, "0");
-    const reqStartStr = `${pad(startTime.getHours())}:${pad(startTime.getMinutes())}`;
-    const reqEndStr = `${pad(endTime.getHours())}:${pad(endTime.getMinutes())}`;
+    const startBA = getBAHoursAndMinutes(startTime);
+    const endBA = getBAHoursAndMinutes(endTime);
+    const reqStartStr = `${pad(startBA.hour)}:${pad(startBA.minute)}`;
+    const reqEndStr = `${pad(endBA.hour)}:${pad(endBA.minute)}`;
 
     for (const cat of schoolCategories) {
       if (cat.schedules) {

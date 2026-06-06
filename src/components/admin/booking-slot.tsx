@@ -1,10 +1,11 @@
 import { component$, type PropFunction } from "@builder.io/qwik";
 import { cn } from "@qwik-ui/utils";
+import { getBAHoursAndMinutes } from "~/routes/admin/calendar/utils";
 
 export type BookingSlotProps = {
   id: string;
-  startTime: Date;
-  endTime: Date;
+  startTime: Date | string;
+  endTime: Date | string;
   status: "PENDING_APPROVAL" | "PENDING_PAYMENT" | "CONFIRMED" | "CANCELLED" | "COMPLETED";
   customerName: string;
   customerPhone?: string | null;
@@ -17,9 +18,10 @@ export type BookingSlotProps = {
 };
 
 export const BookingSlot = component$<BookingSlotProps>((props) => {
-  const startHour =
-    props.startTime.getHours() + props.startTime.getMinutes() / 60;
-  const endHour = props.endTime.getHours() + props.endTime.getMinutes() / 60;
+  const startBA = getBAHoursAndMinutes(props.startTime);
+  const endBA = getBAHoursAndMinutes(props.endTime);
+  const startHour = startBA.hour + startBA.minute / 60;
+  const endHour = endBA.hour + endBA.minute / 60;
 
   const top = (startHour - props.calendarStartHour) * props.pixelsPerHour;
   const height = (endHour - startHour) * props.pixelsPerHour;
@@ -124,13 +126,15 @@ export const BookingSlot = component$<BookingSlotProps>((props) => {
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
           </svg>
-          {props.startTime.toLocaleTimeString("es-AR", {
+          {new Date(props.startTime).toLocaleTimeString("es-AR", {
+            timeZone: "America/Argentina/Buenos_Aires",
             hour: "2-digit",
             minute: "2-digit",
             hour12: false,
           })}{" "}
           -
-          {props.endTime.toLocaleTimeString("es-AR", {
+          {new Date(props.endTime).toLocaleTimeString("es-AR", {
+            timeZone: "America/Argentina/Buenos_Aires",
             hour: "2-digit",
             minute: "2-digit",
             hour12: false,

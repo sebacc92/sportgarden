@@ -118,7 +118,7 @@ export const BookingListView = component$<BookingListViewProps>(
                           guest?.phone || user?.phone || "—";
                         const start = new Date(booking.startTime);
                         const end = new Date(booking.endTime);
-                        const timeStr = `${start.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })} — ${end.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+                        const timeStr = `${start.toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit", hour12: false })} — ${end.toLocaleTimeString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit", hour12: false })}`;
                         const durationH =
                           (end.getTime() - start.getTime()) / 3600000;
                         const rowBg = STATUS_ROW[booking.status] || "";

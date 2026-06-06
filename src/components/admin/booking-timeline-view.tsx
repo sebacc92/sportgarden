@@ -7,6 +7,7 @@ import {
   type PropFunction,
 } from "@builder.io/qwik";
 import { cn } from "@qwik-ui/utils";
+import { getBAHoursAndMinutes } from "~/routes/admin/calendar/utils";
 
 type Pitch = {
   id: string;
@@ -199,7 +200,8 @@ export const BookingTimelineView = component$<Props>(
     useVisibleTask$(({ cleanup }) => {
       const compute = () => {
         const now = new Date();
-        const h = now.getHours() + now.getMinutes() / 60;
+        const { hour, minute } = getBAHoursAndMinutes(now);
+        const h = hour + minute / 60;
         if (h < startHour || h > endHour) {
           currentTimePx.value = null;
           return;
@@ -267,6 +269,7 @@ export const BookingTimelineView = component$<Props>(
 
     const fmt = (d: Date) =>
       new Date(d).toLocaleTimeString("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
@@ -565,8 +568,10 @@ export const BookingTimelineView = component$<Props>(
                             return affectingBookings.map(({ booking }) => {
                               const s = new Date(booking.startTime);
                               const e = new Date(booking.endTime);
-                              const bStart = s.getHours() * 60 + s.getMinutes();
-                              const bEnd = e.getHours() * 60 + e.getMinutes();
+                              const sBA = getBAHoursAndMinutes(s);
+                              const eBA = getBAHoursAndMinutes(e);
+                              const bStart = sBA.hour * 60 + sBA.minute;
+                              const bEnd = eBA.hour * 60 + eBA.minute;
                               const timelineStart = startHour * 60;
                               const left =
                                 ((bStart - timelineStart) / slotMinutes) *
@@ -622,9 +627,10 @@ export const BookingTimelineView = component$<Props>(
                           {pitchBookings.map(({ booking, user, guest }) => {
                             const s = new Date(booking.startTime);
                             const e = new Date(booking.endTime);
-
-                            const bStart = s.getHours() * 60 + s.getMinutes();
-                            const bEnd = e.getHours() * 60 + e.getMinutes();
+                            const sBA = getBAHoursAndMinutes(s);
+                            const eBA = getBAHoursAndMinutes(e);
+                            const bStart = sBA.hour * 60 + sBA.minute;
+                            const bEnd = eBA.hour * 60 + eBA.minute;
 
                             const timelineStart = startHour * 60;
                             const left =

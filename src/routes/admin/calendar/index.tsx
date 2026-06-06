@@ -13,8 +13,10 @@ import {
   zod$,
   z,
   useNavigate,
+  useLocation,
   server$,
 } from "@builder.io/qwik-city";
+import { createClient } from "@supabase/supabase-js";
 import { getDB, camelize } from "~/db";
 import {
   bookings,
@@ -49,6 +51,9 @@ import {
   getStartOfMonth,
   getEndOfMonth,
   getBAFormatDate,
+  getBADayOfWeek,
+  getBAHoursAndMinutes,
+  playNotificationBeep,
 } from "./utils";
 
 export const useUpdateBookingStatusAction = routeAction$(
@@ -386,7 +391,7 @@ export const useCreateAdminBookingAction = routeAction$(
       // Validate operating hours
       const holidaysList = (settings?.holidays as any[]) || [];
       const isHoliday = holidaysList.some((h: any) => h.date === item.date);
-      const dayOfWeek = isHoliday ? 7 : startDateTime.getDay();
+      const dayOfWeek = isHoliday ? 7 : getBADayOfWeek(startDateTime);
       const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
 
       if (!schedule || schedule.isClosed) {
@@ -395,9 +400,10 @@ export const useCreateAdminBookingAction = routeAction$(
         );
       }
 
-      const startMins =
-        startDateTime.getHours() * 60 + startDateTime.getMinutes();
-      let endMins = endDateTime.getHours() * 60 + endDateTime.getMinutes();
+      const startBA = getBAHoursAndMinutes(startDateTime);
+      const endBA = getBAHoursAndMinutes(endDateTime);
+      const startMins = startBA.hour * 60 + startBA.minute;
+      let endMins = endBA.hour * 60 + endBA.minute;
       if (endMins === 0 && startMins > 0) endMins = 24 * 60;
 
       const [openH, openM] = schedule.openTime
@@ -886,7 +892,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     const schoolCategories = settings.schoolCategories as any[];
     const currentDate = new Date(startDate);
     while (currentDate <= endDate) {
-      const dayOfWeek = currentDate.getDay();
+      const dayOfWeek = getBADayOfWeek(currentDate);
       const dateStr = getBAFormatDate(currentDate);
 
       for (const cat of schoolCategories) {
@@ -901,15 +907,9 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
               if (viewStr === "month") {
                 monthCounts[dateStr] = (monthCounts[dateStr] || 0) + 1;
               } else {
-                const [sH, sM] = sched.startTime.split(":");
-                const [eH, eM] = sched.endTime.split(":");
-
                 // Keep BA offset semantics
-                const startDateTime = new Date(`${dateStr}T00:00:00-03:00`);
-                startDateTime.setHours(Number(sH), Number(sM), 0, 0);
-
-                const endDateTime = new Date(`${dateStr}T00:00:00-03:00`);
-                endDateTime.setHours(Number(eH), Number(eM), 0, 0);
+                const startDateTime = new Date(`${dateStr}T${sched.startTime.padStart(5, "0")}:00-03:00`);
+                const endDateTime = new Date(`${dateStr}T${sched.endTime.padStart(5, "0")}:00-03:00`);
 
                 dailyBookings.push({
                   booking: {
@@ -1059,6 +1059,8 @@ export default component$(() => {
   const addPaymentAction = useAddBookingPaymentAction();
   const confirmAttendanceAction = useConfirmAttendanceAction();
   const nav = useNavigate();
+  const loc = useLocation();
+  const isSoundEnabled = useSignal(false);
 
   useStyles$(`
     @media print {
@@ -1080,9 +1082,6 @@ export default component$(() => {
   const layoutMode = useSignal<"timeline" | "list">("timeline");
 
   const clubSettings = calendarData.value.settings;
-  const selectedDateBA = new Date(
-    calendarData.value.selectedDateStr + "T12:00:00",
-  );
 
   const operatingHours = (() => {
     try {
@@ -1099,7 +1098,7 @@ export default component$(() => {
   const isHoliday = (clubSettings as any)?.holidays?.some(
     (h: any) => h.date === calendarData.value.selectedDateStr,
   );
-  const dayOfWeek = isHoliday ? 7 : selectedDateBA.getDay();
+  const dayOfWeek = isHoliday ? 7 : getBADayOfWeek(calendarData.value.selectedDateStr);
 
   const todaySchedule = operatingHours.find((h: any) => h.day === dayOfWeek);
 
@@ -1244,6 +1243,37 @@ export default component$(() => {
     }
   });
 
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ cleanup }) => {
+    const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) return;
+
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+    const channel = supabaseClient
+      .channel("bookings-realtime-admin")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "bookings",
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT" && isSoundEnabled.value) {
+            playNotificationBeep();
+          }
+          nav(loc.url.pathname + loc.url.search, { replaceState: true });
+        }
+      )
+      .subscribe();
+
+    cleanup(() => {
+      supabaseClient.removeChannel(channel);
+    });
+  });
+
   const handleNewBooking = $(() => {
     adminFormPitchId.value = "";
     adminFormDate.value = calendarData.value.selectedDateStr;
@@ -1311,6 +1341,7 @@ export default component$(() => {
         layoutMode={layoutMode}
         isCreateModalOpen={isCreateModalOpen}
         isPrintModalOpen={isPrintModalOpen}
+        isSoundEnabled={isSoundEnabled}
         onViewChange$={handleViewChange}
         onNewBooking$={handleNewBooking}
       />
