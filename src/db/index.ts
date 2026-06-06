@@ -1,19 +1,22 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { RequestEventBase } from "@builder.io/qwik-city";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-import * as schema from "./schema";
 
-let globalClient: ReturnType<typeof postgres> | undefined;
-let globalDb: ReturnType<typeof drizzle<typeof schema>> | undefined;
+let globalSupabase: SupabaseClient | undefined;
 
-export function getDB(requestEvent: RequestEventBase) {
-  const connectionString =
-    requestEvent.env.get("DATABASE_URL") ||
-    (typeof process !== "undefined" ? process.env.DATABASE_URL : undefined);
+export function getDB(requestEvent: RequestEventBase): SupabaseClient {
+  const url =
+    requestEvent.env.get("SUPABASE_URL") ||
+    (typeof process !== "undefined" ? process.env.SUPABASE_URL : undefined);
+  const key =
+    requestEvent.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+    requestEvent.env.get("SUPABASE_ANON_KEY") ||
+    (typeof process !== "undefined"
+      ? process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
+      : undefined);
 
-  if (!connectionString) {
+  if (!url || !key) {
     console.warn(
-      "WARNING: DATABASE_URL is not defined in getDB. Using dummy connection string for build-time / SSG compatibility."
+      "WARNING: SUPABASE_URL or SUPABASE_KEY (SERVICE_ROLE/ANON) is not defined. Returning mock client for build-time / SSG compatibility."
     );
     return new Proxy(
       {},
@@ -21,39 +24,56 @@ export function getDB(requestEvent: RequestEventBase) {
         get() {
           return () => {
             throw new Error(
-              "DATABASE_URL is not defined. Cannot execute queries on mock database."
+              "Supabase URL or Key is not defined. Cannot execute queries."
             );
           };
         },
       }
-    ) as ReturnType<typeof drizzle<typeof schema>>;
+    ) as SupabaseClient;
   }
 
-  if (!globalDb) {
-    globalClient = postgres(connectionString, { prepare: false });
-    globalDb = drizzle(globalClient, { schema });
+  if (!globalSupabase) {
+    globalSupabase = createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
   }
 
-  return globalDb;
+  return globalSupabase;
 }
 
-// Export global db for scripts/migrations compatibility (using lazy proxy to prevent top-level execution)
-let lazyDb: any = null;
-export const db = new Proxy(
-  {},
-  {
-    get(target, prop) {
-      if (!lazyDb) {
-        const connectionString =
-          typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
-        if (!connectionString) {
-          throw new Error("DATABASE_URL environment variable is not defined");
-        }
-        lazyDb = drizzle(postgres(connectionString, { prepare: false }), {
-          schema,
-        });
-      }
-      return (lazyDb as any)[prop];
-    },
+export function camelize<T = any>(obj: any): T {
+  if (!obj) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map((item) => camelize(item)) as any;
   }
-) as ReturnType<typeof drizzle<typeof schema>>;
+  if (typeof obj === "object" && !(obj instanceof Date)) {
+    const n: any = {};
+    for (const k of Object.keys(obj)) {
+      const camelKey = k.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+      n[camelKey] = obj[k];
+    }
+    return n as T;
+  }
+  return obj as T;
+}
+
+export function snakize<T = any>(obj: any): T {
+  if (!obj) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map((item) => snakize(item)) as any;
+  }
+  if (typeof obj === "object" && !(obj instanceof Date)) {
+    const n: any = {};
+    for (const k of Object.keys(obj)) {
+      const snakeKey = k.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+      n[snakeKey] = obj[k];
+    }
+    return n as T;
+  }
+  return obj as T;
+}
+
+export { getDB as getSupabase };

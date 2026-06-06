@@ -16,7 +16,7 @@ import {
   useLocation,
   useNavigate,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import {
   students,
   siteSettings,
@@ -24,8 +24,8 @@ import {
   studentPayments,
   cashRegisters,
   cashMovements,
+  pitches,
 } from "~/db/schema";
-import { desc, eq, count } from "drizzle-orm";
 import { Button, Modal } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import {
@@ -43,24 +43,46 @@ export const useStudentsData = routeLoader$(async (event) => {
   const offset = (page - 1) * limit;
 
   // Get total count
-  const allStudentsCount = await db.select({ value: count() }).from(students);
-  const totalCount = allStudentsCount[0].value;
+  const { count: totalCount, error: countErr } = await db
+    .from(students)
+    .select("*", { count: "exact", head: true });
 
-  const paginatedStudents = await db.query.students.findMany({
-    orderBy: [desc(students.createdAt)],
-    limit,
-    offset,
-    with: {
-      subscriptions: {
-        orderBy: [desc(studentSubscriptions.createdAt)],
-        limit: 1,
-      },
-    },
-  });
+  if (countErr) throw countErr;
 
-  const settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data: studentsData, error: studentsErr } = await db
+    .from(students)
+    .select("*")
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (studentsErr) throw studentsErr;
+  const camelStudents = camelize<any[]>(studentsData || []);
+
+  if (camelStudents.length > 0) {
+    const studentIds = camelStudents.map((s) => s.id);
+    const { data: subsData, error: subsErr } = await db
+      .from(studentSubscriptions)
+      .select("*")
+      .in("student_id", studentIds)
+      .order("created_at", { ascending: false });
+
+    if (subsErr) throw subsErr;
+    const camelSubs = camelize<any[]>(subsData || []);
+
+    // For each student, assign their subscriptions (only the most recent one)
+    camelStudents.forEach((s) => {
+      s.subscriptions = camelSubs.filter((sub) => sub.studentId === s.id).slice(0, 1);
+    });
+  }
+
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) throw settingsErr;
+  const settings = camelize<any>(settingsData);
 
   const categories = (settings?.schoolCategories as any[]) || [];
 
@@ -70,15 +92,19 @@ export const useStudentsData = routeLoader$(async (event) => {
     isActive: boolean;
   }[];
 
-  const pitches = await db.query.pitches.findMany({
-    where: (p) => eq(p.isActive, true),
-    orderBy: (p) => [p.name],
-  });
+  const { data: pitchesData, error: pitchesErr } = await db
+    .from(pitches)
+    .select("*")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (pitchesErr) throw pitchesErr;
+  const camelPitches = camelize<any[]>(pitchesData || []);
 
   return {
-    students: paginatedStudents,
+    students: camelStudents,
     categories,
-    pitches,
+    pitches: camelPitches,
     paymentMethods:
       paymentMethods.length > 0
         ? paymentMethods
@@ -89,8 +115,8 @@ export const useStudentsData = routeLoader$(async (event) => {
             { id: "MERCADO_PAGO", name: "Mercado Pago", isActive: true },
           ],
     pagination: {
-      totalCount,
-      totalPages: Math.ceil(totalCount / limit),
+      totalCount: totalCount || 0,
+      totalPages: Math.ceil((totalCount || 0) / limit),
       currentPage: page,
     },
   };
@@ -100,16 +126,26 @@ export const useSeedStudentsAction = routeAction$(async (_, event) => {
   const db = getDB(event);
 
   // Get categories
-  const settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) throw settingsErr;
+  const settings = camelize<any>(settingsData);
 
   const categories = (settings?.schoolCategories as any[]) || [];
   if (categories.length === 0)
     return { success: false, message: "No hay categorías creadas." };
 
   // Delete current students
-  await db.delete(students);
+  const { error: delErr } = await db
+    .from(students)
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+
+  if (delErr) throw delErr;
 
   const exampleNames = [
     "Enzo Fernandez",
@@ -134,23 +170,29 @@ export const useSeedStudentsAction = routeAction$(async (_, event) => {
     "Alexis Mac Allister",
   ];
 
-  for (let i = 0; i < exampleNames.length; i++) {
+  const insertPayloads = exampleNames.map((name, i) => {
     const category = categories[i % categories.length];
-    await db.insert(students).values({
+    return {
       id: crypto.randomUUID(),
-      name: exampleNames[i],
-      guardianName: "Tutor " + (i + 1),
-      guardianPhone: "11" + Math.floor(10000000 + Math.random() * 90000000),
+      name,
+      guardian_name: "Tutor " + (i + 1),
+      guardian_phone: "11" + Math.floor(10000000 + Math.random() * 90000000),
       category: category.name,
-      monthlyFee: 15000 + Math.floor(Math.random() * 5) * 1000, // Ej: 15k, 16k, etc.
-      birthDate: new Date(2010 + (i % 5), 0, 1),
-      createdAt: new Date(
+      monthly_fee: 15000 + Math.floor(Math.random() * 5) * 1000,
+      birth_date: new Date(2010 + (i % 5), 0, 1).toISOString(),
+      created_at: new Date(
         2023,
         Math.floor(Math.random() * 12),
         Math.floor(Math.random() * 28) + 1,
-      ),
-    });
-  }
+      ).toISOString(),
+    };
+  });
+
+  const { error: insErr } = await db
+    .from(students)
+    .insert(insertPayloads);
+
+  if (insErr) throw insErr;
 
   return { success: true };
 });
@@ -158,9 +200,14 @@ export const useSeedStudentsAction = routeAction$(async (_, event) => {
 export const useCreateCategoryAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const settings = await db.query.siteSettings.findFirst({
-      where: eq(siteSettings.id, 1),
-    });
+    const { data: settingsData, error: settingsErr } = await db
+      .from(siteSettings)
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (settingsErr) throw settingsErr;
+    const settings = camelize<any>(settingsData);
 
     const categories = (settings?.schoolCategories as any[]) || [];
     let parsedSchedules = [];
@@ -169,7 +216,7 @@ export const useCreateCategoryAction = routeAction$(
         parsedSchedules = JSON.parse(data.schedules);
       }
     } catch {
-      // Ignoramos errores de parseo, usamos el arreglo vacío por defecto
+      // Ignoramos errores
     }
 
     categories.push({
@@ -180,10 +227,12 @@ export const useCreateCategoryAction = routeAction$(
       schedules: parsedSchedules,
     });
 
-    await db
-      .update(siteSettings)
-      .set({ schoolCategories: categories })
-      .where(eq(siteSettings.id, 1));
+    const { error: updErr } = await db
+      .from(siteSettings)
+      .update({ school_categories: categories })
+      .eq("id", 1);
+
+    if (updErr) throw updErr;
     return { success: true };
   },
   zod$({
@@ -197,9 +246,14 @@ export const useCreateCategoryAction = routeAction$(
 export const useUpdateCategoryAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const settings = await db.query.siteSettings.findFirst({
-      where: eq(siteSettings.id, 1),
-    });
+    const { data: settingsData, error: settingsErr } = await db
+      .from(siteSettings)
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (settingsErr) throw settingsErr;
+    const settings = camelize<any>(settingsData);
 
     const categories = (settings?.schoolCategories as any[]) || [];
     let parsedSchedules = [];
@@ -208,7 +262,7 @@ export const useUpdateCategoryAction = routeAction$(
         parsedSchedules = JSON.parse(data.schedules);
       }
     } catch {
-      // Ignoramos errores de parseo, usamos el arreglo vacío por defecto
+      // Ignoramos errores
     }
 
     const idx = categories.findIndex((c: any) => c.id === data.id);
@@ -219,14 +273,16 @@ export const useUpdateCategoryAction = routeAction$(
         teacher: data.teacher,
         monthlyFee: data.monthlyFee || 0,
         schedules: parsedSchedules,
-        days: undefined, // Cleanup old fields
+        days: undefined,
         startTime: undefined,
         endTime: undefined,
       };
-      await db
-        .update(siteSettings)
-        .set({ schoolCategories: categories })
-        .where(eq(siteSettings.id, 1));
+      const { error: updErr } = await db
+        .from(siteSettings)
+        .update({ school_categories: categories })
+        .eq("id", 1);
+
+      if (updErr) throw updErr;
     }
     return { success: true };
   },
@@ -242,16 +298,24 @@ export const useUpdateCategoryAction = routeAction$(
 export const useDeleteCategoryAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const settings = await db.query.siteSettings.findFirst({
-      where: eq(siteSettings.id, 1),
-    });
+    const { data: settingsData, error: settingsErr } = await db
+      .from(siteSettings)
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (settingsErr) throw settingsErr;
+    const settings = camelize<any>(settingsData);
 
     let categories = (settings?.schoolCategories as any[]) || [];
     categories = categories.filter((c: any) => c.id !== data.id);
-    await db
-      .update(siteSettings)
-      .set({ schoolCategories: categories })
-      .where(eq(siteSettings.id, 1));
+
+    const { error: updErr } = await db
+      .from(siteSettings)
+      .update({ school_categories: categories })
+      .eq("id", 1);
+
+    if (updErr) throw updErr;
     return { success: true };
   },
   zod$({
@@ -264,17 +328,27 @@ export const useCreateStudentAction = routeAction$(
     const db = getDB(requestEvent);
 
     // 1. Get Category Fee from settings
-    const settings = await db.query.siteSettings.findFirst({
-      where: eq(siteSettings.id, 1),
-    });
+    const { data: settingsData, error: settingsErr } = await db
+      .from(siteSettings)
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (settingsErr) throw settingsErr;
+    const settings = camelize<any>(settingsData);
     const categories = (settings?.schoolCategories as any[]) || [];
     const category = categories.find((c) => c.name === data.category);
     const fee = category?.monthlyFee || 0;
 
     // 2. Check for open cash register
-    const openRegister = await db.query.cashRegisters.findFirst({
-      where: eq(cashRegisters.status, "OPEN"),
-    });
+    const { data: openRegisterData, error: regErr } = await db
+      .from(cashRegisters)
+      .select("*")
+      .eq("status", "OPEN")
+      .maybeSingle();
+
+    if (regErr) throw regErr;
+    const openRegister = camelize<any>(openRegisterData);
 
     if (!openRegister) {
       return {
@@ -288,53 +362,61 @@ export const useCreateStudentAction = routeAction$(
     const now = new Date();
 
     // 3. Insert Student
-    await db.insert(students).values({
+    const { error: studErr } = await db.from(students).insert({
       id: studentId,
       name: data.name,
-      guardianName: data.guardianName,
-      guardianPhone: data.guardianPhone,
-      guardianEmail: data.guardianEmail,
+      guardian_name: data.guardianName,
+      guardian_phone: data.guardianPhone,
+      guardian_email: data.guardianEmail,
       category: data.category,
-      monthlyFee: fee,
-      birthDate: data.birthDate ? new Date(data.birthDate) : null,
+      monthly_fee: fee,
+      birth_date: data.birthDate ? new Date(data.birthDate).toISOString() : null,
     });
+
+    if (studErr) throw studErr;
 
     // 4. Create first subscription (Paid)
     const subscriptionId = crypto.randomUUID();
     const nextDueDate = new Date();
     nextDueDate.setMonth(nextDueDate.getMonth() + 1);
 
-    await db.insert(studentSubscriptions).values({
+    const { error: subErr } = await db.from(studentSubscriptions).insert({
       id: subscriptionId,
-      studentId,
+      student_id: studentId,
       month: now.getMonth() + 1,
       year: now.getFullYear(),
       price: fee,
       status: "PAID",
-      dueDate: nextDueDate,
+      due_date: nextDueDate.toISOString(),
     });
+
+    if (subErr) throw subErr;
 
     // 5. Create payment record
     const paymentId = crypto.randomUUID();
-    await db.insert(studentPayments).values({
+    const { error: payErr } = await db.from(studentPayments).insert({
       id: paymentId,
-      subscriptionId,
+      subscription_id: subscriptionId,
       amount: fee,
-      paymentMethod: data.paymentMethod || "CASH",
-      paymentDate: now,
+      payment_method: data.paymentMethod || "CASH",
+      payment_date: now.toISOString(),
     });
 
+    if (payErr) throw payErr;
+
     // 6. Register in Cash Movement
-    await db.insert(cashMovements).values({
+    const { error: movErr } = await db.from(cashMovements).insert({
       id: crypto.randomUUID(),
-      registerId: openRegister.id,
+      register_id: openRegister.id,
       type: "INCOME",
       category: "SCHOOL",
       amount: fee,
       description: `Inscripción y 1ra cuota: ${data.name} (${data.category})`,
-      paymentMethod: data.paymentMethod || "CASH",
-      referenceId: studentId, // Using studentId as reference for school movements
+      payment_method: data.paymentMethod || "CASH",
+      reference_id: studentId,
     });
+
+    if (movErr) throw movErr;
 
     return { success: true };
   },
@@ -355,14 +437,25 @@ export const usePayFeeAction = routeAction$(
     const now = new Date();
 
     // 1. Get student and open register
-    const student = await db.query.students.findFirst({
-      where: eq(students.id, data.studentId),
-    });
-    if (!student) return { success: false, message: "Alumno no encontrado." };
+    const { data: studentData, error: studErr } = await db
+      .from(students)
+      .select("*")
+      .eq("id", data.studentId)
+      .maybeSingle();
 
-    const openRegister = await db.query.cashRegisters.findFirst({
-      where: eq(cashRegisters.status, "OPEN"),
-    });
+    if (studErr) throw studErr;
+    if (!studentData) return { success: false, message: "Alumno no encontrado." };
+    const student = camelize<any>(studentData);
+
+    const { data: openRegisterData, error: regErr } = await db
+      .from(cashRegisters)
+      .select("*")
+      .eq("status", "OPEN")
+      .maybeSingle();
+
+    if (regErr) throw regErr;
+    const openRegister = camelize<any>(openRegisterData);
+
     if (!openRegister)
       return {
         success: false,
@@ -374,36 +467,42 @@ export const usePayFeeAction = routeAction$(
     const nextDueDate = new Date();
     nextDueDate.setMonth(nextDueDate.getMonth() + 1);
 
-    await db.insert(studentSubscriptions).values({
+    const { error: subErr } = await db.from(studentSubscriptions).insert({
       id: subscriptionId,
-      studentId: student.id,
+      student_id: student.id,
       month: now.getMonth() + 1,
       year: now.getFullYear(),
       price: student.monthlyFee,
       status: "PAID",
-      dueDate: nextDueDate,
+      due_date: nextDueDate.toISOString(),
     });
+
+    if (subErr) throw subErr;
 
     // 3. Create payment record
-    await db.insert(studentPayments).values({
+    const { error: payErr } = await db.from(studentPayments).insert({
       id: crypto.randomUUID(),
-      subscriptionId,
+      subscription_id: subscriptionId,
       amount: student.monthlyFee,
-      paymentMethod: data.paymentMethod || "CASH",
-      paymentDate: now,
+      payment_method: data.paymentMethod || "CASH",
+      payment_date: now.toISOString(),
     });
 
+    if (payErr) throw payErr;
+
     // 4. Register in Cash
-    await db.insert(cashMovements).values({
+    const { error: movErr } = await db.from(cashMovements).insert({
       id: crypto.randomUUID(),
-      registerId: openRegister.id,
+      register_id: openRegister.id,
       type: "INCOME",
       category: "SCHOOL",
       amount: student.monthlyFee,
       description: `Pago de cuota: ${student.name} (${student.category})`,
-      paymentMethod: data.paymentMethod || "CASH",
-      referenceId: student.id,
+      payment_method: data.paymentMethod || "CASH",
+      reference_id: student.id,
     });
+
+    if (movErr) throw movErr;
 
     return { success: true };
   },
@@ -416,7 +515,12 @@ export const usePayFeeAction = routeAction$(
 export const useDeleteStudentAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    await db.delete(students).where(eq(students.id, data.id));
+    const { error } = await db
+      .from(students)
+      .delete()
+      .eq("id", data.id);
+
+    if (error) throw error;
     return { success: true };
   },
   zod$({

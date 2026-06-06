@@ -6,8 +6,7 @@ import {
   useNavigate,
   type DocumentHead,
 } from "@builder.io/qwik-city";
-import { eq, inArray, desc, sql, ilike, or, and } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { users } from "~/db/schema";
 import { LuSearch, LuChevronLeft, LuChevronRight } from "@qwikest/icons/lucide";
 
@@ -16,9 +15,14 @@ export const useAdminUser = routeLoader$(async (requestEvent) => {
   const adminId = requestEvent.cookie.get("auth_session")?.value;
   if (!adminId) throw requestEvent.redirect(302, "/admin/login");
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, adminId),
-  });
+  const { data: userData, error } = await db
+    .from(users)
+    .select("*")
+    .eq("id", adminId)
+    .maybeSingle();
+
+  if (error) throw error;
+  const user = camelize<any>(userData);
 
   if (!user || !["DEV", "OWNER", "MANAGER", "EMPLOYEE"].includes(user.role)) {
     throw requestEvent.redirect(302, "/admin");
@@ -39,40 +43,41 @@ export const useClientsData = routeLoader$(async (requestEvent) => {
   const limitNum = 20;
   const offsetNum = (page - 1) * limitNum;
 
-  const baseWhere = and(
-    inArray(users.role, ["REGISTERED", "GUEST"]),
-    eq(users.clientType, tab),
-  );
-  const searchWhere = search
-    ? or(
-        ilike(users.name, `%${search}%`),
-        ilike(users.email, `%${search}%`),
-        ilike(users.phone, `%${search}%`),
-      )
-    : undefined;
-
-  const finalWhere = searchWhere
-    ? sql`${baseWhere} and ${searchWhere}`
-    : baseWhere;
-
-  const results = await db.query.users.findMany({
-    where: finalWhere,
-    orderBy: [desc(users.createdAt)],
-    limit: limitNum,
-    offset: offsetNum,
-    with: {
-      accounts: true,
-    },
-  });
-
-  const countResult = await db
-    .select({ count: sql<number>`count(*)` })
+  let query = db
     .from(users)
-    .where(finalWhere);
-  const total = countResult[0].count;
+    .select("*", { count: "exact" })
+    .in("role", ["REGISTERED", "GUEST"])
+    .eq("client_type", tab)
+    .order("created_at", { ascending: false })
+    .range(offsetNum, offsetNum + limitNum - 1);
+
+  if (search) {
+    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+  }
+
+  const { data, count, error } = await query;
+  if (error) throw error;
+
+  const camelClients = camelize<any[]>(data || []);
+  const total = count || 0;
+
+  if (camelClients.length > 0) {
+    const clientIds = camelClients.map((c) => c.id);
+    const { data: accountsData, error: accountsErr } = await db
+      .from("accounts")
+      .select("*")
+      .in("user_id", clientIds);
+
+    if (accountsErr) throw accountsErr;
+    const camelAccounts = camelize<any[]>(accountsData || []);
+
+    camelClients.forEach((c) => {
+      c.accounts = camelAccounts.filter((acc) => acc.userId === c.id);
+    });
+  }
 
   return {
-    clients: results,
+    clients: camelClients,
     total,
     page,
     totalPages: Math.ceil(total / limitNum) || 1,

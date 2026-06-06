@@ -6,8 +6,7 @@ import {
   z,
   Form,
 } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
 import { LuSave, LuGlobe, LuImage, LuTrash2 } from "@qwikest/icons/lucide";
@@ -16,19 +15,28 @@ import imageCompression from "browser-image-compression";
 
 export const useSiteContentSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  let settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data, error } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) throw error;
+  let settings = camelize<any>(data);
 
   if (!settings) {
     // create default if doesn't exist
-    await db.insert(siteSettings).values({
-      id: 1,
-      clubName: "GardenClubFutbol",
-    });
-    settings = await db.query.siteSettings.findFirst({
-      where: eq(siteSettings.id, 1),
-    });
+    const { data: insData, error: insError } = await db
+      .from(siteSettings)
+      .insert({
+        id: 1,
+        club_name: "GardenClubFutbol",
+      })
+      .select()
+      .maybeSingle();
+
+    if (insError) throw insError;
+    settings = camelize<any>(insData);
   }
 
   return settings;
@@ -104,15 +112,17 @@ export const useSaveWebContentAction = routeAction$(
       promoPopup.imageUrl = url;
     }
 
-    await db
-      .update(siteSettings)
-      .set({
-        landingTexts,
-        heroSlides,
-        promoPopup,
-        updatedAt: new Date(),
+    const { error: updErr } = await db
+      .from(siteSettings)
+      .update({
+        landing_texts: landingTexts,
+        hero_slides: heroSlides,
+        promo_popup: promoPopup,
+        updated_at: new Date().toISOString(),
       })
-      .where(eq(siteSettings.id, 1));
+      .eq("id", 1);
+
+    if (updErr) throw updErr;
 
     return { success: true };
   },

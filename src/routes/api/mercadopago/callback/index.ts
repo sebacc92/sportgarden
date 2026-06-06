@@ -1,5 +1,5 @@
-import type { RequestHandler } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { type RequestHandler } from "@builder.io/qwik-city";
+import { getDB, snakize } from "~/db";
 import { mercadoPagoCredentials } from "~/db/schema";
 import { exchangeOAuthCode } from "~/lib/mercadopago";
 
@@ -24,21 +24,11 @@ export const onGet: RequestHandler = async (requestEvent) => {
     // 3. Guardar o actualizar las credenciales en la base de datos (id por defecto "1" para el club único)
     const db = getDB(requestEvent);
     
-    await db
-      .insert(mercadoPagoCredentials)
-      .values({
-        id: "1", // Vinculado al administrador/club principal (id: "1")
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        expiresAt: expiresAt,
-        publicKey: tokens.public_key,
-        userId: String(tokens.user_id),
-        liveMode: tokens.live_mode,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: mercadoPagoCredentials.id,
-        set: {
+    const { error: upsertErr } = await db
+      .from(mercadoPagoCredentials)
+      .upsert(
+        snakize({
+          id: "1", // Vinculado al administrador/club principal (id: "1")
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token,
           expiresAt: expiresAt,
@@ -46,8 +36,12 @@ export const onGet: RequestHandler = async (requestEvent) => {
           userId: String(tokens.user_id),
           liveMode: tokens.live_mode,
           updatedAt: new Date(),
-        },
-      });
+        })
+      );
+
+    if (upsertErr) {
+      throw new Error(upsertErr.message);
+    }
 
     // 4. Redirigir de vuelta al panel con un indicador de éxito
     throw redirect(302, "/admin/club?mp_success=true");

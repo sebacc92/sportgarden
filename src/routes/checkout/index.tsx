@@ -33,19 +33,25 @@ if (typeof globalThis.Headers !== "undefined" && !(globalThis.Headers.prototype 
 import { component$, useVisibleTask$ } from "@builder.io/qwik";
 import { routeAction$, Form, Link } from "@builder.io/qwik-city";
 import { MercadoPagoConfig, Preference } from "mercadopago";
-import { getDB } from "~/db";
-import { eq } from "drizzle-orm";
+import { getDB, camelize } from "~/db";
 import { mercadoPagoCredentials } from "~/db/schema";
 
 export const useCrearPreferencia = routeAction$(async (data, requestEvent) => {
   const db = getDB(requestEvent);
 
   // Intentar obtener las credenciales de la base de datos para el ID "1" si existen
-  const [credentials] = await db
-    .select()
+  const { data: credentialsList, error: getErr } = await db
     .from(mercadoPagoCredentials)
-    .where(eq(mercadoPagoCredentials.id, "1"))
+    .select("*")
+    .eq("id", "1")
     .limit(1);
+
+  if (getErr) {
+    return requestEvent.fail(500, {
+      message: "Error de base de datos.",
+    });
+  }
+  const credentials = camelize<any>(credentialsList?.[0]);
 
   const mpAccessToken = credentials?.accessToken || requestEvent.env.get("MP_ACCESS_TOKEN");
 

@@ -1,15 +1,22 @@
 import { routeLoader$, server$, type RequestEventBase } from "@builder.io/qwik-city";
-import { eq, and, gte, lt, inArray, desc } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { pitches, bookings, instagramPosts, siteSettings, pitchOverlaps } from "~/db/schema";
 import { MOCK_INSTAGRAM_POSTS } from "~/components/ui/social-feed";
 
 export const usePitchesLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  return await db.query.pitches.findMany({
-    where: eq(pitches.isActive, true),
-    with: { pricingRules: true }
-  });
+  const { data: pitchesData, error: pitchesErr } = await db
+    .from(pitches)
+    .select(`
+      *,
+      pricingRules:pitch_pricing_rules(*)
+    `)
+    .eq("is_active", true);
+
+  if (pitchesErr) {
+    throw new Error(pitchesErr.message);
+  }
+  return camelize<any[]>(pitchesData);
 });
 
 export const useUserLoader = routeLoader$((requestEvent) => {
@@ -25,12 +32,18 @@ export const useUserLoader = routeLoader$((requestEvent) => {
 export const useInstagramFeed = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   try {
-    const posts = await db.query.instagramPosts.findMany({
-      orderBy: [desc(instagramPosts.timestamp)],
-      limit: 6,
-    });
+    const { data: postsData, error: postsErr } = await db
+      .from(instagramPosts)
+      .select("*")
+      .order("timestamp", { ascending: false })
+      .limit(6);
 
-    if (posts.length > 0) {
+    if (postsErr) {
+      throw new Error(postsErr.message);
+    }
+    const posts = camelize<any[]>(postsData);
+
+    if (posts && posts.length > 0) {
       return posts.map((p) => ({
         id: p.id,
         imageUrl: p.mediaUrl,
@@ -48,7 +61,17 @@ export const useInstagramFeed = routeLoader$(async (requestEvent) => {
 
 export const useAISettingsLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) {
+    throw new Error(settingsErr.message);
+  }
+  const settings = camelize<any>(settingsData);
+
   return {
     ...settings,
     paymentMethods: (settings?.paymentMethods || []) as { id: string; name: string; isActive: boolean }[],
@@ -66,11 +89,16 @@ export const useAISettingsLoader = routeLoader$(async (requestEvent) => {
 
 export const useGalleryLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const [settings] = await db
-    .select({ galleryImages: siteSettings.galleryImages })
+  const { data: settingsData, error: settingsErr } = await db
     .from(siteSettings)
-    .where(eq(siteSettings.id, 1))
-    .limit(1);
+    .select("gallery_images")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) {
+    throw new Error(settingsErr.message);
+  }
+  const settings = camelize<any>(settingsData);
   return (settings?.galleryImages as string[] | null) ?? [];
 });
 
@@ -82,31 +110,33 @@ export const getDailyBookings = server$(async function (this: RequestEventBase, 
   const endOfDay = new Date(`${dateStr}T23:59:59`);
 
   // Get related pitch IDs (bidirectional)
-  const { or } = await import("drizzle-orm");
-  const overlaps = await db.select().from(pitchOverlaps).where(
-    or(
-      eq(pitchOverlaps.pitchId, pitchId),
-      eq(pitchOverlaps.overlapPitchId, pitchId)
-    )
-  );
+  const { data: overlapsData, error: overlapErr } = await db
+    .from(pitchOverlaps)
+    .select("*")
+    .or(`pitch_id.eq.${pitchId},overlap_pitch_id.eq.${pitchId}`);
+
+  if (overlapErr) {
+    throw new Error(overlapErr.message);
+  }
+  const overlaps = camelize<any[]>(overlapsData);
   const relatedIds = [pitchId, ...overlaps.map((o: any) => o.pitchId === pitchId ? o.overlapPitchId : o.pitchId)];
 
-  const dailyBookings = await db.query.bookings.findMany({
-    where: and(
-      inArray(bookings.pitchId, relatedIds),
-      gte(bookings.startTime, startOfDay),
-      lt(bookings.startTime, endOfDay),
-      inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]),
-    ),
-    columns: {
-      startTime: true,
-      endTime: true,
-    },
-    orderBy: (bookings, { asc }) => [asc(bookings.startTime)],
-  });
+  const { data: dailyBookingsData, error: bookingsErr } = await db
+    .from(bookings)
+    .select("start_time, end_time")
+    .in("pitch_id", relatedIds)
+    .gte("start_time", startOfDay.toISOString())
+    .lt("start_time", endOfDay.toISOString())
+    .in("status", ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"])
+    .order("start_time", { ascending: true });
+
+  if (bookingsErr) {
+    throw new Error(bookingsErr.message);
+  }
+  const dailyBookings = camelize<any[]>(dailyBookingsData);
 
   return dailyBookings.map((b) => ({
-    startTime: b.startTime.toISOString(),
-    endTime: b.endTime.toISOString(),
+    startTime: new Date(b.startTime).toISOString(),
+    endTime: new Date(b.endTime).toISOString(),
   }));
 });

@@ -1,6 +1,5 @@
 import { component$ } from "@builder.io/qwik";
 import { routeAction$, Form, zod$, z, Link } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
 import { users } from "~/db/schema";
 import { verifyPassword, createSessionJWT } from "~/lib/auth";
@@ -12,11 +11,13 @@ export const useLoginAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.email, data.email),
-    });
+    const { data: user, error } = await db
+      .from(users)
+      .select("*")
+      .eq("email", data.email)
+      .maybeSingle();
 
-    if (!user || !user.password) {
+    if (error || !user || !user.password) {
       return requestEvent.fail(401, {
         message: "Credenciales inválidas.",
       });

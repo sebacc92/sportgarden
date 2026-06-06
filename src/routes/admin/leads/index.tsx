@@ -6,63 +6,68 @@ import {
   z,
   Form,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
-import { bookings, guestRequests, pitches, siteSettings } from "~/db/schema";
-import { eq } from "drizzle-orm";
+import { getDB, camelize } from "~/db";
+import { bookings, siteSettings } from "~/db/schema";
 
 // Loader to fetch pending leads
 export const usePendingLeads = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
 
-  const leads = await db
-    .select({
-      booking: {
-        id: bookings.id,
-        pitchId: bookings.pitchId,
-        startTime: bookings.startTime,
-        endTime: bookings.endTime,
-        status: bookings.status,
-        totalPrice: bookings.totalPrice,
-        paidAmount: bookings.paidAmount,
-        paymentStatus: bookings.paymentStatus,
-        paymentMethod: bookings.paymentMethod,
-        extras: bookings.extras,
-      },
-      guest: {
-        id: guestRequests.id,
-        name: guestRequests.name,
-        phone: guestRequests.phone,
-        email: guestRequests.email,
-        createdAt: guestRequests.createdAt,
-      },
-      pitch: {
-        name: pitches.name,
-      },
-    })
+  const { data: leadsData, error } = await db
     .from(bookings)
-    .innerJoin(guestRequests, eq(bookings.id, guestRequests.bookingId))
-    .innerJoin(pitches, eq(bookings.pitchId, pitches.id))
-    .where(eq(bookings.status, "PENDING_APPROVAL"))
-    .orderBy(bookings.startTime);
+    .select(`
+      *,
+      guest:guest_requests!inner(*),
+      pitch:pitches!inner(name)
+    `)
+    .eq("status", "PENDING_APPROVAL")
+    .order("start_time", { ascending: true });
 
-  const settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-    columns: { clubName: true },
-  });
+  if (error) {
+    throw new Error(error.message);
+  }
+  const leadsRaw = camelize<any[]>(leadsData);
+
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("club_name")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) {
+    throw new Error(settingsErr.message);
+  }
+  const settings = camelize<any>(settingsData);
 
   return {
-    leads: leads.map((l: any) => ({
-      ...l,
-      booking: {
-        ...l.booking,
-        startTime: l.booking.startTime.toISOString(),
-        endTime: l.booking.endTime.toISOString(),
-      },
-      guest: {
-        ...l.guest,
-        createdAt: l.guest.createdAt.toISOString(),
-      },
-    })),
+    leads: leadsRaw.map((l: any) => {
+      const guestObj = Array.isArray(l.guest) ? l.guest[0] : l.guest;
+      const pitchObj = Array.isArray(l.pitch) ? l.pitch[0] : l.pitch;
+      return {
+        booking: {
+          id: l.id,
+          pitchId: l.pitchId,
+          startTime: new Date(l.startTime).toISOString(),
+          endTime: new Date(l.endTime).toISOString(),
+          status: l.status,
+          totalPrice: l.totalPrice,
+          paidAmount: l.paidAmount,
+          paymentStatus: l.paymentStatus,
+          paymentMethod: l.paymentMethod,
+          extras: l.extras,
+        },
+        guest: guestObj ? {
+          id: guestObj.id,
+          name: guestObj.name,
+          phone: guestObj.phone,
+          email: guestObj.email,
+          createdAt: new Date(guestObj.createdAt).toISOString(),
+        } : null,
+        pitch: {
+          name: pitchObj?.name || "Cancha",
+        },
+      };
+    }),
     clubName: settings?.clubName || "Garden Club",
   };
 });
@@ -72,25 +77,29 @@ export const useUpdateLeadStatusAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const booking = await db.query.bookings.findFirst({
-      where: eq(bookings.id, data.bookingId),
-    });
+    const { data: booking, error: getErr } = await db
+      .from(bookings)
+      .select("*")
+      .eq("id", data.bookingId)
+      .maybeSingle();
 
-    if (!booking) {
+    if (getErr || !booking) {
       return { success: false, message: "Reserva no encontrada." };
     }
 
     if (data.action === "APPROVE") {
-      await db
-        .update(bookings)
-        .set({ status: "CONFIRMED" })
-        .where(eq(bookings.id, data.bookingId));
+      const { error: updErr } = await db
+        .from(bookings)
+        .update({ status: "CONFIRMED" })
+        .eq("id", data.bookingId);
+      if (updErr) throw updErr;
       return { success: true, message: "Reserva confirmada con éxito." };
     } else if (data.action === "REJECT") {
-      await db
-        .update(bookings)
-        .set({ status: "CANCELLED" })
-        .where(eq(bookings.id, data.bookingId));
+      const { error: updErr } = await db
+        .from(bookings)
+        .update({ status: "CANCELLED" })
+        .eq("id", data.bookingId);
+      if (updErr) throw updErr;
       return { success: true, message: "Solicitud rechazada." };
     }
 

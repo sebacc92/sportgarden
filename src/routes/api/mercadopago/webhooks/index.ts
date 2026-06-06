@@ -20,9 +20,8 @@ if (typeof process === "undefined") {
 }
 
 import type { RequestHandler } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize, snakize } from "~/db";
 import { bookings, mercadoPagoCredentials, transactions, cashSessions } from "~/db/schema";
-import { eq, or } from "drizzle-orm";
 
 export const onPost: RequestHandler = async (requestEvent) => {
   const { request, send } = requestEvent;
@@ -52,11 +51,16 @@ export const onPost: RequestHandler = async (requestEvent) => {
 
     // Consultar las credenciales en la base de datos buscando el id: "1"
     const db = getDB(requestEvent);
-    const [credentials] = await db
-      .select()
+    const { data: credentialsData, error: credentialsErr } = await db
       .from(mercadoPagoCredentials)
-      .where(eq(mercadoPagoCredentials.id, "1"))
-      .limit(1);
+      .select("*")
+      .eq("id", "1")
+      .maybeSingle();
+
+    if (credentialsErr) {
+      throw new Error(credentialsErr.message);
+    }
+    const credentials = camelize<any>(credentialsData);
 
     const accessToken = credentials?.accessToken || requestEvent.env.get("MP_ACCESS_TOKEN");
 
@@ -92,54 +96,78 @@ export const onPost: RequestHandler = async (requestEvent) => {
 
     if (status === "approved") {
       // Buscar la reserva por ID o por preferenceId
-      const conditions = [];
+      const conditions: string[] = [];
       if (externalReference) {
-        conditions.push(eq(bookings.id, externalReference));
+        conditions.push(`id.eq.${externalReference}`);
       }
       if (preferenceId) {
-        conditions.push(eq(bookings.preferenceId, preferenceId));
+        conditions.push(`preference_id.eq.${preferenceId}`);
       }
 
       if (conditions.length > 0) {
-        const foundBookings = await db
-          .select()
+        const { data: foundBookingsData, error: bookingSearchErr } = await db
           .from(bookings)
-          .where(or(...conditions))
+          .select("*")
+          .or(conditions.join(","))
           .limit(1);
+
+        if (bookingSearchErr) {
+          throw new Error(bookingSearchErr.message);
+        }
+        const foundBookings = camelize<any[]>(foundBookingsData);
 
         if (foundBookings.length > 0) {
           const booking = foundBookings[0];
           console.log(`[MercadoPago Webhook] Actualizando reserva ID: ${booking.id} a CONFIRMED/PAID`);
           
-          await db
-            .update(bookings)
-            .set({
-              status: "CONFIRMED",
-              paymentStatus: "PAID",
-              paidAmount: transactionAmount || booking.totalPrice,
-              paymentId: String(paymentId),
-              paymentMethod: "MERCADOPAGO",
-            })
-            .where(eq(bookings.id, booking.id));
+          const { error: updateErr } = await db
+            .from(bookings)
+            .update(
+              snakize({
+                status: "CONFIRMED",
+                paymentStatus: "PAID",
+                paidAmount: transactionAmount || booking.totalPrice,
+                paymentId: String(paymentId),
+                paymentMethod: "MERCADOPAGO",
+              })
+            )
+            .eq("id", booking.id);
+
+          if (updateErr) {
+            throw new Error(updateErr.message);
+          }
 
           console.log(`[MercadoPago Webhook] Reserva ID: ${booking.id} actualizada exitosamente.`);
 
           // Log the digital payment in the transactions table
           try {
-            const openSession = await db.query.cashSessions.findFirst({
-              where: eq(cashSessions.status, "OPEN"),
-            });
+            const { data: openSessionData, error: sessionErr } = await db
+              .from(cashSessions)
+              .select("*")
+              .eq("status", "OPEN")
+              .maybeSingle();
 
-            await db.insert(transactions).values({
-              id: crypto.randomUUID(),
-              cashSessionId: openSession ? openSession.id : null,
-              type: "INCOME",
-              category: "RESERVA_MP",
-              amount: transactionAmount || booking.totalPrice,
-              description: `Pago digital MP - Reserva: ${booking.id.slice(0, 8)}`,
-              paymentMethod: "MERCADOPAGO",
-              referenceId: booking.id,
-            });
+            if (sessionErr) {
+              throw new Error(sessionErr.message);
+            }
+            const openSession = camelize<any>(openSessionData);
+
+            const { error: txnErr } = await db.from(transactions).insert(
+              snakize({
+                id: crypto.randomUUID(),
+                cashSessionId: openSession ? openSession.id : null,
+                type: "INCOME",
+                category: "RESERVA_MP",
+                amount: transactionAmount || booking.totalPrice,
+                description: `Pago digital MP - Reserva: ${booking.id.slice(0, 8)}`,
+                paymentMethod: "MERCADOPAGO",
+                referenceId: booking.id,
+              })
+            );
+
+            if (txnErr) {
+              throw new Error(txnErr.message);
+            }
             console.log(`[MercadoPago Webhook] Digital transaction successfully recorded with session ID: ${openSession ? openSession.id : 'NULL'}`);
           } catch (e) {
             console.error(`[MercadoPago Webhook] Error logging transaction:`, e);

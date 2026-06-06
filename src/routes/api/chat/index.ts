@@ -1,7 +1,6 @@
 import { type RequestHandler } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
-import { siteSettings, chatSessions, chatMessages, pitches } from "~/db/schema";
-import { eq } from "drizzle-orm";
+import { getDB, camelize, snakize } from "~/db";
+import { siteSettings, chatSessions, chatMessages, pitches, type SiteSettings, type Pitch } from "~/db/schema";
 import OpenAI from "openai";
 
 export const onPost: RequestHandler = async (requestEvent) => {
@@ -9,11 +8,16 @@ export const onPost: RequestHandler = async (requestEvent) => {
     const { request, env, json } = requestEvent;
 
     const db = getDB(requestEvent);
-    const [settings] = await db
-      .select()
+    const { data: settingsData, error: settingsErr } = await db
       .from(siteSettings)
-      .where(eq(siteSettings.id, 1))
-      .limit(1);
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (settingsErr) {
+      throw new Error(settingsErr.message);
+    }
+    const settings = camelize<SiteSettings>(settingsData);
 
     if (settings && !settings.aiEnabled) {
       json(403, {
@@ -34,27 +38,27 @@ export const onPost: RequestHandler = async (requestEvent) => {
       // Registrar sesión y mensajes en DB
       try {
         await db
-          .insert(chatSessions)
-          .values({
-            id: sessionId,
-            createdAt: new Date(),
-            lastActive: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: chatSessions.id,
-            set: { lastActive: new Date() },
-          });
+          .from(chatSessions)
+          .upsert(
+            snakize({
+              id: sessionId,
+              createdAt: new Date(),
+              lastActive: new Date(),
+            })
+          );
 
         const lastUserMessage = messages[messages.length - 1];
         if (lastUserMessage && lastUserMessage.role === "user") {
-          await db.insert(chatMessages).values({
-            id:
-              "msg-" + Date.now().toString() + Math.floor(Math.random() * 1000),
-            sessionId: sessionId,
-            role: "user",
-            content: lastUserMessage.content,
-            createdAt: new Date(),
-          });
+          await db.from(chatMessages).insert(
+            snakize({
+              id:
+                "msg-" + Date.now().toString() + Math.floor(Math.random() * 1000),
+              sessionId: sessionId,
+              role: "user",
+              content: lastUserMessage.content,
+              createdAt: new Date(),
+            })
+          );
         }
       } catch (dbErr) {
         console.error("Error guardando en BD (silenciado)", dbErr);
@@ -62,10 +66,15 @@ export const onPost: RequestHandler = async (requestEvent) => {
     }
 
     // Fetch context data: Canchas activas
-    const activePitches = await db
-      .select()
+    const { data: pitchesData, error: pitchesErr } = await db
       .from(pitches)
-      .where(eq(pitches.isActive, true));
+      .select("*")
+      .eq("is_active", true);
+
+    if (pitchesErr) {
+      throw new Error(pitchesErr.message);
+    }
+    const activePitches = camelize<Pitch[]>(pitchesData);
 
     const formatPitches = (p: typeof activePitches) =>
       p
@@ -203,14 +212,16 @@ ${settings?.aiCallToAction || "Para reservar tu turno, usá nuestra web o escrib
 
       if (sessionId) {
         try {
-          await db.insert(chatMessages).values({
-            id:
-              "msg-" + Date.now().toString() + Math.floor(Math.random() * 1000),
-            sessionId: sessionId,
-            role: "assistant",
-            content: replyText,
-            createdAt: new Date(),
-          });
+          await db.from(chatMessages).insert(
+            snakize({
+              id:
+                "msg-" + Date.now().toString() + Math.floor(Math.random() * 1000),
+              sessionId: sessionId,
+              role: "assistant",
+              content: replyText,
+              createdAt: new Date(),
+            })
+          );
         } catch (dbErr) {
           console.error("Error guardando en BD (silenciado)", dbErr);
         }

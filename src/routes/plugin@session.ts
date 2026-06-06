@@ -2,7 +2,6 @@ import type { RequestHandler } from "@builder.io/qwik-city";
 import { verifySessionJWT } from "~/lib/auth";
 import { getDB } from "~/db";
 import { users } from "~/db/schema";
-import { eq } from "drizzle-orm";
 
 export const onRequest: RequestHandler = async (event) => {
   const { url, cookie } = event;
@@ -14,17 +13,13 @@ export const onRequest: RequestHandler = async (event) => {
   if (authSession?.user?.email) {
     try {
       const db = getDB(event);
-      const user = await db.query.users.findFirst({
-        where: eq(users.email, authSession.user.email),
-        columns: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          role: true,
-        },
-      });
-      if (user) {
+      const { data: user, error } = await db
+        .from(users)
+        .select("id, name, email, phone, role")
+        .eq("email", authSession.user.email)
+        .maybeSingle();
+
+      if (user && !error) {
         loggedInUser = {
           userId: user.id,
           role: user.role,
@@ -46,17 +41,13 @@ export const onRequest: RequestHandler = async (event) => {
       if (payload) {
         try {
           const db = getDB(event);
-          const user = await db.query.users.findFirst({
-            where: eq(users.id, payload.userId),
-            columns: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-              role: true,
-            },
-          });
-          if (user) {
+          const { data: user, error } = await db
+            .from(users)
+            .select("id, name, email, phone, role")
+            .eq("id", payload.userId)
+            .maybeSingle();
+
+          if (user && !error) {
             loggedInUser = {
               userId: user.id,
               role: user.role,

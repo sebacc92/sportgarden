@@ -1,8 +1,7 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { bookings } from "~/db/schema";
-import { eq, desc } from "drizzle-orm";
 
 export const useUserBookingsLoader = routeLoader$(async (requestEvent) => {
   const user = requestEvent.sharedMap.get("user");
@@ -11,13 +10,19 @@ export const useUserBookingsLoader = routeLoader$(async (requestEvent) => {
   }
 
   const db = getDB(requestEvent);
-  const list = await db.query.bookings.findMany({
-    where: eq(bookings.userId, user.userId),
-    orderBy: [desc(bookings.startTime)],
-    with: {
-      pitch: true,
-    },
-  });
+  const { data: listData, error } = await db
+    .from(bookings)
+    .select(`
+      *,
+      pitch:pitches(*)
+    `)
+    .eq("user_id", user.userId)
+    .order("start_time", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  const list = camelize<any[]>(listData);
 
   return list.map((b) => ({
     id: b.id,

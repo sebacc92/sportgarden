@@ -31,9 +31,8 @@ if (typeof globalThis.Headers !== "undefined" && !(globalThis.Headers.prototype 
 }
 
 import { routeAction$, zod$, z } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
-import { getDB } from "~/db";
-import { bookings, guestRequests, pitches, mercadoPagoCredentials } from "~/db/schema";
+import { getDB, camelize, snakize } from "~/db";
+import { bookings, guestRequests, pitches, mercadoPagoCredentials, siteSettings } from "~/db/schema";
 import { isPitchAvailable } from "~/utils/availability";
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { processPaywayPayment } from "~/lib/payway";
@@ -102,16 +101,21 @@ export const useGuestBookingAction = routeAction$(
     );
 
     // Check if pitch exists to calculate price
-    const pitch = await db.query.pitches.findFirst({
-      where: eq(pitches.id, data.pitchId),
-      with: { pricingRules: true },
-    });
+    const { data: pitchData, error: pitchErr } = await db
+      .from(pitches)
+      .select(`
+        *,
+        pricingRules:pitch_pricing_rules(*)
+      `)
+      .eq("id", data.pitchId)
+      .maybeSingle();
 
-    if (!pitch) {
+    if (pitchErr || !pitchData) {
       return requestEvent.fail(404, {
         message: "Pitch not found",
       });
     }
+    const pitch = camelize<any>(pitchData);
 
     // Check for overlap including overlapping pitches
     const { available, conflicts } = await isPitchAvailable(db, {
@@ -126,7 +130,16 @@ export const useGuestBookingAction = routeAction$(
       });
     }
 
-    const settings = await db.query.siteSettings.findFirst();
+    const { data: settingsData, error: settingsErr } = await db
+      .from(siteSettings)
+      .select("*")
+      .limit(1)
+      .maybeSingle();
+
+    if (settingsErr) {
+      throw new Error(settingsErr.message);
+    }
+    const settings = camelize<any>(settingsData);
 
     // Verify operating hours
     if (!isValidOperatingHours(data.date, data.time, data.duration, settings)) {
@@ -150,28 +163,40 @@ export const useGuestBookingAction = routeAction$(
     const bookingId = crypto.randomUUID();
 
     // Create booking and guest request
-    await db.insert(bookings).values({
-      id: bookingId,
-      pitchId: data.pitchId,
-      startTime: startTimeDate,
-      endTime: endTimeDate,
-      status: "PENDING_APPROVAL",
-      totalPrice,
-      paidAmount: 0,
-      paymentStatus: "PENDING",
-      paymentMethod: data.paymentMethod || "CASH",
-      extras: data.extras
-        ? data.extras.map((e: string) => JSON.parse(e))
-        : null,
-    });
+    const { error: bookingErr } = await db.from(bookings).insert(
+      snakize({
+        id: bookingId,
+        pitchId: data.pitchId,
+        startTime: startTimeDate.toISOString(),
+        endTime: endTimeDate.toISOString(),
+        status: "PENDING_APPROVAL",
+        totalPrice,
+        paidAmount: 0,
+        paymentStatus: "PENDING",
+        paymentMethod: data.paymentMethod || "CASH",
+        extras: data.extras
+          ? data.extras.map((e: string) => JSON.parse(e))
+          : null,
+      })
+    );
 
-    await db.insert(guestRequests).values({
-      id: crypto.randomUUID(),
-      bookingId,
-      name: data.guestName,
-      phone: data.guestPhone,
-      email: data.guestEmail || null,
-    });
+    if (bookingErr) {
+      throw new Error(bookingErr.message);
+    }
+
+    const { error: guestErr } = await db.from(guestRequests).insert(
+      snakize({
+        id: crypto.randomUUID(),
+        bookingId,
+        name: data.guestName,
+        phone: data.guestPhone,
+        email: data.guestEmail || null,
+      })
+    );
+
+    if (guestErr) {
+      throw new Error(guestErr.message);
+    }
 
     return {
       success: true,
@@ -226,18 +251,32 @@ export const useUserBookingAction = routeAction$(
       });
     }
 
-    const pitch = await db.query.pitches.findFirst({
-      where: eq(pitches.id, data.pitchId),
-      with: { pricingRules: true },
-    });
+    const { data: pitchData, error: pitchErr } = await db
+      .from(pitches)
+      .select(`
+        *,
+        pricingRules:pitch_pricing_rules(*)
+      `)
+      .eq("id", data.pitchId)
+      .maybeSingle();
 
-    if (!pitch) {
+    if (pitchErr || !pitchData) {
       return requestEvent.fail(404, {
         message: "Pitch not found",
       });
     }
+    const pitch = camelize<any>(pitchData);
 
-    const settings = await db.query.siteSettings.findFirst();
+    const { data: settingsData, error: settingsErr } = await db
+      .from(siteSettings)
+      .select("*")
+      .limit(1)
+      .maybeSingle();
+
+    if (settingsErr) {
+      throw new Error(settingsErr.message);
+    }
+    const settings = camelize<any>(settingsData);
 
     // Verify operating hours
     if (!isValidOperatingHours(data.date, data.time, data.duration, settings)) {
@@ -297,11 +336,16 @@ export const useUserBookingAction = routeAction$(
 
     if (amountToCharge > 0 && paymentMethod === "MERCADOPAGO") {
       // 1. Obtener las credenciales de la base de datos para el ID "1" si existen
-      const [credentials] = await db
-        .select()
+      const { data: credentialsData, error: credentialsErr } = await db
         .from(mercadoPagoCredentials)
-        .where(eq(mercadoPagoCredentials.id, "1"))
-        .limit(1);
+        .select("*")
+        .eq("id", "1")
+        .maybeSingle();
+
+      if (credentialsErr) {
+        throw new Error(credentialsErr.message);
+      }
+      const credentials = camelize<any>(credentialsData);
 
       const mpAccessToken = credentials?.accessToken || requestEvent.env.get("MP_ACCESS_TOKEN");
 
@@ -356,21 +400,27 @@ export const useUserBookingAction = routeAction$(
     }
 
     // Insert booking
-    await db.insert(bookings).values({
-      id: bookingId,
-      userId,
-      pitchId: data.pitchId,
-      startTime: startTimeDate,
-      endTime: endTimeDate,
-      status: bookingStatus,
-      totalPrice,
-      paidAmount: 0,
-      paymentStatus: "PENDING",
-      paymentMethod: paymentMethod,
-      extras: data.extras
-        ? data.extras.map((e: string) => JSON.parse(e))
-        : null,
-    });
+    const { error: insertErr } = await db.from(bookings).insert(
+      snakize({
+        id: bookingId,
+        userId,
+        pitchId: data.pitchId,
+        startTime: startTimeDate.toISOString(),
+        endTime: endTimeDate.toISOString(),
+        status: bookingStatus,
+        totalPrice,
+        paidAmount: 0,
+        paymentStatus: "PENDING",
+        paymentMethod: paymentMethod,
+        extras: data.extras
+          ? data.extras.map((e: string) => JSON.parse(e))
+          : null,
+      })
+    );
+
+    if (insertErr) {
+      throw new Error(insertErr.message);
+    }
 
     return { success: true, bookingId, checkoutUrl, amountToCharge, paymentMethod };
   },
@@ -389,15 +439,18 @@ export const useConfirmarPagoPayway = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const booking = await db.query.bookings.findFirst({
-      where: eq(bookings.id, data.bookingId),
-    });
+    const { data: bookingData, error: bookingErr } = await db
+      .from(bookings)
+      .select("*")
+      .eq("id", data.bookingId)
+      .maybeSingle();
 
-    if (!booking) {
+    if (bookingErr || !bookingData) {
       return requestEvent.fail(404, {
         message: "Reserva no encontrada.",
       });
     }
+    const booking = camelize<any>(bookingData);
 
     // Generate unique transaction ID using app prefix
     const siteTransactionId = `sgf_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
@@ -420,16 +473,22 @@ export const useConfirmarPagoPayway = routeAction$(
         const newPaidAmount = (booking.paidAmount || 0) + data.amount;
         const newPaymentStatus = newPaidAmount >= booking.totalPrice ? "PAID" : "PARTIAL";
 
-        await db
-          .update(bookings)
-          .set({
-            status: "CONFIRMED",
-            paidAmount: newPaidAmount,
-            paymentStatus: newPaymentStatus,
-            paymentId: String(result.id),
-            preferenceId: result.site_transaction_id,
-          })
-          .where(eq(bookings.id, data.bookingId));
+        const { error: updateErr } = await db
+          .from(bookings)
+          .update(
+            snakize({
+              status: "CONFIRMED",
+              paidAmount: newPaidAmount,
+              paymentStatus: newPaymentStatus,
+              paymentId: String(result.id),
+              preferenceId: result.site_transaction_id,
+            })
+          )
+          .eq("id", data.bookingId);
+
+        if (updateErr) {
+          throw new Error(updateErr.message);
+        }
 
         return {
           success: true,

@@ -6,8 +6,7 @@ import {
   z,
   useNavigate,
 } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { pitches, siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
 
@@ -21,24 +20,32 @@ import { PitchDeleteConfirmModal } from "~/components/admin/pitches/PitchDeleteC
 // 1. Data Loader
 export const usePitchesData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  return db.query.pitches.findMany({
-    orderBy: (pitches, { asc }) => [asc(pitches.name)],
-    with: {
-      pricingRules: true,
-      overlaps: true,
-      overlappedBy: true,
-    },
-  });
+  const { data: pitchesData, error } = await db
+    .from(pitches)
+    .select(`
+      *,
+      pricingRules:pitch_pricing_rules(*)
+    `)
+    .order("name", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return camelize<any[]>(pitchesData);
 });
 
 export const useSiteSettingsData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const [settings] = await db
-    .select()
+  const { data: settingsData, error } = await db
     .from(siteSettings)
-    .where(eq(siteSettings.id, 1))
-    .limit(1);
-  return settings;
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return camelize<any>(settingsData);
 });
 
 // 2. Actions (Only the ones needed on the main view)
@@ -46,15 +53,23 @@ export const useTogglePitchStatusAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const pitch = await db.query.pitches.findFirst({
-      where: eq(pitches.id, data.id),
-    });
+    const { data: pitch, error: getErr } = await db
+      .from(pitches)
+      .select("is_active")
+      .eq("id", data.id)
+      .maybeSingle();
 
-    if (pitch) {
-      await db
-        .update(pitches)
-        .set({ isActive: !pitch.isActive })
-        .where(eq(pitches.id, data.id));
+    if (getErr || !pitch) {
+      return { success: false };
+    }
+
+    const { error: updErr } = await db
+      .from(pitches)
+      .update({ is_active: !pitch.is_active })
+      .eq("id", data.id);
+
+    if (updErr) {
+      throw updErr;
     }
 
     return { success: true };
@@ -68,7 +83,12 @@ export const useDeletePitchAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
     try {
-      await db.delete(pitches).where(eq(pitches.id, data.id));
+      const { error } = await db
+        .from(pitches)
+        .delete()
+        .eq("id", data.id);
+
+      if (error) throw error;
       return { success: true };
     } catch {
       return {
@@ -87,10 +107,14 @@ export const useUpdateExtraServicesAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
     const extras = JSON.parse(data.extrasJson as string) as any[];
-    await db
-      .update(siteSettings)
-      .set({ extraServices: extras })
-      .where(eq(siteSettings.id, 1));
+    const { error } = await db
+      .from(siteSettings)
+      .update({ extra_services: extras })
+      .eq("id", 1);
+
+    if (error) {
+      throw error;
+    }
     return { success: true };
   },
   zod$({

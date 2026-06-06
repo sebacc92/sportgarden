@@ -6,9 +6,8 @@ import {
   zod$,
   type DocumentHead,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { users } from "~/db/schema";
-import { eq, and, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export const useLoginAction = routeAction$(
@@ -16,15 +15,15 @@ export const useLoginAction = routeAction$(
     const db = getDB(requestEvent);
 
     // Buscar usuario por nombre de usuario y asegurarse que sea ADMIN
-    const [user] = await db
-      .select()
+    const { data: userData, error } = await db
       .from(users)
-      .where(
-        and(
-          eq(users.name, data.username.trim().toLowerCase()),
-          inArray(users.role, ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]),
-        ),
-      );
+      .select("*")
+      .eq("name", data.username.trim().toLowerCase())
+      .in("role", ["DEV", "OWNER", "MANAGER", "EMPLOYEE"])
+      .maybeSingle();
+
+    if (error) throw error;
+    const user = camelize<any>(userData);
 
     if (!user || !user.password) {
       return requestEvent.fail(401, {
@@ -50,10 +49,12 @@ export const useLoginAction = routeAction$(
     });
 
     // Update lastLoginAt
-    await db
-      .update(users)
-      .set({ lastLoginAt: new Date() })
-      .where(eq(users.id, user.id));
+    const { error: updErr } = await db
+      .from(users)
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("id", user.id);
+
+    if (updErr) throw updErr;
 
     throw requestEvent.redirect(302, "/admin/calendar/");
   },

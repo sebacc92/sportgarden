@@ -77,8 +77,14 @@ export const onGet: RequestHandler = async (requestEvent) => {
     const db = getDB(requestEvent);
 
     // Delete previous posts and insert the new cacheable ones
-    await db.delete(instagramPosts);
-    await db.insert(instagramPosts).values(postsToInsert);
+    const { error: deleteErr } = await db.from(instagramPosts).delete().not("id", "is", null);
+    if (deleteErr) {
+      throw new Error(deleteErr.message);
+    }
+    const { error: insertErr } = await db.from(instagramPosts).insert(postsToInsert);
+    if (insertErr) {
+      throw new Error(insertErr.message);
+    }
 
     json(200, { success: true, count: postsToInsert.length });
   } catch (err: any) {

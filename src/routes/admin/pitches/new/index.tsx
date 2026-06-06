@@ -7,7 +7,7 @@ import {
   Form,
   useNavigate,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { pitches, pitchOverlaps } from "~/db/schema";
 import { put } from "@vercel/blob";
 import imageCompression from "browser-image-compression";
@@ -23,10 +23,13 @@ import { cn } from "@qwik-ui/utils";
 // Loader for overlaps selection
 export const useAllPitches = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  return db.query.pitches.findMany({
-    orderBy: (pitches, { asc }) => [asc(pitches.name)],
-    columns: { id: true, name: true },
-  });
+  const { data, error } = await db
+    .from(pitches)
+    .select("id, name")
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return camelize<any[]>(data || []);
 });
 
 export const useCreatePitchAction = routeAction$(
@@ -50,32 +53,35 @@ export const useCreatePitchAction = routeAction$(
       uploadedImageUrl = url;
     }
 
-    await db.insert(pitches).values({
+    const { error: insertErr } = await db.from(pitches).insert({
       id,
       name: data.name,
       type: data.type as "F5" | "F6" | "F9",
-      isCovered: data.isCovered === "on",
-      isLit: data.isLit === "on",
-      pricePerHour: Number(data.pricePerHour),
-      depositType: (data.depositType as "PERCENTAGE" | "FIXED") || "PERCENTAGE",
-      depositAmount: Number(data.depositAmount) || 0,
+      is_covered: data.isCovered === "on",
+      is_lit: data.isLit === "on",
+      price_per_hour: Number(data.pricePerHour),
+      deposit_type: (data.depositType as "PERCENTAGE" | "FIXED") || "PERCENTAGE",
+      deposit_amount: Number(data.depositAmount) || 0,
       notes: data.notes || null,
-      isActive: true,
-      imageUrl: uploadedImageUrl,
+      is_active: true,
+      image_url: uploadedImageUrl,
       sport: data.sport || "Fútbol",
       surface: data.surface || "Sintético",
     });
 
+    if (insertErr) throw insertErr;
+
     // Handle overlaps
     const overlapIds = JSON.parse(data.overlaps || "[]") as string[];
     if (overlapIds.length > 0) {
-      await db.insert(pitchOverlaps).values(
+      const { error: overlapsErr } = await db.from(pitchOverlaps).insert(
         overlapIds.map((oid) => ({
           id: Math.random().toString(36).substring(2, 11),
-          pitchId: id,
-          overlapPitchId: oid,
+          pitch_id: id,
+          overlap_pitch_id: oid,
         })),
       );
+      if (overlapsErr) throw overlapsErr;
     }
     return { success: true, id };
   },

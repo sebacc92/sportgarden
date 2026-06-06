@@ -1,10 +1,9 @@
 import { component$ } from "@builder.io/qwik";
 import type { QRL } from "@builder.io/qwik";
-import type { InferSelectModel } from "drizzle-orm";
-import type { pitches } from "~/db/schema";
+import type { Pitch } from "~/db/schema";
 import { Button } from "~/components/ui";
 
-export type PitchRow = InferSelectModel<typeof pitches>;
+export type PitchRow = Pitch;
 
 type PitchesGridProps = {
   pitches: PitchRow[];

@@ -2,7 +2,6 @@ import { component$, useSignal, $ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, type DocumentHead } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { products, orders } from "~/db/schema";
-import { eq, sql } from "drizzle-orm";
 import { StoreSection } from "~/components/home/store-section";
 import {
   useGuestBookingAction,
@@ -45,7 +44,11 @@ export { getDailyBookings } from "~/lib/home-page/loaders";
 // --- Store loaders & actions ---
 export const useActiveProducts = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  return await db.select().from(products).where(eq(products.isActive, true));
+  const { data, error } = await db.from(products).select("*").eq("isActive", true);
+  if (error) {
+    throw new Error(error.message);
+  }
+  return data || [];
 });
 
 export const useCheckoutAction = routeAction$(
@@ -60,30 +63,38 @@ export const useCheckoutAction = routeAction$(
 
     try {
       // Validate stock for all products
+      const fetchedProducts: any[] = [];
       for (const item of items) {
-        const prod = await db.query.products.findFirst({
-          where: eq(products.id, item.productId),
-        });
-        if (!prod) {
+        const { data: prod, error: prodErr } = await db
+          .from(products)
+          .select("*")
+          .eq("id", item.productId)
+          .maybeSingle();
+
+        if (prodErr || !prod) {
           return requestEvent.fail(404, { message: `Producto "${item.name}" no encontrado.` });
         }
         if (prod.stock < item.quantity) {
           return requestEvent.fail(400, { message: `Stock insuficiente para "${item.name}". Stock disponible: ${prod.stock}` });
         }
+        fetchedProducts.push({ prod, item });
       }
 
       // Deduct stock
-      for (const item of items) {
-        await db
-          .update(products)
-          .set({
-            stock: sql`stock - ${item.quantity}`,
-          })
-          .where(eq(products.id, item.productId));
+      for (const { prod, item } of fetchedProducts) {
+        const newStock = prod.stock - item.quantity;
+        const { error: updateErr } = await db
+          .from(products)
+          .update({ stock: newStock })
+          .eq("id", item.productId);
+
+        if (updateErr) {
+          throw new Error(updateErr.message);
+        }
       }
 
       // Save order
-      await db.insert(orders).values({
+      const { error: insertErr } = await db.from(orders).insert({
         id: orderId,
         customerName: data.customerName,
         customerPhone: data.customerPhone,
@@ -92,6 +103,10 @@ export const useCheckoutAction = routeAction$(
         status: "PENDING",
         items: items,
       });
+
+      if (insertErr) {
+        throw new Error(insertErr.message);
+      }
 
       return { success: true, orderId };
     } catch (err: any) {

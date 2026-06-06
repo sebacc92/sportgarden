@@ -12,9 +12,8 @@ import {
   zod$,
   Link,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
-import { cashRegisters, cashMovements, bookings, students, cashSessions, transactions } from "~/db/schema";
-import { eq, desc, inArray, isNull, and, gte, lte } from "drizzle-orm";
+import { getDB, camelize } from "~/db";
+import { cashRegisters, cashMovements, bookings, students, cashSessions, transactions, pitches, users, guestRequests, siteSettings } from "~/db/schema";
 import { Button, Modal } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
@@ -32,29 +31,51 @@ export const useCashData = routeLoader$(async (requestEvent) => {
   const limit = 25;
   const offset = (page - 1) * limit;
 
-  let latestRegister = await db.query.cashRegisters.findFirst({
-    where: eq(cashRegisters.status, "OPEN"),
-    orderBy: [desc(cashRegisters.openedAt)],
-  });
+  // 1. Fetch latest open register or latest register
+  const { data: openRegisterData, error: openRegErr } = await db
+    .from(cashRegisters)
+    .select("*")
+    .eq("status", "OPEN")
+    .order("opened_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (openRegErr) throw openRegErr;
+  let latestRegister = camelize<any>(openRegisterData);
 
   if (!latestRegister) {
-    latestRegister = await db.query.cashRegisters.findFirst({
-      orderBy: [desc(cashRegisters.openedAt)],
-    });
+    const { data: latestRegData, error: latestRegErr } = await db
+      .from(cashRegisters)
+      .select("*")
+      .order("opened_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestRegErr) throw latestRegErr;
+    latestRegister = camelize<any>(latestRegData);
   }
+
   let allMovements: any[] = [];
   let paginatedMovements: any[] = [];
   let totalCount = 0;
   let digitalTransactions: any[] = [];
 
   if (latestRegister) {
-    const cashMovementsList = await db.query.cashMovements.findMany({
-      where: eq(cashMovements.registerId, latestRegister.id),
-    });
+    const { data: movementsData, error: movementsErr } = await db
+      .from(cashMovements)
+      .select("*")
+      .eq("register_id", latestRegister.id);
 
-    digitalTransactions = await db.query.transactions.findMany({
-      where: eq(transactions.cashSessionId, latestRegister.id),
-    });
+    if (movementsErr) throw movementsErr;
+    const cashMovementsList = camelize<any[]>(movementsData || []);
+
+    const { data: txsData, error: txsErr } = await db
+      .from(transactions)
+      .select("*")
+      .eq("cash_session_id", latestRegister.id);
+
+    if (txsErr) throw txsErr;
+    digitalTransactions = camelize<any[]>(txsData || []);
 
     // Map digital transactions to match standard movement structure
     const mappedDigital = digitalTransactions.map((t) => ({
@@ -84,14 +105,47 @@ export const useCashData = routeLoader$(async (requestEvent) => {
       .map((m) => m.referenceId);
 
     if (bookingIds.length > 0) {
-      const relatedBookings = await db.query.bookings.findMany({
-        where: inArray(bookings.id, bookingIds),
-        with: {
-          pitch: true,
-          user: true,
-          guestRequest: true,
-        },
-      });
+      const { data: booksData, error: booksErr } = await db
+        .from(bookings)
+        .select("*")
+        .in("id", bookingIds);
+
+      if (booksErr) throw booksErr;
+      const bookingsRaw = camelize<any[]>(booksData || []);
+
+      let relatedBookings: any[] = [];
+      if (bookingsRaw.length > 0) {
+        const pitchIds = Array.from(new Set(bookingsRaw.map((b) => b.pitchId).filter(Boolean)));
+        const userIds = Array.from(new Set(bookingsRaw.map((b) => b.userId).filter(Boolean)));
+
+        const { data: pitchesData, error: pitchesErr } = await db
+          .from(pitches)
+          .select("*")
+          .in("id", pitchIds);
+        if (pitchesErr) throw pitchesErr;
+        const pitchesRaw = camelize<any[]>(pitchesData || []);
+
+        const { data: usersData, error: usersErr } = await db
+          .from(users)
+          .select("id, name, phone")
+          .in("id", userIds);
+        if (usersErr) throw usersErr;
+        const usersRaw = camelize<any[]>(usersData || []);
+
+        const { data: guestsData, error: guestsErr } = await db
+          .from(guestRequests)
+          .select("*")
+          .in("booking_id", bookingIds);
+        if (guestsErr) throw guestsErr;
+        const guestsRaw = camelize<any[]>(guestsData || []);
+
+        relatedBookings = bookingsRaw.map((b) => ({
+          ...b,
+          pitch: pitchesRaw.find((p) => p.id === b.pitchId) || null,
+          user: usersRaw.find((u) => u.id === b.userId) || null,
+          guestRequest: guestsRaw.find((g) => g.bookingId === b.id) || null,
+        }));
+      }
 
       // Attach booking info to movements
       paginatedMovements = paginatedMovements.map((m) => {
@@ -109,9 +163,13 @@ export const useCashData = routeLoader$(async (requestEvent) => {
       .map((m) => m.referenceId);
 
     if (studentIds.length > 0) {
-      const relatedStudents = await db.query.students.findMany({
-        where: inArray(students.id, studentIds),
-      });
+      const { data: studentsData, error: studentsErr } = await db
+        .from(students)
+        .select("*")
+        .in("id", studentIds);
+
+      if (studentsErr) throw studentsErr;
+      const relatedStudents = camelize<any[]>(studentsData || []);
 
       paginatedMovements = paginatedMovements.map((m) => {
         if (m.category === "SCHOOL" && m.referenceId) {
@@ -134,7 +192,14 @@ export const useCashData = routeLoader$(async (requestEvent) => {
   const currentBalance =
     (latestRegister?.openingBalance || 0) + totalIncomes - totalExpenses;
 
-  const settings = await db.query.siteSettings.findFirst();
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .maybeSingle();
+
+  if (settingsErr) throw settingsErr;
+  const settings = camelize<any>(settingsData);
+
   const availableMethods = resolvePaymentMethodsForAnalytics(
     settings?.paymentMethods,
   );
@@ -155,9 +220,13 @@ export const useCashData = routeLoader$(async (requestEvent) => {
   }
 
   // Cargar transacciones en suspenso (mientras la caja está cerrada actualmente)
-  const pendingTransactions = await db.query.transactions.findMany({
-    where: isNull(transactions.cashSessionId),
-  });
+  const { data: pendingTxsData, error: pendingTxsErr } = await db
+    .from(transactions)
+    .select("*")
+    .is("cash_session_id", null);
+
+  if (pendingTxsErr) throw pendingTxsErr;
+  const pendingTransactions = camelize<any[]>(pendingTxsData || []);
 
   const pendingDigital = {
     count: pendingTransactions.length,
@@ -180,17 +249,33 @@ export const useCashData = routeLoader$(async (requestEvent) => {
   const endOfToday = new Date();
   endOfToday.setHours(23, 59, 59, 999);
 
-  const unconfirmedTodayBookings = await db.query.bookings.findMany({
-    where: and(
-      inArray(bookings.paymentMethod, ["CUENTA_CORRIENTE", "CURRENT_ACCOUNT"]),
-      inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL"]),
-      gte(bookings.startTime, startOfToday),
-      lte(bookings.startTime, endOfToday),
-    ),
-    with: {
-      pitch: true,
-    },
-  });
+  const { data: unconfirmedData, error: unconfirmedErr } = await db
+    .from(bookings)
+    .select("*")
+    .in("payment_method", ["CUENTA_CORRIENTE", "CURRENT_ACCOUNT"])
+    .in("status", ["CONFIRMED", "PENDING_APPROVAL"])
+    .gte("start_time", startOfToday.toISOString())
+    .lte("start_time", endOfToday.toISOString());
+
+  if (unconfirmedErr) throw unconfirmedErr;
+  const unconfirmedRaw = camelize<any[]>(unconfirmedData || []);
+
+  let unconfirmedTodayBookings: any[] = [];
+  if (unconfirmedRaw.length > 0) {
+    const pitchIds = Array.from(new Set(unconfirmedRaw.map((b) => b.pitchId).filter(Boolean)));
+    const { data: pitchesData, error: pitchesErr } = await db
+      .from(pitches)
+      .select("*")
+      .in("id", pitchIds);
+
+    if (pitchesErr) throw pitchesErr;
+    const pitchesRaw = camelize<any[]>(pitchesData || []);
+
+    unconfirmedTodayBookings = unconfirmedRaw.map((b) => ({
+      ...b,
+      pitch: pitchesRaw.find((p) => p.id === b.pitchId) || null,
+    }));
+  }
 
   return {
     latestRegister,
@@ -218,28 +303,28 @@ export const useToggleRegisterAction = routeAction$(
     const { action, balance, registerId, notes } = data;
     if (action === "OPEN") {
       const id = crypto.randomUUID();
-      await db.transaction(async (tx) => {
-        // Insert register
-        await tx.insert(cashRegisters).values({
-          id,
-          openingBalance: Number(balance) || 0,
-          status: "OPEN",
-          notes: notes || null,
-        });
 
-        // Insert session in cashSessions
-        await tx.insert(cashSessions).values({
-          id,
-          openedAt: new Date(),
-          status: "OPEN",
-        });
-
-        // Assign pending digital transactions (cashSessionId IS NULL) to the new session
-        await tx
-          .update(transactions)
-          .set({ cashSessionId: id })
-          .where(isNull(transactions.cashSessionId));
+      const { error: insRegErr } = await db.from(cashRegisters).insert({
+        id,
+        opening_balance: Number(balance) || 0,
+        status: "OPEN",
+        notes: notes || null,
       });
+      if (insRegErr) throw insRegErr;
+
+      const { error: insSesErr } = await db.from(cashSessions).insert({
+        id,
+        opened_at: new Date().toISOString(),
+        status: "OPEN",
+      });
+      if (insSesErr) throw insSesErr;
+
+      const { error: updTxErr } = await db
+        .from(transactions)
+        .update({ cash_session_id: id })
+        .is("cash_session_id", null);
+      if (updTxErr) throw updTxErr;
+
       return { success: true };
     } else if (action === "CLOSE") {
       // Parse billCount from JSON string
@@ -251,28 +336,28 @@ export const useToggleRegisterAction = routeAction$(
           // Ignorar error de parseo si el JSON es inválido
         }
       }
-      await db.transaction(async (tx) => {
-        // Close register
-        await tx
-          .update(cashRegisters)
-          .set({
-            status: "CLOSED",
-            closingBalance: Number(balance) || 0,
-            closedAt: new Date(),
-            billCount: billCount ?? null,
-            notes: notes || null,
-          })
-          .where(eq(cashRegisters.id, registerId!));
 
-        // Close cashSession
-        await tx
-          .update(cashSessions)
-          .set({
-            status: "CLOSED",
-            closedAt: new Date(),
-          })
-          .where(eq(cashSessions.id, registerId!));
-      });
+      const { error: updRegErr } = await db
+        .from(cashRegisters)
+        .update({
+          status: "CLOSED",
+          closing_balance: Number(balance) || 0,
+          closed_at: new Date().toISOString(),
+          bill_count: billCount ?? null,
+          notes: notes || null,
+        })
+        .eq("id", registerId!);
+      if (updRegErr) throw updRegErr;
+
+      const { error: updSesErr } = await db
+        .from(cashSessions)
+        .update({
+          status: "CLOSED",
+          closed_at: new Date().toISOString(),
+        })
+        .eq("id", registerId!);
+      if (updSesErr) throw updSesErr;
+
       return { success: true };
     }
     return { success: false };
@@ -289,15 +374,16 @@ export const useToggleRegisterAction = routeAction$(
 export const useAddMovementAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    await db.insert(cashMovements).values({
+    const { error } = await db.from(cashMovements).insert({
       id: crypto.randomUUID(),
-      registerId: data.registerId,
-      type: data.type as any,
-      category: data.category as any,
+      register_id: data.registerId,
+      type: data.type,
+      category: data.category,
       amount: data.amount,
       description: data.description,
-      paymentMethod: data.paymentMethod as any,
+      payment_method: data.paymentMethod,
     });
+    if (error) throw error;
     return { success: true };
   },
   zod$({

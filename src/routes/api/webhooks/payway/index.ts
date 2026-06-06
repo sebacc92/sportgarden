@@ -1,7 +1,6 @@
 import type { RequestHandler } from "@builder.io/qwik-city";
 import { getDB } from "~/db";
 import { bookings, transactions, cashSessions } from "~/db/schema";
-import { eq } from "drizzle-orm";
 import { processPaywayWebhook } from "~/lib/payway";
 
 /**
@@ -44,44 +43,49 @@ export const onPost: RequestHandler = async (requestEvent) => {
 
     const db = getDB(requestEvent);
 
-    // 3. Update the booking status in Turso DB
-    const updatedBookings = await db
-      .update(bookings)
-      .set({
+    // 3. Update the booking status in DB
+    const { data: updatedBookings, error: updErr } = await db
+      .from(bookings)
+      .update({
         status: "CONFIRMED",
-        paymentStatus: "PAID",
-        paidAmount: amount,
-        paymentId: paymentId,
-        paymentMethod: "PAYWAY",
+        payment_status: "PAID",
+        paid_amount: amount,
+        payment_id: paymentId,
+        payment_method: "PAYWAY",
       })
-      .where(eq(bookings.id, bookingId))
-      .returning();
+      .eq("id", bookingId)
+      .select();
 
-    if (updatedBookings.length === 0) {
-      console.error(`[Webhook Payway] Booking with ID '${bookingId}' not found in Turso DB.`);
+    if (updErr || !updatedBookings || updatedBookings.length === 0) {
+      console.error(`[Webhook Payway] Booking with ID '${bookingId}' not found in DB.`, updErr?.message);
       requestEvent.status(404);
       requestEvent.json(404, { success: false, error: "Booking not found" });
       return;
     }
 
-    console.log(`[Webhook Payway] Booking '${bookingId}' successfully confirmed in Turso database.`);
+    console.log(`[Webhook Payway] Booking '${bookingId}' successfully confirmed in database.`);
 
     // 4. Log the digital transaction in the cash session
     try {
-      const openSession = await db.query.cashSessions.findFirst({
-        where: eq(cashSessions.status, "OPEN"),
-      });
+      const { data: openSession, error: sessErr } = await db
+        .from(cashSessions)
+        .select("id")
+        .eq("status", "OPEN")
+        .maybeSingle();
 
-      await db.insert(transactions).values({
+      if (sessErr) throw sessErr;
+
+      const { error: insErr } = await db.from(transactions).insert({
         id: crypto.randomUUID(),
-        cashSessionId: openSession ? openSession.id : null,
+        cash_session_id: openSession ? openSession.id : null,
         type: "INCOME",
         category: "RESERVA_PAYWAY",
         amount: amount,
         description: `Pago digital Payway - Reserva: ${bookingId.slice(0, 8)}`,
-        paymentMethod: "PAYWAY",
-        referenceId: bookingId,
+        payment_method: "PAYWAY",
+        reference_id: bookingId,
       });
+      if (insErr) throw insErr;
       console.log(`[Webhook Payway] Digital transaction successfully recorded with session ID: ${openSession ? openSession.id : 'NULL'}`);
     } catch (e) {
       console.error(`[Webhook Payway] Error logging transaction:`, e);

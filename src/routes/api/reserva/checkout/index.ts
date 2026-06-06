@@ -1,7 +1,6 @@
-import type { RequestHandler } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
-import { mercadoPagoCredentials } from "~/db/schema";
-import { eq } from "drizzle-orm";
+import { type RequestHandler } from "@builder.io/qwik-city";
+import { getDB, camelize } from "~/db";
+import { mercadoPagoCredentials, type MercadoPagoCredentials } from "~/db/schema";
 
 interface CheckoutRequest {
   canchaId: string;
@@ -38,11 +37,16 @@ export const onPost: RequestHandler = async (requestEvent) => {
 
     // 2. Consultar las credenciales en la base de datos buscando el id: "1"
     const db = getDB(requestEvent);
-    const [credentials] = await db
-      .select()
+    const { data: credentialsData, error: credentialsErr } = await db
       .from(mercadoPagoCredentials)
-      .where(eq(mercadoPagoCredentials.id, "1"))
-      .limit(1);
+      .select("*")
+      .eq("id", "1")
+      .maybeSingle();
+
+    if (credentialsErr) {
+      throw new Error(credentialsErr.message);
+    }
+    const credentials = camelize<MercadoPagoCredentials>(credentialsData);
 
     if (!credentials || !credentials.accessToken) {
       json(400, {

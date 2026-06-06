@@ -1,6 +1,5 @@
 import { component$ } from "@builder.io/qwik";
 import { routeAction$, Form, zod$, z, Link } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
 import { getDB } from "~/db";
 import { users } from "~/db/schema";
 import { hashPassword, createSessionJWT } from "~/lib/auth";
@@ -13,9 +12,17 @@ export const useRegisterAction = routeAction$(
     const db = getDB(requestEvent);
 
     // Check if email already exists
-    const existingUser = await db.query.users.findFirst({
-      where: eq(users.email, data.email),
-    });
+    const { data: existingUser, error: checkErr } = await db
+      .from(users)
+      .select("id")
+      .eq("email", data.email)
+      .maybeSingle();
+
+    if (checkErr) {
+      return requestEvent.fail(500, {
+        message: "Error de base de datos.",
+      });
+    }
 
     if (existingUser) {
       return requestEvent.fail(400, {
@@ -28,7 +35,7 @@ export const useRegisterAction = routeAction$(
     const id = crypto.randomUUID();
 
     // Create user
-    await db.insert(users).values({
+    const { error: insErr } = await db.from(users).insert({
       id,
       name: data.name,
       email: data.email,
@@ -36,6 +43,12 @@ export const useRegisterAction = routeAction$(
       password: hashedPassword,
       role: "REGISTERED",
     });
+
+    if (insErr) {
+      return requestEvent.fail(500, {
+        message: "Error al crear el usuario en la base de datos.",
+      });
+    }
 
     // Create session
     const token = await createSessionJWT(id, "REGISTERED");

@@ -7,7 +7,7 @@ import {
   zod$,
   Link,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import {
   groups,
   groupTransactions,
@@ -15,29 +15,42 @@ import {
   cashMovements,
   siteSettings,
 } from "~/db/schema";
-import { eq, desc } from "drizzle-orm";
 import { Button } from "~/components/ui";
 
 export const useGroupDetailsData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const groupId = requestEvent.params.id;
 
-  const group = await db.query.groups.findFirst({
-    where: eq(groups.id, groupId),
-  });
+  const { data: groupData, error: groupErr } = await db
+    .from(groups)
+    .select("*")
+    .eq("id", groupId)
+    .maybeSingle();
 
-  if (!group) {
+  if (groupErr || !groupData) {
     throw requestEvent.redirect(302, "/admin/groups/");
   }
 
-  const transactions = await db.query.groupTransactions.findMany({
-    where: eq(groupTransactions.groupId, groupId),
-    orderBy: [desc(groupTransactions.createdAt)],
-  });
+  const { data: txsData, error: txsErr } = await db
+    .from(groupTransactions)
+    .select("*")
+    .eq("group_id", groupId)
+    .order("created_at", { ascending: false });
 
-  const settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  if (txsErr) throw txsErr;
+
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) throw settingsErr;
+
+  const group = camelize<any>(groupData);
+  const transactions = camelize<any[]>(txsData || []);
+  const settings = camelize<any>(settingsData);
+
   const paymentMethods = (settings?.paymentMethods || []) as {
     id: string;
     name: string;
@@ -65,51 +78,61 @@ export const useAddTransactionAction = routeAction$(
     const amount = Number(data.amount);
 
     // Get group to update balance
-    const group = await db.query.groups.findFirst({
-      where: eq(groups.id, data.groupId),
-    });
+    const { data: groupData, error: groupErr } = await db
+      .from(groups)
+      .select("*")
+      .eq("id", data.groupId)
+      .maybeSingle();
 
-    if (!group) return { success: false, message: "Grupo no encontrado" };
+    if (groupErr || !groupData) return { success: false, message: "Grupo no encontrado" };
+    const group = camelize<any>(groupData);
 
     const newBalance =
       data.type === "PAYMENT" ? group.balance + amount : group.balance - amount;
 
     const txId = crypto.randomUUID();
 
-    // Run in transaction if possible, but SQLite Drizzle doesn't have robust transaction API exposed simply sometimes,
-    // we'll just run sequentially.
-    await db.insert(groupTransactions).values({
+    const { error: insTxErr } = await db.from(groupTransactions).insert({
       id: txId,
-      groupId: data.groupId,
+      group_id: data.groupId,
       type: data.type as "CHARGE" | "PAYMENT",
       amount: amount,
       description: data.description,
     });
 
-    await db
-      .update(groups)
-      .set({ balance: newBalance })
-      .where(eq(groups.id, data.groupId));
+    if (insTxErr) throw insTxErr;
 
-    // If it's a payment and there's an open cash register, we should ask the user or just automatically add it?
-    // Let's check if there is an open register and we indicated a payment method.
+    const { error: updGroupErr } = await db
+      .from(groups)
+      .update({ balance: newBalance })
+      .eq("id", data.groupId);
+
+    if (updGroupErr) throw updGroupErr;
+
+    // If it's a payment and there's an open cash register
     if (data.type === "PAYMENT" && data.paymentMethod) {
-      const openRegister = await db.query.cashRegisters.findFirst({
-        where: eq(cashRegisters.status, "OPEN"),
-        orderBy: [desc(cashRegisters.openedAt)],
-      });
+      const { data: registersData, error: regErr } = await db
+        .from(cashRegisters)
+        .select("*")
+        .eq("status", "OPEN")
+        .order("opened_at", { ascending: false })
+        .limit(1);
+
+      if (regErr) throw regErr;
+      const openRegister = camelize<any>(registersData?.[0]);
 
       if (openRegister) {
-        await db.insert(cashMovements).values({
+        const { error: insMovErr } = await db.from(cashMovements).insert({
           id: crypto.randomUUID(),
-          registerId: openRegister.id,
+          register_id: openRegister.id,
           type: "INCOME",
           category: "GROUP_PAYMENT",
           amount: amount,
           description: `Pago de ${group.name} - ${data.description || ""}`,
-          paymentMethod: data.paymentMethod as any,
-          referenceId: txId,
+          payment_method: data.paymentMethod,
+          reference_id: txId,
         });
+        if (insMovErr) throw insMovErr;
       }
     }
 

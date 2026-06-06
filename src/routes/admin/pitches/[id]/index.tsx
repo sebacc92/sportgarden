@@ -7,7 +7,7 @@ import {
   Form,
   useNavigate,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { pitches, pitchOverlaps, pitchPricingRules } from "~/db/schema";
 import { put } from "@vercel/blob";
 import imageCompression from "browser-image-compression";
@@ -20,31 +20,32 @@ import {
   LuPlus,
 } from "@qwikest/icons/lucide";
 import { cn } from "@qwik-ui/utils";
-import { eq, or } from "drizzle-orm";
 
 export const usePitchData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const id = requestEvent.params.id;
-  const pitch = await db.query.pitches.findFirst({
-    where: eq(pitches.id, id),
-    with: {
-      pricingRules: true,
-      overlaps: true,
-    },
-  });
+  const { data: pitchData, error: pitchErr } = await db
+    .from(pitches)
+    .select("*, pricingRules:pitch_pricing_rules(*), overlaps:pitch_overlaps(*)")
+    .eq("id", id)
+    .maybeSingle();
 
-  if (!pitch) {
+  if (pitchErr) throw pitchErr;
+  if (!pitchData) {
     throw requestEvent.redirect(302, "/admin/pitches");
   }
-  return pitch;
+  return camelize<any>(pitchData);
 });
 
 export const useAllPitches = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  return db.query.pitches.findMany({
-    orderBy: (pitches, { asc }) => [asc(pitches.name)],
-    columns: { id: true, name: true },
-  });
+  const { data, error } = await db
+    .from(pitches)
+    .select("id, name")
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return camelize<any[]>(data || []);
 });
 
 export const useUpdatePitchAction = routeAction$(
@@ -68,56 +69,73 @@ export const useUpdatePitchAction = routeAction$(
       uploadedImageUrl = url;
     }
 
-    await db
-      .update(pitches)
-      .set({
+    const { error: updateErr } = await db
+      .from(pitches)
+      .update({
         name: data.name,
         type: data.type as "F5" | "F6" | "F9",
-        isCovered: data.isCovered === "on",
-        isLit: data.isLit === "on",
-        pricePerHour: Number(data.pricePerHour),
-        depositType:
+        is_covered: data.isCovered === "on",
+        is_lit: data.isLit === "on",
+        price_per_hour: Number(data.pricePerHour),
+        deposit_type:
           (data.depositType as "PERCENTAGE" | "FIXED") || "PERCENTAGE",
-        depositAmount: Number(data.depositAmount) || 0,
+        deposit_amount: Number(data.depositAmount) || 0,
         notes: data.notes || null,
-        imageUrl: uploadedImageUrl,
+        image_url: uploadedImageUrl,
         sport: data.sport || "Fútbol",
         surface: data.surface || "Sintético",
       })
-      .where(eq(pitches.id, id));
+      .eq("id", id);
+
+    if (updateErr) throw updateErr;
 
     // Update overlaps
     const overlapIds = JSON.parse(data.overlaps || "[]") as string[];
     // Delete existing (bidirectional)
-    await db
-      .delete(pitchOverlaps)
-      .where(
-        or(eq(pitchOverlaps.pitchId, id), eq(pitchOverlaps.overlapPitchId, id)),
-      );
+    const { error: deleteOverlapsErr } = await db
+      .from(pitchOverlaps)
+      .delete()
+      .or(`pitch_id.eq.${id},overlap_pitch_id.eq.${id}`);
+
+    if (deleteOverlapsErr) throw deleteOverlapsErr;
+
     // Insert new
     if (overlapIds.length > 0) {
-      await db.insert(pitchOverlaps).values(
-        overlapIds.map((oid) => ({
-          id: Math.random().toString(36).substring(2, 11),
-          pitchId: id,
-          overlapPitchId: oid,
-        })),
-      );
+      const { error: insertOverlapsErr } = await db
+        .from(pitchOverlaps)
+        .insert(
+          overlapIds.map((oid) => ({
+            id: Math.random().toString(36).substring(2, 11),
+            pitch_id: id,
+            overlap_pitch_id: oid,
+          })),
+        );
+      if (insertOverlapsErr) throw insertOverlapsErr;
     }
 
     // Update pricing rules
     const rules = JSON.parse(data.rulesJson as string) as any[];
-    await db.delete(pitchPricingRules).where(eq(pitchPricingRules.pitchId, id));
+    const { error: deleteRulesErr } = await db
+      .from(pitchPricingRules)
+      .delete()
+      .eq("pitch_id", id);
+
+    if (deleteRulesErr) throw deleteRulesErr;
+
     if (rules.length > 0) {
       const rulesToInsert = rules.map((rule) => ({
         id: Math.random().toString(36).substring(2, 11),
-        pitchId: id,
-        dayOfWeek: Number(rule.dayOfWeek),
-        startTime: rule.startTime,
-        endTime: rule.endTime,
+        pitch_id: id,
+        day_of_week: Number(rule.dayOfWeek),
+        start_time: rule.startTime,
+        end_time: rule.endTime,
         price: Number(rule.price),
       }));
-      await db.insert(pitchPricingRules).values(rulesToInsert);
+      const { error: insertRulesErr } = await db
+        .from(pitchPricingRules)
+        .insert(rulesToInsert);
+
+      if (insertRulesErr) throw insertRulesErr;
     }
 
     return { success: true };
@@ -186,8 +204,8 @@ export default component$(() => {
       notes: pitch.notes || "",
       imageUrl: pitch.imageUrl,
       previewUrl: null as string | null,
-      overlaps: pitch.overlaps.map((o) => o.overlapPitchId),
-      rules: pitch.pricingRules.map((r) => ({ ...r, id: r.id })),
+      overlaps: pitch.overlaps.map((o: any) => o.overlapPitchId),
+      rules: pitch.pricingRules.map((r: any) => ({ ...r, id: r.id })),
     },
     { deep: true },
   );
@@ -556,7 +574,7 @@ export default component$(() => {
             </div>
 
             <div class="space-y-4">
-              {formState.rules.map((rule, idx) => (
+              {formState.rules.map((rule: any, idx: number) => (
                 <div
                   key={rule.id}
                   class="flex items-center gap-4 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm"
@@ -576,7 +594,7 @@ export default component$(() => {
                     >
                       {daysOfWeek.map((day, i) => (
                         <option key={i} value={i}>
-                          {day}
+                           {day}
                         </option>
                       ))}
                     </select>
@@ -626,7 +644,7 @@ export default component$(() => {
                       type="button"
                       onClick$={() =>
                         (formState.rules = formState.rules.filter(
-                          (r) => r.id !== rule.id,
+                          (r: any) => r.id !== rule.id,
                         ))
                       }
                       class="rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
@@ -708,7 +726,7 @@ export default component$(() => {
                           onChange$={() => {
                             const current = formState.overlaps;
                             const next = isSelected
-                              ? current.filter((id) => id !== p.id)
+                              ? current.filter((id: string) => id !== p.id)
                               : [...current, p.id];
                             formState.overlaps = next;
                           }}

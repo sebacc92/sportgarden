@@ -1,7 +1,6 @@
 import { component$, $, useSignal, useComputed$ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { siteSettings } from "~/db/schema";
 import { put } from "@vercel/blob";
 import imageCompression from "browser-image-compression";
@@ -13,11 +12,15 @@ const MAX_REELS = 5;
 
 export const useGalleryLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const [settings] = await db
-    .select({ galleryImages: siteSettings.galleryImages, reels: siteSettings.reels })
+  const { data, error } = await db
     .from(siteSettings)
-    .where(eq(siteSettings.id, 1))
-    .limit(1);
+    .select("gallery_images, reels")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) throw error;
+  const settings = camelize<any>(data);
+
   return {
     images: (settings?.galleryImages as string[] | null) ?? [],
     reels: (settings?.reels as { id: string; videoUrl: string; posterUrl: string; caption?: string }[] | null) ?? [],
@@ -30,11 +33,14 @@ export const useUploadGalleryImageAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const [settings] = await db
-      .select({ galleryImages: siteSettings.galleryImages })
+    const { data: settingsData, error } = await db
       .from(siteSettings)
-      .where(eq(siteSettings.id, 1))
-      .limit(1);
+      .select("gallery_images")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) throw error;
+    const settings = camelize<any>(settingsData);
     const current = (settings?.galleryImages as string[] | null) ?? [];
 
     if (current.length >= MAX_IMAGES) {
@@ -55,10 +61,12 @@ export const useUploadGalleryImageAction = routeAction$(
     });
 
     const updated = [...current, url];
-    await db
-      .update(siteSettings)
-      .set({ galleryImages: updated, updatedAt: new Date() })
-      .where(eq(siteSettings.id, 1));
+    const { error: updErr } = await db
+      .from(siteSettings)
+      .update({ gallery_images: updated, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    if (updErr) throw updErr;
 
     return { success: true };
   },
@@ -68,17 +76,24 @@ export const useUploadGalleryImageAction = routeAction$(
 export const useDeleteGalleryImageAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const [settings] = await db
-      .select({ galleryImages: siteSettings.galleryImages })
+    const { data: settingsData, error } = await db
       .from(siteSettings)
-      .where(eq(siteSettings.id, 1))
-      .limit(1);
+      .select("gallery_images")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) throw error;
+    const settings = camelize<any>(settingsData);
     const current = (settings?.galleryImages as string[] | null) ?? [];
     const updated = current.filter((url) => url !== data.url);
-    await db
-      .update(siteSettings)
-      .set({ galleryImages: updated, updatedAt: new Date() })
-      .where(eq(siteSettings.id, 1));
+
+    const { error: updErr } = await db
+      .from(siteSettings)
+      .update({ gallery_images: updated, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    if (updErr) throw updErr;
+
     return { success: true };
   },
   zod$({ url: z.string().url() }),
@@ -89,10 +104,14 @@ export const useReorderGalleryAction = routeAction$(
     const db = getDB(requestEvent);
     const urls = JSON.parse(data.urlsJson as string) as string[];
     if (!Array.isArray(urls)) return { success: false };
-    await db
-      .update(siteSettings)
-      .set({ galleryImages: urls, updatedAt: new Date() })
-      .where(eq(siteSettings.id, 1));
+
+    const { error: updErr } = await db
+      .from(siteSettings)
+      .update({ gallery_images: urls, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    if (updErr) throw updErr;
+
     return { success: true };
   },
   zod$({ urlsJson: z.string() }),
@@ -102,11 +121,14 @@ export const useUploadReelAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const [settings] = await db
-      .select({ reels: siteSettings.reels })
+    const { data: settingsData, error } = await db
       .from(siteSettings)
-      .where(eq(siteSettings.id, 1))
-      .limit(1);
+      .select("reels")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) throw error;
+    const settings = camelize<any>(settingsData);
     const current = (settings?.reels as { id: string; videoUrl: string; posterUrl: string; caption?: string }[] | null) ?? [];
 
     if (current.length >= MAX_REELS) {
@@ -149,10 +171,12 @@ export const useUploadReelAction = routeAction$(
     };
 
     const updated = [...current, newReel];
-    await db
-      .update(siteSettings)
-      .set({ reels: updated, updatedAt: new Date() })
-      .where(eq(siteSettings.id, 1));
+    const { error: updErr } = await db
+      .from(siteSettings)
+      .update({ reels: updated, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    if (updErr) throw updErr;
 
     return { success: true };
   },
@@ -166,17 +190,24 @@ export const useUploadReelAction = routeAction$(
 export const useDeleteReelAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const [settings] = await db
-      .select({ reels: siteSettings.reels })
+    const { data: settingsData, error } = await db
       .from(siteSettings)
-      .where(eq(siteSettings.id, 1))
-      .limit(1);
+      .select("reels")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) throw error;
+    const settings = camelize<any>(settingsData);
     const current = (settings?.reels as { id: string; videoUrl: string; posterUrl: string; caption?: string }[] | null) ?? [];
     const updated = current.filter((r) => r.id !== data.id);
-    await db
-      .update(siteSettings)
-      .set({ reels: updated, updatedAt: new Date() })
-      .where(eq(siteSettings.id, 1));
+
+    const { error: updErr } = await db
+      .from(siteSettings)
+      .update({ reels: updated, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+
+    if (updErr) throw updErr;
+
     return { success: true };
   },
   zod$({ id: z.string() }),

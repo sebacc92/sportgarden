@@ -8,17 +8,22 @@ import {
   Link,
   server$,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize, snakize } from "~/db";
 import { groups, users } from "~/db/schema";
-import { desc } from "drizzle-orm";
 import { Button, Modal } from "~/components/ui";
 
 export const useGroupsData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
 
-  const allGroups = await db.query.groups.findMany({
-    orderBy: [desc(groups.createdAt)],
-  });
+  const { data: allGroupsData, error } = await db
+    .from(groups)
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  const allGroups = camelize<any[]>(allGroupsData);
 
   return {
     groups: allGroups,
@@ -29,14 +34,20 @@ export const useCreateGroupAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    await db.insert(groups).values({
-      id: crypto.randomUUID(),
-      name: data.name,
-      contactName: data.contactName,
-      contactPhone: data.contactPhone,
-      contactEmail: data.contactEmail,
-      balance: 0,
-    });
+    const { error } = await db.from(groups).insert(
+      snakize({
+        id: crypto.randomUUID(),
+        name: data.name,
+        contactName: data.contactName,
+        contactPhone: data.contactPhone,
+        contactEmail: data.contactEmail || null,
+        balance: 0,
+      })
+    );
+
+    if (error) {
+      throw new Error(error.message);
+    }
 
     return { success: true };
   },
@@ -51,18 +62,18 @@ export const useCreateGroupAction = routeAction$(
 export const searchContactsServer = server$(async function (query: string) {
   if (!query || query.length < 2) return [];
   const db = getDB(this as any);
-  const { ilike, or } = await import("drizzle-orm");
   const pattern = `%${query}%`;
 
-  return await db.query.users.findMany({
-    where: or(
-      ilike(users.name, pattern),
-      ilike(users.email, pattern),
-      ilike(users.phone, pattern),
-    ),
-    columns: { id: true, name: true, phone: true, email: true },
-    limit: 10,
-  });
+  const { data: usersData, error } = await db
+    .from(users)
+    .select("id, name, phone, email")
+    .or(`name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`)
+    .limit(10);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return camelize<any[]>(usersData);
 });
 
 export default component$(() => {

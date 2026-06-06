@@ -37,7 +37,6 @@
     "autoprefixer": "^10.4.14",
     "class-variance-authority": "0.7.1",
     "dotenv": "^17.4.2",
-    "drizzle-kit": "^0.31.10",
     "eslint": "10.4.0",
     "eslint-plugin-qwik": "^1.19.2",
     "globals": "17.6.0",
@@ -59,17 +58,14 @@
     "vite-tsconfig-paths": "6.1.1"
   },
   "dependencies": {
-    "@auth/drizzle-adapter": "^1.11.2",
     "@supabase/supabase-js": "^2.107.0",
     "@vercel/blob": "^2.3.3",
     "bcryptjs": "^3.0.3",
     "browser-image-compression": "^2.0.2",
     "cssnano": "8.0.1",
-    "drizzle-orm": "^0.45.2",
     "jose": "^6.2.3",
     "mercadopago": "3.0.0",
-    "openai": "6.39.0",
-    "postgres": "^3.4.9"
+    "openai": "6.39.0"
   },
   "nx": {}
 }

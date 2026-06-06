@@ -7,8 +7,7 @@ import {
   z,
   type DocumentHead,
 } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
 import { LuPlus, LuTrash2, LuSave } from "@qwikest/icons/lucide";
@@ -18,22 +17,28 @@ import { CashAdminPageWrapper } from "~/components/admin/cash/CashAdminPageWrapp
 
 export const useCashPaymentSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const row = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data: rowData, error: rowErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (rowErr) throw rowErr;
+  const row = camelize<any>(rowData);
   return resolvePaymentMethodsForSettings(row?.paymentMethods);
 });
 
 export const useSavePaymentMethodsAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    await db
-      .update(siteSettings)
-      .set({
-        paymentMethods: JSON.parse(data.paymentMethods as string),
-        updatedAt: new Date(),
+    const { error } = await db
+      .from(siteSettings)
+      .update({
+        payment_methods: JSON.parse(data.paymentMethods as string),
+        updated_at: new Date().toISOString(),
       })
-      .where(eq(siteSettings.id, 1));
+      .eq("id", 1);
+    if (error) throw error;
     return { success: true };
   },
   zod$({

@@ -34,7 +34,6 @@ import type { RequestHandler } from "@builder.io/qwik-city";
 import { MercadoPagoConfig, Payment } from "mercadopago";
 import { getDB } from "~/db";
 import { bookings, transactions, cashSessions } from "~/db/schema";
-import { eq } from "drizzle-orm";
 
 /**
  * POST /api/webhook/mercadopago
@@ -135,41 +134,46 @@ export const onPost: RequestHandler = async (requestEvent) => {
       } else {
         console.log(`[Webhook MP] Payment approved! Updating booking '${externalReference}' in database...`);
 
-        // --- ACTIVE PRODUCTION QUERY (Turso + Drizzle ORM) ---
+        // --- ACTIVE PRODUCTION QUERY (Supabase REST) ---
         const db = getDB(requestEvent);
-        const updatedBookings = await db
-          .update(bookings)
-          .set({
+        const { data: updatedBookings, error: updErr } = await db
+          .from(bookings)
+          .update({
             status: "CONFIRMED",
-            paymentStatus: "PAID",
-            paidAmount: Number(mpPayment.transaction_amount || 0),
-            paymentId: paymentId.toString(),
-            paymentMethod: mpPayment.payment_method_id || "MERCADOPAGO",
+            payment_status: "PAID",
+            paid_amount: Number(mpPayment.transaction_amount || 0),
+            payment_id: paymentId.toString(),
+            payment_method: mpPayment.payment_method_id || "MERCADOPAGO",
           })
-          .where(eq(bookings.id, externalReference))
-          .returning();
+          .eq("id", externalReference)
+          .select();
 
-        if (updatedBookings.length === 0) {
-          console.error(`[Webhook MP] Booking with ID '${externalReference}' not found in Turso DB.`);
+        if (updErr || !updatedBookings || updatedBookings.length === 0) {
+          console.error(`[Webhook MP] Booking with ID '${externalReference}' not found in DB.`, updErr?.message);
         } else {
-          console.log(`[Webhook MP] Booking '${externalReference}' successfully confirmed in Turso database.`);
+          console.log(`[Webhook MP] Booking '${externalReference}' successfully confirmed in database.`);
 
           // Log the digital payment in the transactions table
           try {
-            const openSession = await db.query.cashSessions.findFirst({
-              where: eq(cashSessions.status, "OPEN"),
-            });
+            const { data: openSession, error: sessErr } = await db
+              .from(cashSessions)
+              .select("id")
+              .eq("status", "OPEN")
+              .maybeSingle();
 
-            await db.insert(transactions).values({
+            if (sessErr) throw sessErr;
+
+            const { error: insErr } = await db.from(transactions).insert({
               id: crypto.randomUUID(),
-              cashSessionId: openSession ? openSession.id : null,
+              cash_session_id: openSession ? openSession.id : null,
               type: "INCOME",
               category: "RESERVA_MP",
               amount: Number(mpPayment.transaction_amount || 0),
               description: `Pago digital MP - Reserva: ${externalReference.slice(0, 8)}`,
-              paymentMethod: mpPayment.payment_method_id || "MERCADOPAGO",
-              referenceId: externalReference,
+              payment_method: mpPayment.payment_method_id || "MERCADOPAGO",
+              reference_id: externalReference,
             });
+            if (insErr) throw insErr;
             console.log(`[Webhook MP] Digital transaction successfully recorded with session ID: ${openSession ? openSession.id : 'NULL'}`);
           } catch (e) {
             console.error(`[Webhook MP] Error logging transaction:`, e);

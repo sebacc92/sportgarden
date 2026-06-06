@@ -15,7 +15,7 @@ import {
   useNavigate,
   server$,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import {
   bookings,
   pitches,
@@ -27,8 +27,8 @@ import {
   groups,
   groupTransactions,
   pitchSubscriptions,
+  siteSettings,
 } from "~/db/schema";
-import { eq, and, gte, lte, lt, inArray, notInArray } from "drizzle-orm";
 import { isPitchAvailable } from "~/utils/availability";
 import { BookingListView } from "~/components/admin/booking-list-view";
 import { BookingTimelineView } from "~/components/admin/booking-timeline-view";
@@ -56,13 +56,17 @@ export const useUpdateBookingStatusAction = routeAction$(
     const db = getDB(requestEvent);
 
     // Fetch current booking
-    const booking = await db.query.bookings.findFirst({
-      where: eq(bookings.id, data.bookingId),
-    });
+    const { data: bookingData, error: bookingErr } = await db
+      .from(bookings)
+      .select("*")
+      .eq("id", data.bookingId)
+      .maybeSingle();
 
-    if (!booking) {
+    if (bookingErr) throw bookingErr;
+    if (!bookingData) {
       return { success: false, message: "Reserva no encontrada." };
     }
+    const booking = camelize<any>(bookingData);
 
     // Handle Transfer Logic
     if (
@@ -106,14 +110,16 @@ export const useUpdateBookingStatusAction = routeAction$(
         };
       }
 
-      await db
-        .update(bookings)
-        .set({
-          startTime: newStart,
-          endTime: newEnd,
+      const { error: updErr } = await db
+        .from(bookings)
+        .update({
+          start_time: newStart.toISOString(),
+          end_time: newEnd.toISOString(),
           status: "CONFIRMED",
         })
-        .where(eq(bookings.id, booking.id));
+        .eq("id", booking.id);
+
+      if (updErr) throw updErr;
 
       return { success: true, message: "Reserva transferida con éxito." };
     }
@@ -121,9 +127,14 @@ export const useUpdateBookingStatusAction = routeAction$(
     // Handle Cancellation with Refund
     if (data.status === "CANCELLED" && data.cancellationOption === "RETURN") {
       if (booking.paidAmount > 0) {
-        const openRegister = await db.query.cashRegisters.findFirst({
-          where: eq(cashRegisters.status, "OPEN"),
-        });
+        const { data: openRegisterData, error: regErr } = await db
+          .from(cashRegisters)
+          .select("*")
+          .eq("status", "OPEN")
+          .maybeSingle();
+
+        if (regErr) throw regErr;
+        const openRegister = camelize<any>(openRegisterData);
 
         if (!openRegister) {
           return {
@@ -133,26 +144,30 @@ export const useUpdateBookingStatusAction = routeAction$(
         }
 
         // Record expense in cash register
-        await db.insert(cashMovements).values({
+        const { error: insMovErr } = await db.from(cashMovements).insert({
           id: crypto.randomUUID(),
-          registerId: openRegister.id,
+          register_id: openRegister.id,
           type: "EXPENSE",
           category: "CANCELACION",
           amount: booking.paidAmount,
           description: `Devolución seña reserva anulada: ${booking.id.slice(0, 8)}`,
-          paymentMethod: booking.paymentMethod as any,
-          referenceId: booking.id,
+          payment_method: booking.paymentMethod,
+          reference_id: booking.id,
         });
 
+        if (insMovErr) throw insMovErr;
+
         // Mark as cancelled and reset paid amount
-        await db
-          .update(bookings)
-          .set({
+        const { error: updBookErr } = await db
+          .from(bookings)
+          .update({
             status: "CANCELLED",
-            paidAmount: 0,
-            paymentStatus: "PENDING",
+            paid_amount: 0,
+            payment_status: "PENDING",
           })
-          .where(eq(bookings.id, booking.id));
+          .eq("id", booking.id);
+
+        if (updBookErr) throw updBookErr;
 
         return {
           success: true,
@@ -162,10 +177,12 @@ export const useUpdateBookingStatusAction = routeAction$(
     }
 
     // Standard status update
-    await db
-      .update(bookings)
-      .set({ status: data.status as any })
-      .where(eq(bookings.id, data.bookingId));
+    const { error: updBookErr } = await db
+      .from(bookings)
+      .update({ status: data.status })
+      .eq("id", data.bookingId);
+
+    if (updBookErr) throw updBookErr;
 
     return { success: true };
   },
@@ -275,9 +292,14 @@ export const useCreateAdminBookingAction = routeAction$(
     let openRegisterId: string | null = null;
 
     if (firstPaidAmount > 0) {
-      const openRegister = await db.query.cashRegisters.findFirst({
-        where: eq(cashRegisters.status, "OPEN"),
-      });
+      const { data: openRegisterData, error: regErr } = await db
+        .from(cashRegisters)
+        .select("*")
+        .eq("status", "OPEN")
+        .maybeSingle();
+
+      if (regErr) throw regErr;
+      const openRegister = camelize<any>(openRegisterData);
 
       if (!openRegister) {
         return {
@@ -293,27 +315,40 @@ export const useCreateAdminBookingAction = routeAction$(
 
     // Handle guest registration if no userId provided but customer info exists
     if (!finalUserId && data.customerPhone) {
-      const existingUser = await db.query.users.findFirst({
-        where: eq(users.phone, data.customerPhone),
-      });
+      const { data: existingUserData, error: userErr } = await db
+        .from(users)
+        .select("*")
+        .eq("phone", data.customerPhone)
+        .maybeSingle();
+
+      if (userErr) throw userErr;
+      const existingUser = camelize<any>(existingUserData);
 
       if (existingUser) {
         finalUserId = existingUser.id;
       } else {
         // Create new guest user
         const newUserId = crypto.randomUUID();
-        await db.insert(users).values({
+        const { error: insUserErr } = await db.from(users).insert({
           id: newUserId,
           name: data.customerName || "Invitado",
           phone: data.customerPhone,
           email: data.customerEmail || null,
           role: "GUEST",
         });
+        if (insUserErr) throw insUserErr;
         finalUserId = newUserId;
       }
     }
 
-    const settings = await db.query.siteSettings.findFirst();
+    const { data: settingsData, error: settingsErr } = await db
+      .from(siteSettings)
+      .select("*")
+      .maybeSingle();
+
+    if (settingsErr) throw settingsErr;
+    const settings = camelize<any>(settingsData);
+
     const operatingHours = (() => {
       try {
         if (typeof settings?.operatingHours === "string")
@@ -326,193 +361,180 @@ export const useCreateAdminBookingAction = routeAction$(
       }
     })();
 
-    const results = await db.transaction(async (tx) => {
-      // Fetch all existing bookings for the relevant period to check conflicts in-memory
-      const allExistingBookings = await tx
-        .select()
-        .from(bookings)
-        .where(
-          and(
-            inArray(
-              bookings.pitchId,
-              Array.from(new Set(datesToBook.map((d) => d.pitchId))),
-            ),
-            gte(bookings.startTime, startDate),
-            lte(bookings.endTime, endDate),
-          ),
+    // Perform queries sequentially instead of inside a Drizzle transaction
+    const pitchIds = Array.from(new Set(datesToBook.map((d) => d.pitchId)));
+    const { data: existingData, error: existErr } = await db
+      .from(bookings)
+      .select("*")
+      .in("pitch_id", pitchIds)
+      .gte("start_time", startDate.toISOString())
+      .lte("end_time", endDate.toISOString());
+
+    if (existErr) throw existErr;
+    const allExistingBookings = camelize<any[]>(existingData || []);
+
+    const bookingsToInsert: any[] = [];
+    const guestsToInsert: any[] = [];
+    let bookingsCount = 0;
+
+    for (let i = 0; i < datesToBook.length; i++) {
+      const item = datesToBook[i];
+      const startDateTime = new Date(`${item.date}T${item.startTime}:00-03:00`);
+      const endDateTime = new Date(`${item.date}T${item.endTime}:00-03:00`);
+      const bookingId = i === 0 ? firstBookingId : crypto.randomUUID();
+
+      // Validate operating hours
+      const holidaysList = (settings?.holidays as any[]) || [];
+      const isHoliday = holidaysList.some((h: any) => h.date === item.date);
+      const dayOfWeek = isHoliday ? 7 : startDateTime.getDay();
+      const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+
+      if (!schedule || schedule.isClosed) {
+        throw new Error(
+          `El club está cerrado el día seleccionado (${item.date}).`,
         );
+      }
 
-      const bookingsToInsert: any[] = [];
-      const guestsToInsert: any[] = [];
-      let bookingsCount = 0;
+      const startMins =
+        startDateTime.getHours() * 60 + startDateTime.getMinutes();
+      let endMins = endDateTime.getHours() * 60 + endDateTime.getMinutes();
+      if (endMins === 0 && startMins > 0) endMins = 24 * 60;
 
-      for (let i = 0; i < datesToBook.length; i++) {
-        const item = datesToBook[i];
-        const startDateTime = new Date(`${item.date}T${item.startTime}:00-03:00`);
-        const endDateTime = new Date(`${item.date}T${item.endTime}:00-03:00`);
-        const bookingId = i === 0 ? firstBookingId : crypto.randomUUID();
+      const [openH, openM] = schedule.openTime
+        ? schedule.openTime.split(":").map(Number)
+        : [8, 0];
+      const [closeH, closeM] = schedule.closeTime
+        ? schedule.closeTime.split(":").map(Number)
+        : [23, 0];
 
-        // Validate operating hours
-        const holidaysList = (settings?.holidays as any[]) || [];
-        const isHoliday = holidaysList.some((h: any) => h.date === item.date);
-        const dayOfWeek = isHoliday ? 7 : startDateTime.getDay();
-        const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+      const openMins = openH * 60 + (openM || 0);
+      let closeMins = closeH * 60 + (closeM || 0);
+      if (closeMins === 0) closeMins = 24 * 60;
 
-        if (!schedule || schedule.isClosed) {
-          throw new Error(
-            `El club está cerrado el día seleccionado (${item.date}).`,
-          );
-        }
+      if (startMins < openMins || endMins > closeMins) {
+        throw new Error(
+          `El horario seleccionado (${item.startTime} - ${item.endTime}) está fuera del horario de atención del club para el día ${item.date}.`,
+        );
+      }
 
-        const startMins =
-          startDateTime.getHours() * 60 + startDateTime.getMinutes();
-        let endMins = endDateTime.getHours() * 60 + endDateTime.getMinutes();
-        if (endMins === 0 && startMins > 0) endMins = 24 * 60;
+      // Check conflict including overlaps
+      const { available, conflicts } = await isPitchAvailable(db, {
+        pitchId: item.pitchId,
+        startTime: startDateTime,
+        endTime: endDateTime,
+      });
 
-        const [openH, openM] = schedule.openTime
-          ? schedule.openTime.split(":").map(Number)
-          : [8, 0];
-        const [closeH, closeM] = schedule.closeTime
-          ? schedule.closeTime.split(":").map(Number)
-          : [23, 0];
+      if (!available) {
+        throw new Error(
+          `Conflicto de horario: ${item.date} ${item.startTime} - ${item.endTime} en ${conflicts[0].pitch.name}.`,
+        );
+      }
 
-        const openMins = openH * 60 + (openM || 0);
-        let closeMins = closeH * 60 + (closeM || 0);
-        if (closeMins === 0) closeMins = 24 * 60;
+      bookingsToInsert.push({
+        id: bookingId,
+        user_id: finalUserId,
+        pitch_id: item.pitchId,
+        start_time: startDateTime.toISOString(),
+        end_time: endDateTime.toISOString(),
+        status: "CONFIRMED",
+        total_price: item.price,
+        paid_amount: i === 0 ? Number(data.paidAmount) || 0 : 0,
+        payment_status:
+          i === 0
+            ? data.paymentStatus ||
+              ((Number(data.paidAmount) || 0) >= Number(data.price)
+                ? "PAID"
+                : (Number(data.paidAmount) || 0) > 0
+                  ? "PARTIAL"
+                  : "PENDING")
+            : "PENDING",
+        payment_method: data.paymentMethod,
+        is_subscription: data.isSubscription,
+        booking_type:
+          data.bookingType || (data.isSubscription ? "FIXED" : "EVENTUAL"),
+        notes: item.subId ? `subscription:${item.subId}` : (data.notes || null),
+        extras: data.extras ? JSON.parse(data.extras) : null,
+      });
 
-        if (startMins < openMins || endMins > closeMins) {
-          throw new Error(
-            `El horario seleccionado (${item.startTime} - ${item.endTime}) está fuera del horario de atención del club para el día ${item.date}.`,
-          );
-        }
-
-        // Check conflict including overlaps
-        const { available, conflicts } = await isPitchAvailable(tx, {
-          pitchId: item.pitchId,
-          startTime: startDateTime,
-          endTime: endDateTime,
+      if (!data.userId) {
+        guestsToInsert.push({
+          id: crypto.randomUUID(),
+          booking_id: bookingId,
+          name: data.customerName || "Invitado",
+          phone: data.customerPhone || "",
+          email: data.customerEmail || null,
         });
+      }
 
-        if (!available) {
-          throw new Error(
-            `Conflicto de horario: ${item.date} ${item.startTime} - ${item.endTime} en ${conflicts[0].pitch.name}.`,
-          );
-        }
-
-        bookingsToInsert.push({
-          id: bookingId,
-          userId: finalUserId,
-          pitchId: item.pitchId,
-          startTime: startDateTime,
-          endTime: endDateTime,
-          status: "CONFIRMED",
-          totalPrice: item.price,
-          paidAmount: i === 0 ? Number(data.paidAmount) || 0 : 0,
-          paymentStatus:
-            i === 0
-              ? data.paymentStatus ||
-                ((Number(data.paidAmount) || 0) >= Number(data.price)
-                  ? "PAID"
-                  : (Number(data.paidAmount) || 0) > 0
-                    ? "PARTIAL"
-                    : "PENDING")
-              : "PENDING",
-          paymentMethod: data.paymentMethod as any,
-          isSubscription: data.isSubscription,
-          bookingType:
-            data.bookingType || (data.isSubscription ? "FIXED" : "EVENTUAL"),
-          notes: item.subId ? `subscription:${item.subId}` : (data.notes || null),
-          extras: data.extras ? JSON.parse(data.extras) : null,
+      if (i === 0 && firstPaidAmount > 0 && openRegisterId) {
+        const { error: insMovErr } = await db.from(cashMovements).insert({
+          id: crypto.randomUUID(),
+          register_id: openRegisterId,
+          type: "INCOME",
+          category: "BOOKING",
+          amount: firstPaidAmount,
+          description: `Pago reserva: ${data.customerName || "Invitado"}`,
+          payment_method: data.paymentMethod,
+          reference_id: bookingId,
         });
-
-        if (!data.userId) {
-          guestsToInsert.push({
-            id: crypto.randomUUID(),
-            bookingId: bookingId,
-            name: data.customerName || "Invitado",
-            phone: data.customerPhone || "",
-            email: data.customerEmail || null,
-          });
-        }
-
-        if (i === 0 && firstPaidAmount > 0 && openRegisterId) {
-          await tx.insert(cashMovements).values({
-            id: crypto.randomUUID(),
-            registerId: openRegisterId,
-            type: "INCOME",
-            category: "BOOKING",
-            amount: firstPaidAmount,
-            description: `Pago reserva: ${data.customerName || "Invitado"}`,
-            paymentMethod: data.paymentMethod as any,
-            referenceId: bookingId,
-          });
-        }
-
-        // Add to in-memory to prevent conflicts within the same batch
-        allExistingBookings.push({
-          pitchId: item.pitchId,
-          startTime: startDateTime,
-          endTime: endDateTime,
-        } as any);
-
-        bookingsCount++;
+        if (insMovErr) throw insMovErr;
       }
 
-      if (bookingsToInsert.length > 0) {
-        // SQLite has a limit on parameters per insert, so we chunk if needed
-        const CHUNK_SIZE = 50;
-        for (let i = 0; i < bookingsToInsert.length; i += CHUNK_SIZE) {
-          await tx
-            .insert(bookings)
-            .values(bookingsToInsert.slice(i, i + CHUNK_SIZE));
-        }
+      // Add to in-memory to prevent conflicts within the same batch
+      allExistingBookings.push({
+        pitchId: item.pitchId,
+        startTime: startDateTime,
+        endTime: endDateTime,
+      } as any);
+
+      bookingsCount++;
+    }
+
+    if (bookingsToInsert.length > 0) {
+      const { error: insBookErr } = await db.from(bookings).insert(bookingsToInsert);
+      if (insBookErr) throw insBookErr;
+    }
+
+    // If it's a subscription, we should insert the pitchSubscriptions records too
+    if (data.isSubscription) {
+      if (schedulesWithIds.length > 0) {
+        const subsToInsert = schedulesWithIds.map(s => ({
+          id: s.subId,
+          pitch_id: s.pitchId || data.pitchId,
+          user_id: finalUserId,
+          group_id: null,
+          day_of_week: Number(s.dayOfWeek),
+          start_time: s.startTime,
+          end_time: s.endTime,
+          start_date: startDate.toISOString(),
+          price_per_match: Number(s.price),
+          is_active: true,
+        }));
+        const { error: insSubErr } = await db.from(pitchSubscriptions).insert(subsToInsert);
+        if (insSubErr) throw insSubErr;
+      } else {
+        const { error: insSubErr } = await db.from(pitchSubscriptions).insert({
+          id: singleSubId,
+          pitch_id: data.pitchId,
+          user_id: finalUserId,
+          group_id: null,
+          day_of_week: startDate.getDay(),
+          start_time: data.startTime,
+          end_time: data.endTime,
+          start_date: startDate.toISOString(),
+          price_per_match: globalPrice,
+          is_active: true,
+        });
+        if (insSubErr) throw insSubErr;
       }
+    }
 
-      // If it's a subscription, we should insert the pitchSubscriptions records too
-      if (data.isSubscription) {
-        if (schedulesWithIds.length > 0) {
-          const subsToInsert = schedulesWithIds.map(s => ({
-            id: s.subId,
-            pitchId: s.pitchId || data.pitchId,
-            userId: finalUserId,
-            groupId: null, // the modal doesn't support groups right now, only users/guests
-            dayOfWeek: Number(s.dayOfWeek),
-            startTime: s.startTime,
-            endTime: s.endTime,
-            startDate: startDate,
-            pricePerMatch: Number(s.price),
-            isActive: true,
-          }));
-          await tx.insert(pitchSubscriptions).values(subsToInsert);
-        } else {
-          await tx.insert(pitchSubscriptions).values({
-            id: singleSubId,
-            pitchId: data.pitchId,
-            userId: finalUserId,
-            groupId: null,
-            dayOfWeek: startDate.getDay(),
-            startTime: data.startTime,
-            endTime: data.endTime,
-            startDate: startDate,
-            pricePerMatch: globalPrice,
-            isActive: true,
-          });
-        }
-      }
+    if (guestsToInsert.length > 0) {
+      const { error: insGuestErr } = await db.from(guestRequests).insert(guestsToInsert);
+      if (insGuestErr) throw insGuestErr;
+    }
 
-      if (guestsToInsert.length > 0) {
-        const CHUNK_SIZE = 50;
-        for (let i = 0; i < guestsToInsert.length; i += CHUNK_SIZE) {
-          await tx
-            .insert(guestRequests)
-            .values(guestsToInsert.slice(i, i + CHUNK_SIZE));
-        }
-      }
-
-      return { success: true, count: bookingsCount };
-    });
-
-    if (results.count === 0) {
+    if (bookingsCount === 0) {
       return {
         failed: true,
         message:
@@ -523,7 +545,7 @@ export const useCreateAdminBookingAction = routeAction$(
     return {
       success: true,
       bookingId: firstBookingId,
-      message: `Se crearon ${results.count} reservas.`,
+      message: `Se crearon ${bookingsCount} reservas.`,
     };
   },
   zod$({
@@ -558,9 +580,14 @@ export const useAddBookingPaymentAction = routeAction$(
     if (amount <= 0)
       return { failed: true, message: "El monto debe ser mayor a 0." };
 
-    const openRegister = await db.query.cashRegisters.findFirst({
-      where: eq(cashRegisters.status, "OPEN"),
-    });
+    const { data: openRegisterData, error: regErr } = await db
+      .from(cashRegisters)
+      .select("*")
+      .eq("status", "OPEN")
+      .maybeSingle();
+
+    if (regErr) throw regErr;
+    const openRegister = camelize<any>(openRegisterData);
 
     if (!openRegister) {
       return {
@@ -570,31 +597,39 @@ export const useAddBookingPaymentAction = routeAction$(
       };
     }
 
-    const booking = await db.query.bookings.findFirst({
-      where: eq(bookings.id, data.bookingId),
-    });
+    const { data: bookingData, error: bookingErr } = await db
+      .from(bookings)
+      .select("*")
+      .eq("id", data.bookingId)
+      .maybeSingle();
 
-    if (!booking) return { failed: true, message: "Reserva no encontrada." };
+    if (bookingErr) throw bookingErr;
+    if (!bookingData) return { failed: true, message: "Reserva no encontrada." };
+    const booking = camelize<any>(bookingData);
 
     const newPaidAmount = (booking.paidAmount || 0) + amount;
     const newPaymentStatus =
       newPaidAmount >= booking.totalPrice ? "PAID" : "PARTIAL";
 
-    await db
-      .update(bookings)
-      .set({ paidAmount: newPaidAmount, paymentStatus: newPaymentStatus })
-      .where(eq(bookings.id, booking.id));
+    const { error: updBookErr } = await db
+      .from(bookings)
+      .update({ paid_amount: newPaidAmount, payment_status: newPaymentStatus })
+      .eq("id", booking.id);
 
-    await db.insert(cashMovements).values({
+    if (updBookErr) throw updBookErr;
+
+    const { error: insMovErr } = await db.from(cashMovements).insert({
       id: crypto.randomUUID(),
-      registerId: openRegister.id,
+      register_id: openRegister.id,
       type: "INCOME",
       category: "BOOKING",
       amount: amount,
       description: `Pago adicional reserva: ${booking.id.slice(0, 8)}`,
-      paymentMethod: data.paymentMethod as any,
-      referenceId: booking.id,
+      payment_method: data.paymentMethod,
+      reference_id: booking.id,
     });
+
+    if (insMovErr) throw insMovErr;
 
     return { success: true };
   },
@@ -608,52 +643,66 @@ export const useAddBookingPaymentAction = routeAction$(
 export const useConfirmAttendanceAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
-    const booking = await db.query.bookings.findFirst({
-      where: eq(bookings.id, data.bookingId),
-    });
+    const { data: bookingData, error: bookingErr } = await db
+      .from(bookings)
+      .select("*")
+      .eq("id", data.bookingId)
+      .maybeSingle();
 
-    if (!booking) {
+    if (bookingErr) throw bookingErr;
+    if (!bookingData) {
       return { failed: true, message: "Reserva no encontrada." };
     }
+    const booking = camelize<any>(bookingData);
 
     if (booking.status === "ATTENDED") {
       return { failed: true, message: "La asistencia ya fue confirmada." };
     }
 
-    await db.transaction(async (tx) => {
-      // 1. Update booking status to ATTENDED
-      await tx
-        .update(bookings)
-        .set({ status: "ATTENDED" })
-        .where(eq(bookings.id, booking.id));
+    // 1. Update booking status to ATTENDED
+    const { error: updBookErr } = await db
+      .from(bookings)
+      .update({ status: "ATTENDED" })
+      .eq("id", booking.id);
 
-      // 2. Generate debt transaction in the customer's current account if there is a group and unpaid balance
-      if (booking.groupId) {
-        const debtAmount = booking.totalPrice - booking.paidAmount;
-        if (debtAmount > 0) {
-          // Insert debt charge in group transactions
-          await tx.insert(groupTransactions).values({
-            id: crypto.randomUUID(),
-            groupId: booking.groupId,
-            type: "CHARGE",
-            amount: debtAmount,
-            description: `Turno asistido: ${booking.id.slice(0, 8)}`,
-            bookingId: booking.id,
-          });
+    if (updBookErr) throw updBookErr;
 
-          // Deduct from group balance to increase debt
-          const group = await tx.query.groups.findFirst({
-            where: eq(groups.id, booking.groupId),
-          });
-          if (group) {
-            await tx
-              .update(groups)
-              .set({ balance: group.balance - debtAmount })
-              .where(eq(groups.id, booking.groupId));
-          }
+    // 2. Generate debt transaction in the customer's current account if there is a group and unpaid balance
+    if (booking.groupId) {
+      const debtAmount = booking.totalPrice - booking.paidAmount;
+      if (debtAmount > 0) {
+        // Insert debt charge in group transactions
+        const { error: insTxErr } = await db.from(groupTransactions).insert({
+          id: crypto.randomUUID(),
+          group_id: booking.groupId,
+          type: "CHARGE",
+          amount: debtAmount,
+          description: `Turno asistido: ${booking.id.slice(0, 8)}`,
+          booking_id: booking.id,
+        });
+
+        if (insTxErr) throw insTxErr;
+
+        // Deduct from group balance to increase debt
+        const { data: groupData, error: groupErr } = await db
+          .from(groups)
+          .select("*")
+          .eq("id", booking.groupId)
+          .maybeSingle();
+
+        if (groupErr) throw groupErr;
+        const group = camelize<any>(groupData);
+
+        if (group) {
+          const { error: updGroupErr } = await db
+            .from(groups)
+            .update({ balance: group.balance - debtAmount })
+            .eq("id", booking.groupId);
+
+          if (updGroupErr) throw updGroupErr;
         }
       }
-    });
+    }
 
     return { success: true };
   },
@@ -674,27 +723,37 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
 
   // Auto-complete past bookings (excluding Cuenta Corriente turnos)
   const now = new Date();
-  await db
-    .update(bookings)
-    .set({ status: "COMPLETED" })
-    .where(
-      and(
-        eq(bookings.status, "CONFIRMED"),
-        lt(bookings.endTime, now),
-        notInArray(bookings.paymentMethod, ["CUENTA_CORRIENTE", "CURRENT_ACCOUNT"])
-      )
-    );
+  const { error: completeErr } = await db
+    .from(bookings)
+    .update({ status: "COMPLETED" })
+    .eq("status", "CONFIRMED")
+    .lt("end_time", now.toISOString())
+    .not("payment_method", "in", '("CUENTA_CORRIENTE","CURRENT_ACCOUNT")');
 
-  const settings = await db.query.siteSettings.findFirst();
+  if (completeErr) throw completeErr;
+
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .maybeSingle();
+
+  if (settingsErr) throw settingsErr;
+  const settings = camelize<any>(settingsData);
+
   const extraServices = (settings?.extraServices || []) as {
     name: string;
     price: number;
     icon: string;
   }[];
 
-  const openRegister = await db.query.cashRegisters.findFirst({
-    where: eq(cashRegisters.status, "OPEN"),
-  });
+  const { data: openRegisterData, error: regErr } = await db
+    .from(cashRegisters)
+    .select("*")
+    .eq("status", "OPEN")
+    .maybeSingle();
+
+  if (regErr) throw regErr;
+  const openRegister = camelize<any>(openRegisterData);
 
   // Create selectedDate in BA timezone (UTC-3)
   const selectedDate = new Date(`${dateStr}T12:00:00-03:00`);
@@ -720,20 +779,43 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     endDate = new Date(`${dateStr}T23:59:59-03:00`);
   }
 
-  const allPitchesData = await db.query.pitches.findMany({
-    where: eq(pitches.isActive, true),
-    orderBy: (pitches, { asc }) => [asc(pitches.name)],
-    with: { pricingRules: true, overlaps: true, overlappedBy: true },
-  });
+  const { data: pitchesData, error: pitchesErr } = await db
+    .from(pitches)
+    .select("*")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
 
-  const allPitches = allPitchesData.map((p) => {
+  if (pitchesErr) throw pitchesErr;
+  const pitchesRaw = camelize<any[]>(pitchesData || []);
+
+  const { data: pricingRulesData, error: pricingErr } = await db
+    .from("pitch_pricing_rules")
+    .select("*");
+
+  if (pricingErr) throw pricingErr;
+  const pricingRulesRaw = camelize<any[]>(pricingRulesData || []);
+
+  const { data: overlapsData, error: overlapsErr } = await db
+    .from("pitch_overlaps")
+    .select("*");
+
+  if (overlapsErr) throw overlapsErr;
+  const overlapsRaw = camelize<any[]>(overlapsData || []);
+
+  const allPitches = pitchesRaw.map((p) => {
+    const pricingRules = pricingRulesRaw.filter((rule) => rule.pitchId === p.id);
+    const overlaps = overlapsRaw.filter((o) => o.pitchId === p.id);
+    const overlappedBy = overlapsRaw.filter((o) => o.overlapPitchId === p.id);
+
     const overlapIds = new Set<string>();
-    if (p.overlaps)
-      p.overlaps.forEach((o: any) => overlapIds.add(o.overlapPitchId));
-    if (p.overlappedBy)
-      p.overlappedBy.forEach((o: any) => overlapIds.add(o.pitchId));
+    overlaps.forEach((o: any) => overlapIds.add(o.overlapPitchId));
+    overlappedBy.forEach((o: any) => overlapIds.add(o.pitchId));
+
     return {
       ...p,
+      pricingRules,
+      overlaps,
+      overlappedBy,
       overlapPitchIds: Array.from(overlapIds),
     };
   });
@@ -743,59 +825,60 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
 
   if (viewStr === "month") {
     // Optimized month query: only get IDs and start times
-    const allMonthBookings = await db
-      .select({
-        id: bookings.id,
-        startTime: bookings.startTime,
-      })
+    const { data: allMonthBookingsData, error: monthErr } = await db
       .from(bookings)
-      .where(
-        and(
-          gte(bookings.startTime, startDate),
-          lte(bookings.startTime, endDate),
-        ),
-      );
+      .select("id, start_time")
+      .gte("start_time", startDate.toISOString())
+      .lte("start_time", endDate.toISOString());
+
+    if (monthErr) throw monthErr;
+    const allMonthBookings = camelize<any[]>(allMonthBookingsData || []);
 
     for (const b of allMonthBookings) {
-      const dStr = getBAFormatDate(b.startTime);
+      const dStr = getBAFormatDate(new Date(b.startTime));
       monthCounts[dStr] = (monthCounts[dStr] || 0) + 1;
     }
   } else {
     // Normal query for day/week
-    dailyBookings = await db
-      .select({
-        booking: {
-          id: bookings.id,
-          pitchId: bookings.pitchId,
-          startTime: bookings.startTime,
-          endTime: bookings.endTime,
-          status: bookings.status,
-          totalPrice: bookings.totalPrice,
-          paidAmount: bookings.paidAmount,
-          paymentStatus: bookings.paymentStatus,
-          isSubscription: bookings.isSubscription,
-          bookingType: bookings.bookingType,
-        },
-        user: {
-          id: users.id,
-          name: users.name,
-          phone: users.phone,
-        },
-        guest: {
-          id: guestRequests.id,
-          name: guestRequests.name,
-          phone: guestRequests.phone,
-        },
-      })
+    const { data: bookingsData, error: bookingsErr } = await db
       .from(bookings)
-      .leftJoin(users, eq(bookings.userId, users.id))
-      .leftJoin(guestRequests, eq(bookings.id, guestRequests.bookingId))
-      .where(
-        and(
-          gte(bookings.startTime, startDate),
-          lte(bookings.startTime, endDate),
-        ),
-      );
+      .select("*")
+      .gte("start_time", startDate.toISOString())
+      .lte("start_time", endDate.toISOString());
+
+    if (bookingsErr) throw bookingsErr;
+    const bookingsRaw = camelize<any[]>(bookingsData || []);
+
+    if (bookingsRaw.length > 0) {
+      const userIds = Array.from(new Set(bookingsRaw.map((b) => b.userId).filter(Boolean)));
+      const bookingIds = bookingsRaw.map((b) => b.id);
+
+      const { data: usersData, error: usersErr } = await db
+        .from(users)
+        .select("id, name, phone")
+        .in("id", userIds);
+
+      if (usersErr) throw usersErr;
+      const usersRaw = camelize<any[]>(usersData || []);
+
+      const { data: guestsData, error: guestsErr } = await db
+        .from(guestRequests)
+        .select("id, booking_id, name, phone")
+        .in("booking_id", bookingIds);
+
+      if (guestsErr) throw guestsErr;
+      const guestsRaw = camelize<any[]>(guestsData || []);
+
+      dailyBookings = bookingsRaw.map((b) => {
+        const u = usersRaw.find((usr) => usr.id === b.userId) || null;
+        const g = guestsRaw.find((gst) => gst.bookingId === b.id) || null;
+        return {
+          booking: b,
+          user: u,
+          guest: g,
+        };
+      });
+    }
   }
 
   // Inject School Classes (Virtual Bookings)
@@ -921,18 +1004,16 @@ export const getAdminDailyBookings = server$(async function (
   if (!pitchId || !dateStr) return [];
   const startOfDay = new Date(`${dateStr}T00:00:00-03:00`);
   const endOfDay = new Date(`${dateStr}T23:59:59-03:00`);
-  const { inArray, lt, or } = await import("drizzle-orm");
 
   // Get related pitch IDs (bidirectional)
-  const overlaps = await db
-    .select()
+  const { data: overlapsData, error: overlapsErr } = await db
     .from(pitchOverlaps)
-    .where(
-      or(
-        eq(pitchOverlaps.pitchId, pitchId),
-        eq(pitchOverlaps.overlapPitchId, pitchId),
-      ),
-    );
+    .select("*")
+    .or(`pitch_id.eq.${pitchId},overlap_pitch_id.eq.${pitchId}`);
+
+  if (overlapsErr) throw overlapsErr;
+  const overlaps = camelize<any[]>(overlapsData || []);
+
   const relatedIds = [
     pitchId,
     ...overlaps.map((o: any) =>
@@ -940,42 +1021,35 @@ export const getAdminDailyBookings = server$(async function (
     ),
   ];
 
-  const daily = await db.query.bookings.findMany({
-    where: and(
-      inArray(bookings.pitchId, relatedIds),
-      gte(bookings.startTime, startOfDay),
-      lt(bookings.startTime, endOfDay),
-      inArray(bookings.status, [
-        "CONFIRMED",
-        "PENDING_APPROVAL",
-        "COMPLETED",
-      ] as any),
-    ),
-    columns: { startTime: true, endTime: true },
-  });
+  const { data: dailyData, error: dailyErr } = await db
+    .from(bookings)
+    .select("start_time, end_time")
+    .in("pitch_id", relatedIds)
+    .gte("start_time", startOfDay.toISOString())
+    .lt("start_time", endOfDay.toISOString())
+    .in("status", ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"]);
+
+  if (dailyErr) throw dailyErr;
+  const daily = camelize<any[]>(dailyData || []);
+
   return daily.map((b) => ({
-    startTime: b.startTime.toISOString(),
-    endTime: b.endTime.toISOString(),
+    startTime: new Date(b.startTime).toISOString(),
+    endTime: new Date(b.endTime).toISOString(),
   }));
 });
 
 export const searchUsersServer = server$(async function (query: string) {
   if (!query || query.length < 2) return [];
   const db = getDB(this as any);
-  const { ilike, or } = await import("drizzle-orm");
-  const pattern = `%${query}%`;
 
-  const results = await db.query.users.findMany({
-    where: or(
-      ilike(users.name, pattern),
-      ilike(users.email, pattern),
-      ilike(users.phone, pattern),
-    ),
-    columns: { id: true, name: true, phone: true, email: true },
-    limit: 5,
-  });
+  const { data, error } = await db
+    .from(users)
+    .select("id, name, phone, email")
+    .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`)
+    .limit(5);
 
-  return results;
+  if (error) throw error;
+  return camelize<any[]>(data || []);
 });
 
 export default component$(() => {

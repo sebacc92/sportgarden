@@ -1,8 +1,7 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { cashRegisters, cashMovements, siteSettings } from "~/db/schema";
-import { eq, desc } from "drizzle-orm";
 import { resolveMovementCategories } from "~/lib/admin/cash-settings-defaults";
 
 const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 100];
@@ -11,18 +10,24 @@ export const useRegisterDetailData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const registerId = requestEvent.params.id;
 
-  const registers = await db.query.cashRegisters.findMany({
-    where: eq(cashRegisters.id, registerId),
-    limit: 1,
-  });
+  const { data: regData, error: regErr } = await db
+    .from(cashRegisters)
+    .select("*")
+    .eq("id", registerId)
+    .maybeSingle();
 
-  const register = registers[0];
+  if (regErr) throw regErr;
+  const register = camelize<any>(regData);
   if (!register) throw requestEvent.error(404, "Caja no encontrada");
 
-  const movements = await db.query.cashMovements.findMany({
-    where: eq(cashMovements.registerId, register.id),
-    orderBy: [desc(cashMovements.createdAt)],
-  });
+  const { data: movsData, error: movsErr } = await db
+    .from(cashMovements)
+    .select("*")
+    .eq("register_id", register.id)
+    .order("created_at", { ascending: false });
+
+  if (movsErr) throw movsErr;
+  const movements = camelize<any[]>(movsData || []);
 
   const totalIncomes = movements
     .filter((m) => m.type === "INCOME")
@@ -51,9 +56,14 @@ export const useRegisterDetailData = routeLoader$(async (requestEvent) => {
     else byMethod[m.paymentMethod].expenses += m.amount;
   }
 
-  const settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) throw settingsErr;
+  const settings = camelize<any>(settingsData);
   const paymentMethods = (settings?.paymentMethods || []) as {
     id: string;
     name: string;

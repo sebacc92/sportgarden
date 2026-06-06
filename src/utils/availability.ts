@@ -1,5 +1,5 @@
-import { and, eq, lt, or, ne, inArray, gt } from "drizzle-orm";
-import { bookings, pitchOverlaps } from "~/db/schema";
+import { bookings, pitchOverlaps, siteSettings } from "~/db/schema";
+import { camelize } from "~/db";
 
 /**
  * Checks if a pitch (and its overlapping counterparts) is available for a given time range.
@@ -19,15 +19,15 @@ export async function isPitchAvailable(
   },
 ) {
   // 1. Find all related pitch IDs (bidirectional)
-  const relatedOverlaps = await db
-    .select()
+  const { data: relatedOverlapsData, error: overlapErr } = await db
     .from(pitchOverlaps)
-    .where(
-      or(
-        eq(pitchOverlaps.pitchId, pitchId),
-        eq(pitchOverlaps.overlapPitchId, pitchId),
-      ),
-    );
+    .select("*")
+    .or(`pitch_id.eq.${pitchId},overlap_pitch_id.eq.${pitchId}`);
+
+  if (overlapErr) {
+    throw new Error(overlapErr.message);
+  }
+  const relatedOverlaps = camelize<any[]>(relatedOverlapsData);
 
   const relatedPitchIds = [
     pitchId,
@@ -38,26 +38,39 @@ export async function isPitchAvailable(
 
   // 2. Check for any booking on any of these pitches that overlaps with the requested time
   // Logic: (NewStart < ExistingEnd) AND (NewEnd > ExistingStart)
-  const filters = [
-    inArray(bookings.pitchId, relatedPitchIds),
-    lt(bookings.startTime, endTime),
-    gt(bookings.endTime, startTime),
-    inArray(bookings.status, ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]),
-  ];
+  let query = db
+    .from(bookings)
+    .select(`
+      *,
+      pitch:pitches(*)
+    `)
+    .in("pitch_id", relatedPitchIds)
+    .lt("start_time", endTime.toISOString())
+    .gt("end_time", startTime.toISOString())
+    .in("status", ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]);
 
   if (excludeBookingId) {
-    filters.push(ne(bookings.id, excludeBookingId));
+    query = query.neq("id", excludeBookingId);
   }
 
-  const conflicts = await db.query.bookings.findMany({
-    where: and(...filters),
-    with: {
-      pitch: true,
-    },
-  });
+  const { data: conflictsData, error: conflictsErr } = await query;
+  if (conflictsErr) {
+    throw new Error(conflictsErr.message);
+  }
+  const conflicts = camelize<any[]>(conflictsData);
 
   // 3. Check for overlapping school classes
-  const settings = await db.query.siteSettings.findFirst();
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+
+  if (settingsErr) {
+    throw new Error(settingsErr.message);
+  }
+  const settings = camelize<any>(settingsData);
+
   let hasSchoolConflict = false;
   if (settings && settings.schoolCategories) {
     const schoolCategories = settings.schoolCategories as any[];

@@ -7,31 +7,36 @@ import {
   zod$,
   server$,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { pitchSubscriptions, pitches, bookings, users, groups } from "~/db/schema";
-import { eq, desc, and, gte } from "drizzle-orm";
 import { isPitchAvailable } from "~/utils/availability";
 import { Button, Modal } from "~/components/ui";
 
 export const useSubscriptionsData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
 
-  const allPitches = await db.query.pitches.findMany({
-    where: eq(pitches.isActive, true),
-  });
+  const { data: allPitches, error: pitchesErr } = await db
+    .from(pitches)
+    .select("*")
+    .eq("is_active", true);
 
-  const subscriptions = await db.query.pitchSubscriptions.findMany({
-    orderBy: [desc(pitchSubscriptions.createdAt)],
-    with: {
-      pitch: true,
-      user: true,
-      group: true,
-    },
-  });
+  if (pitchesErr) throw pitchesErr;
+
+  const { data: subsData, error: subsErr } = await db
+    .from(pitchSubscriptions)
+    .select(`
+      *,
+      pitch:pitches(*),
+      user:users(*),
+      group:groups(*)
+    `)
+    .order("created_at", { ascending: false });
+
+  if (subsErr) throw subsErr;
 
   return {
-    pitches: allPitches,
-    subscriptions: subscriptions,
+    pitches: camelize<any[]>(allPitches || []),
+    subscriptions: camelize<any[]>(subsData || []),
   };
 });
 
@@ -41,29 +46,24 @@ export const searchOwnersServer = server$(async function (
 ) {
   if (!query || query.length < 2) return [];
   const db = getDB(this as any);
-  const { ilike, or } = await import("drizzle-orm");
   const pattern = `%${query}%`;
 
   if (type === "USER") {
-    return await db.query.users.findMany({
-      where: or(
-        ilike(users.name, pattern),
-        ilike(users.email, pattern),
-        ilike(users.phone, pattern),
-      ),
-      columns: { id: true, name: true, phone: true, email: true },
-      limit: 10,
-    });
+    const { data, error } = await db
+      .from(users)
+      .select("id, name, phone, email")
+      .or(`name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`)
+      .limit(10);
+    if (error) throw error;
+    return camelize<any[]>(data || []);
   } else {
-    return await db.query.groups.findMany({
-      where: or(
-        ilike(groups.name, pattern),
-        ilike(groups.contactName, pattern),
-        ilike(groups.contactPhone, pattern),
-      ),
-      columns: { id: true, name: true, contactName: true, contactPhone: true },
-      limit: 10,
-    });
+    const { data, error } = await db
+      .from(groups)
+      .select("id, name, contact_name, contact_phone")
+      .or(`name.ilike.${pattern},contact_name.ilike.${pattern},contact_phone.ilike.${pattern}`)
+      .limit(10);
+    if (error) throw error;
+    return camelize<any[]>(data || []);
   }
 });
 
@@ -121,27 +121,49 @@ export const useCreateSubscriptionAction = routeAction$(
       count++;
     }
 
-    await db.transaction(async (tx) => {
-      await tx.insert(pitchSubscriptions).values({
-        id: subId,
-        pitchId: data.pitchId,
-        userId,
-        groupId,
-        dayOfWeek: Number(data.dayOfWeek),
-        startTime: data.startTime,
-        endTime: data.endTime,
-        startDate: startDate,
-        pricePerMatch: Number(data.pricePerMatch),
-        isActive: true,
-      });
-
-      if (datesToBook.length > 0) {
-        const CHUNK_SIZE = 50;
-        for (let i = 0; i < datesToBook.length; i += CHUNK_SIZE) {
-          await tx.insert(bookings).values(datesToBook.slice(i, i + CHUNK_SIZE));
-        }
-      }
+    const { error: subErr } = await db.from(pitchSubscriptions).insert({
+      id: subId,
+      pitch_id: data.pitchId,
+      user_id: userId,
+      group_id: groupId,
+      day_of_week: Number(data.dayOfWeek),
+      start_time: data.startTime,
+      end_time: data.endTime,
+      start_date: startDate.toISOString(),
+      price_per_match: Number(data.pricePerMatch),
+      is_active: true,
     });
+
+    if (subErr) {
+      throw subErr;
+    }
+
+    if (datesToBook.length > 0) {
+      // Snakize datesToBook items
+      const snakizedBookings = datesToBook.map((b) => ({
+        id: b.id,
+        user_id: b.userId,
+        group_id: b.groupId,
+        pitch_id: b.pitchId,
+        start_time: b.startTime.toISOString(),
+        end_time: b.endTime.toISOString(),
+        status: b.status,
+        booking_type: b.bookingType,
+        is_subscription: b.isSubscription,
+        total_price: b.totalPrice,
+        paid_amount: b.paidAmount,
+        payment_status: b.paymentStatus,
+        payment_method: b.paymentMethod,
+        notes: b.notes,
+      }));
+
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < snakizedBookings.length; i += CHUNK_SIZE) {
+        const chunk = snakizedBookings.slice(i, i + CHUNK_SIZE);
+        const { error: bookErr } = await db.from(bookings).insert(chunk);
+        if (bookErr) throw bookErr;
+      }
+    }
 
     return { success: true };
   },
@@ -161,63 +183,70 @@ export const useToggleSubscriptionAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const sub = await db.query.pitchSubscriptions.findFirst({
-      where: eq(pitchSubscriptions.id, data.subscriptionId),
-    });
+    const { data: subData, error: getSubErr } = await db
+      .from(pitchSubscriptions)
+      .select("*")
+      .eq("id", data.subscriptionId)
+      .maybeSingle();
 
-    if (sub) {
+    if (getSubErr) throw getSubErr;
+
+    if (subData) {
+      const sub = camelize<any>(subData);
       const newIsActive = !sub.isActive;
 
-      await db.transaction(async (tx) => {
-        await tx
-          .update(pitchSubscriptions)
-          .set({
-            isActive: newIsActive,
-            endDate: newIsActive ? null : new Date(),
-          })
-          .where(eq(pitchSubscriptions.id, sub.id));
+      const { error: updSubErr } = await db
+        .from(pitchSubscriptions)
+        .update({
+          is_active: newIsActive,
+          end_date: newIsActive ? null : new Date().toISOString(),
+        })
+        .eq("id", sub.id);
 
-        const now = new Date();
+      if (updSubErr) throw updSubErr;
 
-        if (!newIsActive) {
-          // Cancelling: Set all future un-paid bookings for this sub to CANCELLED
-          await tx
-            .update(bookings)
-            .set({ status: "CANCELLED" })
-            .where(
-              and(
-                eq(bookings.notes, `subscription:${sub.id}`),
-                gte(bookings.startTime, now),
-                eq(bookings.paymentStatus, "PENDING"),
-                eq(bookings.status, "CONFIRMED")
-              )
-            );
-        } else {
-          // Reactivating: Set future CANCELLED bookings back to CONFIRMED if available
-          const futureBookings = await tx.query.bookings.findMany({
-            where: and(
-              eq(bookings.notes, `subscription:${sub.id}`),
-              gte(bookings.startTime, now),
-              eq(bookings.status, "CANCELLED")
-            ),
+      const now = new Date().toISOString();
+
+      if (!newIsActive) {
+        // Cancelling: Set all future un-paid bookings for this sub to CANCELLED
+        const { error: cancelErr } = await db
+          .from(bookings)
+          .update({ status: "CANCELLED" })
+          .eq("notes", `subscription:${sub.id}`)
+          .gte("start_time", now)
+          .eq("payment_status", "PENDING")
+          .eq("status", "CONFIRMED");
+
+        if (cancelErr) throw cancelErr;
+      } else {
+        // Reactivating: Set future CANCELLED bookings back to CONFIRMED if available
+        const { data: futureBookingsData, error: getFutureErr } = await db
+          .from(bookings)
+          .select("*")
+          .eq("notes", `subscription:${sub.id}`)
+          .gte("start_time", now)
+          .eq("status", "CANCELLED");
+
+        if (getFutureErr) throw getFutureErr;
+
+        const futureBookings = camelize<any[]>(futureBookingsData || []);
+
+        for (const b of futureBookings) {
+          const { available } = await isPitchAvailable(db, {
+            pitchId: b.pitchId,
+            startTime: new Date(b.startTime),
+            endTime: new Date(b.endTime),
+            excludeBookingId: b.id,
           });
-
-          for (const b of futureBookings) {
-            const { available } = await isPitchAvailable(tx, {
-              pitchId: b.pitchId,
-              startTime: b.startTime,
-              endTime: b.endTime,
-              excludeBookingId: b.id,
-            });
-            if (available) {
-              await tx
-                .update(bookings)
-                .set({ status: "CONFIRMED" })
-                .where(eq(bookings.id, b.id));
-            }
+          if (available) {
+            const { error: reactivateErr } = await db
+              .from(bookings)
+              .update({ status: "CONFIRMED" })
+              .eq("id", b.id);
+            if (reactivateErr) throw reactivateErr;
           }
         }
-      });
+      }
     }
 
     return { success: true };

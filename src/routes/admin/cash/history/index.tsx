@@ -1,24 +1,32 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { cashRegisters, cashMovements } from "~/db/schema";
-import { desc, eq } from "drizzle-orm";
 import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
 
 export const useCashHistoryData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
 
-  const registers = await db.query.cashRegisters.findMany({
-    where: eq(cashRegisters.status, "CLOSED"),
-    orderBy: [desc(cashRegisters.closedAt)],
-    limit: 50,
-  });
+  const { data: registersData, error: registersErr } = await db
+    .from(cashRegisters)
+    .select("*")
+    .eq("status", "CLOSED")
+    .order("closed_at", { ascending: false })
+    .limit(50);
+
+  if (registersErr) throw registersErr;
+  const registers = camelize<any[]>(registersData || []);
 
   const registersWithTotals = await Promise.all(
     registers.map(async (reg) => {
-      const movements = await db.query.cashMovements.findMany({
-        where: eq(cashMovements.registerId, reg.id),
-      });
+      const { data: movementsData, error: movementsErr } = await db
+        .from(cashMovements)
+        .select("*")
+        .eq("register_id", reg.id);
+
+      if (movementsErr) throw movementsErr;
+      const movements = camelize<any[]>(movementsData || []);
+
       const totalIncomes = movements
         .filter((m) => m.type === "INCOME")
         .reduce((a, m) => a + m.amount, 0);

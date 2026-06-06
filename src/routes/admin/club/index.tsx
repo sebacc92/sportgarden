@@ -7,8 +7,7 @@ import {
   z,
   Form,
 } from "@builder.io/qwik-city";
-import { eq } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { siteSettings, mercadoPagoCredentials } from "~/db/schema";
 import { Button } from "~/components/ui";
 import { LuPlus, LuTrash2, LuSave, LuCalendar } from "@qwikest/icons/lucide";
@@ -17,9 +16,14 @@ import { useLocation } from "@builder.io/qwik-city";
 
 export const useMpCredentials = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const credentials = await db.query.mercadoPagoCredentials.findFirst({
-    where: eq(mercadoPagoCredentials.id, "1"),
-  });
+  const { data: credentialsData, error } = await db
+    .from(mercadoPagoCredentials)
+    .select("*")
+    .eq("id", "1")
+    .maybeSingle();
+
+  if (error) throw error;
+  const credentials = camelize<any>(credentialsData);
 
   let formattedDate: string | null = null;
   if (credentials?.createdAt) {
@@ -49,17 +53,24 @@ export const useMpCredentials = routeLoader$(async (requestEvent) => {
 
 export const useDisconnectMpAction = globalAction$(async (data, requestEvent) => {
   const db = getDB(requestEvent);
-  await db
-    .delete(mercadoPagoCredentials)
-    .where(eq(mercadoPagoCredentials.id, "1"));
+  const { error } = await db
+    .from(mercadoPagoCredentials)
+    .delete()
+    .eq("id", "1");
+  if (error) throw error;
   return { success: true };
 });
 
 export const useSiteSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  let settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) throw settingsErr;
+  let settings = camelize<any>(settingsData);
 
   if (!settings) {
     // create default if doesn't exist
@@ -73,21 +84,35 @@ export const useSiteSettings = routeLoader$(async (requestEvent) => {
       { day: 6, isOpen: true, openTime: "08:00", closeTime: "23:00" }, // Sab
       { day: 7, isOpen: true, openTime: "08:00", closeTime: "23:00" }, // Feriado
     ];
-    await db.insert(siteSettings).values({
-      id: 1,
-      clubName: "GardenClubFutbol",
-      operatingHours: defaultHours,
-      services: ["Wi-Fi", "Vestuario", "Estacionamiento"],
-      holidays: [],
-    });
-    settings = await db.query.siteSettings.findFirst({
-      where: eq(siteSettings.id, 1),
-    });
+    const { error: insertErr } = await db
+      .from(siteSettings)
+      .insert({
+        id: 1,
+        club_name: "GardenClubFutbol",
+        operating_hours: defaultHours,
+        services: ["Wi-Fi", "Vestuario", "Estacionamiento"],
+        holidays: [],
+      });
+    if (insertErr) throw insertErr;
+
+    const { data: freshSettings, error: freshErr } = await db
+      .from(siteSettings)
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (freshErr) throw freshErr;
+    settings = camelize<any>(freshSettings);
   }
 
-  const credentials = await db.query.mercadoPagoCredentials.findFirst({
-    where: eq(mercadoPagoCredentials.id, "1"),
-  });
+  const { data: credentialsData, error: credentialsErr } = await db
+    .from(mercadoPagoCredentials)
+    .select("*")
+    .eq("id", "1")
+    .maybeSingle();
+
+  if (credentialsErr) throw credentialsErr;
+  const credentials = camelize<any>(credentialsData);
 
   const mpEnv = {
     clientId: requestEvent.env.get("MP_CLIENT_ID") || "",
@@ -103,24 +128,26 @@ export const useSaveClubSettingsAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    await db
-      .update(siteSettings)
-      .set({
-        clubName: data.clubName,
-        clubAddress: data.clubAddress,
-        clubPhone: data.clubPhone,
-        bankAlias: data.bankAlias,
-        operatingHours: JSON.parse(data.operatingHours as string),
+    const { error } = await db
+      .from(siteSettings)
+      .update({
+        club_name: data.clubName,
+        club_address: data.clubAddress,
+        club_phone: data.clubPhone,
+        bank_alias: data.bankAlias,
+        operating_hours: JSON.parse(data.operatingHours as string),
         services: JSON.parse(data.services as string),
         holidays: JSON.parse(data.holidays as string),
-        paywaySiteId: data.paywaySiteId || null,
-        paywayPublicKey: data.paywayPublicKey || null,
-        paywayPrivateKey: data.paywayPrivateKey || null,
-        paywayEnvironment: data.paywayEnvironment,
-        isPaywayActive: data.isPaywayActive,
-        updatedAt: new Date(),
+        payway_site_id: data.paywaySiteId || null,
+        payway_public_key: data.paywayPublicKey || null,
+        payway_private_key: data.paywayPrivateKey || null,
+        payway_environment: data.paywayEnvironment,
+        is_payway_active: data.isPaywayActive,
+        updated_at: new Date().toISOString(),
       })
-      .where(eq(siteSettings.id, 1));
+      .eq("id", 1);
+
+    if (error) throw error;
 
     return { success: true };
   },

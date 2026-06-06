@@ -1,25 +1,37 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link, type DocumentHead } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { chatSessions, chatMessages } from "~/db/schema";
-import { eq, asc } from "drizzle-orm";
 
 export const useChatDetailLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
 
-  const [session] = await db
-    .select()
+  const { data: sessionList, error: sessErr } = await db
     .from(chatSessions)
-    .where(eq(chatSessions.id, requestEvent.params.id))
+    .select("*")
+    .eq("id", requestEvent.params.id)
     .limit(1);
+
+  if (sessErr) {
+    return requestEvent.fail(500, { message: "Error de base de datos" });
+  }
+
+  const session = camelize<any>(sessionList?.[0]);
+
   if (!session)
     return requestEvent.fail(404, { message: "Sesión no encontrada" });
 
-  const messages = await db
-    .select()
+  const { data: messagesList, error: msgErr } = await db
     .from(chatMessages)
-    .where(eq(chatMessages.sessionId, requestEvent.params.id))
-    .orderBy(asc(chatMessages.createdAt));
+    .select("*")
+    .eq("session_id", requestEvent.params.id)
+    .order("created_at", { ascending: true });
+
+  if (msgErr) {
+    return requestEvent.fail(500, { message: "Error de base de datos" });
+  }
+
+  const messages = camelize<any[]>(messagesList || []);
 
   return { session, messages };
 });

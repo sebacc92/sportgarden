@@ -8,9 +8,8 @@ import {
   zod$,
   type DocumentHead,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize, snakize } from "~/db";
 import { siteSettings, chatSessions, chatMessages } from "~/db/schema";
-import { eq, desc, count } from "drizzle-orm";
 import { LuImage, LuTrash2 } from "@qwikest/icons/lucide";
 import { put } from "@vercel/blob";
 import imageCompression from "browser-image-compression";
@@ -35,17 +34,26 @@ const DEFAULT_SETTINGS = {
 export const useChatSessions = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
 
-  const sessions = await db
-    .select({
-      id: chatSessions.id,
-      createdAt: chatSessions.createdAt,
-      lastActive: chatSessions.lastActive,
-      messageCount: count(chatMessages.id),
-    })
+  const { data: sessionsData, error } = await db
     .from(chatSessions)
-    .leftJoin(chatMessages, eq(chatSessions.id, chatMessages.sessionId))
-    .groupBy(chatSessions.id)
-    .orderBy(desc(chatSessions.lastActive));
+    .select(`
+      id,
+      created_at,
+      last_active,
+      chatMessages:chat_messages(count)
+    `)
+    .order("last_active", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const sessions = camelize<any[]>(sessionsData).map(s => ({
+    id: s.id,
+    createdAt: s.createdAt,
+    lastActive: s.lastActive,
+    messageCount: s.chatMessages?.[0]?.count || 0
+  }));
 
   return sessions;
 });
@@ -56,8 +64,10 @@ export const useDeleteChatAction = routeAction$(async (data, requestEvent) => {
 
   try {
     const db = getDB(requestEvent);
-    await db.delete(chatMessages).where(eq(chatMessages.sessionId, id));
-    await db.delete(chatSessions).where(eq(chatSessions.id, id));
+    const { error: msgErr } = await db.from(chatMessages).delete().eq("session_id", id);
+    if (msgErr) throw msgErr;
+    const { error: sessErr } = await db.from(chatSessions).delete().eq("id", id);
+    if (sessErr) throw sessErr;
     return { success: true };
   } catch (err) {
     console.error("Error deleting chat session:", err);
@@ -69,15 +79,21 @@ export const useDeleteChatAction = routeAction$(async (data, requestEvent) => {
 
 export const useSettingsLoader = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const [settings] = await db
-    .select()
+  const { data: settingsData, error } = await db
     .from(siteSettings)
-    .where(eq(siteSettings.id, 1))
-    .limit(1);
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  const settings = camelize<any>(settingsData);
 
   if (!settings) {
     try {
-      await db.insert(siteSettings).values(DEFAULT_SETTINGS);
+      const { error: insertErr } = await db.from(siteSettings).insert(snakize(DEFAULT_SETTINGS));
+      if (insertErr) throw insertErr;
       return DEFAULT_SETTINGS;
     } catch {
       return DEFAULT_SETTINGS;
@@ -107,20 +123,26 @@ export const useUpdateAiSettingsAction = routeAction$(
         uploadedImageUrl = url;
       }
 
-      await db
-        .update(siteSettings)
-        .set({
-          aiEnabled: data.aiEnabled === "on",
-          aiTone: data.aiTone || null,
-          aiInstructions: data.aiInstructions || null,
-          aiKnowledge: data.aiKnowledge || null,
-          aiInitialGreeting: data.aiInitialGreeting || null,
-          aiCallToAction: data.aiCallToAction || null,
-          whatsappNumber: data.whatsappNumber || "5491112345678",
-          aiAvatarUrl: uploadedImageUrl,
-          updatedAt: new Date(),
-        })
-        .where(eq(siteSettings.id, 1));
+      const { error } = await db
+        .from(siteSettings)
+        .update(
+          snakize({
+            aiEnabled: data.aiEnabled === "on",
+            aiTone: data.aiTone || null,
+            aiInstructions: data.aiInstructions || null,
+            aiKnowledge: data.aiKnowledge || null,
+            aiInitialGreeting: data.aiInitialGreeting || null,
+            aiCallToAction: data.aiCallToAction || null,
+            whatsappNumber: data.whatsappNumber || "5491112345678",
+            aiAvatarUrl: uploadedImageUrl,
+            updatedAt: new Date().toISOString(),
+          })
+        )
+        .eq("id", 1);
+
+      if (error) {
+        throw new Error(error.message);
+      }
 
       return { success: true };
     } catch (e: any) {

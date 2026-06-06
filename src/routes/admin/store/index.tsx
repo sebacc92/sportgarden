@@ -1,7 +1,6 @@
 import { component$, useSignal, useTask$ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, Form, z, zod$ } from "@builder.io/qwik-city";
-import { eq, desc } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize, snakize } from "~/db";
 import { products, orders, siteSettings } from "~/db/schema";
 
 // --- Loaders ---
@@ -10,25 +9,57 @@ export const useStoreData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   
   // Ensure site settings exist
-  let settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) {
+    throw new Error(settingsErr.message);
+  }
+
+  let settings = camelize<any>(settingsData);
+
   if (!settings) {
-    await db.insert(siteSettings).values({
-      id: 1,
-      clubName: "GardenClubFutbol",
-      storeEnabled: true,
-    });
-    settings = await db.query.siteSettings.findFirst({
-      where: eq(siteSettings.id, 1),
-    });
+    const { data: insertedData, error: insertErr } = await db
+      .from(siteSettings)
+      .insert(
+        snakize({
+          id: 1,
+          clubName: "GardenClubFutbol",
+          storeEnabled: true,
+        })
+      )
+      .select()
+      .maybeSingle();
+
+    if (insertErr) {
+      throw new Error(insertErr.message);
+    }
+    settings = camelize<any>(insertedData);
   }
 
   // Load products & orders sorted by latest
-  const allProducts = await db.select().from(products).orderBy(desc(products.createdAt));
+  const { data: productsData, error: prodErr } = await db
+    .from(products)
+    .select("*")
+    .order("created_at", { ascending: false });
 
+  if (prodErr) {
+    throw new Error(prodErr.message);
+  }
+  const allProducts = camelize<any[]>(productsData);
 
-  const allOrders = await db.select().from(orders).orderBy(desc(orders.createdAt));
+  const { data: ordersData, error: ordersErr } = await db
+    .from(orders)
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (ordersErr) {
+    throw new Error(ordersErr.message);
+  }
+  const allOrders = camelize<any[]>(ordersData);
   
   return {
     products: allProducts,
@@ -41,12 +72,18 @@ export const useToggleStore = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
     try {
-      await db
-        .update(siteSettings)
-        .set({
-          storeEnabled: data.enabled,
-        })
-        .where(eq(siteSettings.id, 1));
+      const { error } = await db
+        .from(siteSettings)
+        .update(
+          snakize({
+            storeEnabled: data.enabled,
+          })
+        )
+        .eq("id", 1);
+
+      if (error) {
+        throw new Error(error.message);
+      }
       return { success: true };
     } catch (err: any) {
       console.error(err);
@@ -79,15 +116,21 @@ export const useAddProduct = routeAction$(
         finalImageUrl = blobUpload.url;
       }
 
-      await db.insert(products).values({
-        id: productId,
-        name: data.name,
-        description: data.description || "",
-        price: data.price,
-        stock: data.stock,
-        imageUrl: finalImageUrl,
-        isActive: true,
-      });
+      const { error } = await db.from(products).insert(
+        snakize({
+          id: productId,
+          name: data.name,
+          description: data.description || "",
+          price: data.price,
+          stock: data.stock,
+          imageUrl: finalImageUrl,
+          isActive: true,
+        })
+      );
+
+      if (error) {
+        throw new Error(error.message);
+      }
       return { success: true };
     } catch (err: any) {
       console.error(err);
@@ -122,17 +165,23 @@ export const useEditProduct = routeAction$(
         finalImageUrl = blobUpload.url;
       }
 
-      await db
-        .update(products)
-        .set({
-          name: data.name,
-          description: data.description || "",
-          price: data.price,
-          stock: data.stock,
-          imageUrl: finalImageUrl,
-          isActive: data.isActive,
-        })
-        .where(eq(products.id, data.id));
+      const { error } = await db
+        .from(products)
+        .update(
+          snakize({
+            name: data.name,
+            description: data.description || "",
+            price: data.price,
+            stock: data.stock,
+            imageUrl: finalImageUrl,
+            isActive: data.isActive,
+          })
+        )
+        .eq("id", data.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
       return { success: true };
     } catch (err: any) {
       console.error(err);
@@ -156,8 +205,10 @@ export const useDeleteProduct = routeAction$(
     const db = getDB(requestEvent);
 
     try {
-      // Direct hard delete for this clean showcase, fallback soft-delete can also be used
-      await db.delete(products).where(eq(products.id, data.id));
+      const { error } = await db.from(products).delete().eq("id", data.id);
+      if (error) {
+        throw new Error(error.message);
+      }
       return { success: true };
     } catch (err: any) {
       console.error(err);
@@ -174,12 +225,18 @@ export const useUpdateOrderStatus = routeAction$(
     const db = getDB(requestEvent);
 
     try {
-      await db
-        .update(orders)
-        .set({
-          status: data.status as "PENDING" | "COMPLETED" | "CANCELLED",
-        })
-        .where(eq(orders.id, data.id));
+      const { error } = await db
+        .from(orders)
+        .update(
+          snakize({
+            status: data.status as "PENDING" | "COMPLETED" | "CANCELLED",
+          })
+        )
+        .eq("id", data.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
       return { success: true };
     } catch (err: any) {
       console.error(err);

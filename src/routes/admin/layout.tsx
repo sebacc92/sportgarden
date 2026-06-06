@@ -5,8 +5,7 @@ import {
   routeLoader$,
   server$,
 } from "@builder.io/qwik-city";
-import { eq, sql } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { siteSettings, users, cashRegisters, bookings } from "~/db/schema";
 import logo from "../../media/GardenClubFutbol8.png";
 import { LuUserCog, LuUsers } from "@qwikest/icons/lucide";
@@ -18,55 +17,75 @@ export const useAdminUser = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const adminId = requestEvent.cookie.get("auth_session")?.value;
   if (!adminId) throw requestEvent.redirect(302, "/admin/login/");
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, adminId),
-    columns: { role: true, name: true },
-  });
-  if (!user) {
+  const { data: userData, error } = await db
+    .from(users)
+    .select("role, name")
+    .eq("id", adminId)
+    .maybeSingle();
+
+  if (error || !userData) {
     requestEvent.cookie.delete("auth_session", { path: "/" });
     throw requestEvent.redirect(302, "/admin/login/");
   }
-  return user;
+  return camelize<any>(userData);
 });
 
 export const useSiteSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  return await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data, error } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return camelize<any>(data);
 });
+
 export const useOpenRegister = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const openRegister = await db.query.cashRegisters.findFirst({
-    where: eq(cashRegisters.status, "OPEN"),
-    columns: { id: true, openedAt: true },
-  });
-  return openRegister
-    ? { id: openRegister.id, openedAt: openRegister.openedAt.toISOString() }
-    : null;
+  const { data, error } = await db
+    .from(cashRegisters)
+    .select("id, opened_at")
+    .eq("status", "OPEN")
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  const openRegister = camelize<any>(data);
+  return {
+    id: openRegister.id,
+    openedAt: new Date(openRegister.openedAt).toISOString(),
+  };
 });
 
 export const usePendingLeadsCount = routeLoader$(async (requestEvent) => {
   try {
     const db = getDB(requestEvent);
-    const countResult = await db
-      .select({
-        count: sql<number>`count(*)`
-      })
+    const { count, error } = await db
       .from(bookings)
-      .where(eq(bookings.status, "PENDING_APPROVAL"));
-    return countResult[0]?.count ?? 0;
+      .select("*", { count: "exact", head: true })
+      .eq("status", "PENDING_APPROVAL");
+
+    if (error) throw error;
+    return count ?? 0;
   } catch (error) {
     console.error("Error fetching pending leads count:", error);
     return 0;
   }
 });
+
 export const updateClubStatus = server$(async function (status: string) {
   const db = getDB(this);
-  await db
-    .update(siteSettings)
-    .set({ clubStatus: status as "OPEN" | "CLOSED" | "AUTO", updatedAt: new Date() })
-    .where(eq(siteSettings.id, 1));
+  const { error } = await db
+    .from(siteSettings)
+    .update({
+      club_status: status as "OPEN" | "CLOSED" | "AUTO",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+
+  if (error) throw error;
   return { success: true };
 });
 

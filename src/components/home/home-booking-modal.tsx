@@ -8,8 +8,7 @@ import {
 } from "@builder.io/qwik";
 import type { QRL, Signal } from "@builder.io/qwik";
 import { Link } from "@builder.io/qwik-city";
-import type { InferSelectModel } from "drizzle-orm";
-import { pitches } from "~/db/schema";
+import type { Pitch } from "~/db/schema";
 import { Button, Modal, Alert } from "~/components/ui";
 import { calculateProportionalPrice } from "~/utils/pricing";
 import PaywayCheckout from "~/components/payway/PaywayCheckout";
@@ -17,7 +16,7 @@ import { getDailyBookings } from "~/lib/home-page/loaders";
 import { TIME_SLOT_OPTIONS } from "~/lib/home-page/constants";
 import type { HomeNavbarUser } from "./home-navbar";
 
-export type PitchRow = InferSelectModel<typeof pitches>;
+export type PitchRow = Pitch;
 export type SiteSettingsShape = {
   paymentMethods?: { id: string; name: string; isActive: boolean }[];
   extraServices?: { name: string; price: number; icon: string }[];

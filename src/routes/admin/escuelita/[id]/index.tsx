@@ -7,7 +7,7 @@ import {
   zod$,
   Link,
 } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import {
   students,
   studentSubscriptions,
@@ -15,28 +15,32 @@ import {
   cashRegisters,
   cashMovements,
 } from "~/db/schema";
-import { eq, desc } from "drizzle-orm";
 import { Button } from "~/components/ui";
 
 export const useStudentDetailsData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const studentId = requestEvent.params.id;
 
-  const student = await db.query.students.findFirst({
-    where: eq(students.id, studentId),
-  });
+  const { data: studentData, error: studentErr } = await db
+    .from(students)
+    .select("*")
+    .eq("id", studentId)
+    .maybeSingle();
 
-  if (!student) {
+  if (studentErr || !studentData) {
     throw requestEvent.redirect(302, "/admin/escuelita/");
   }
+  const student = camelize<any>(studentData);
 
-  const subscriptions = await db.query.studentSubscriptions.findMany({
-    where: eq(studentSubscriptions.studentId, studentId),
-    orderBy: [
-      desc(studentSubscriptions.year),
-      desc(studentSubscriptions.month),
-    ],
-  });
+  const { data: subsData, error: subsErr } = await db
+    .from(studentSubscriptions)
+    .select("*")
+    .eq("student_id", studentId)
+    .order("year", { ascending: false })
+    .order("month", { ascending: false });
+
+  if (subsErr) throw subsErr;
+  const subscriptions = camelize<any[]>(subsData || []);
 
   return {
     student,
@@ -48,15 +52,16 @@ export const useGenerateSubscriptionAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    await db.insert(studentSubscriptions).values({
+    const { error } = await db.from(studentSubscriptions).insert({
       id: crypto.randomUUID(),
-      studentId: data.studentId,
+      student_id: data.studentId,
       month: Number(data.month),
       year: Number(data.year),
       price: Number(data.price),
       status: "PENDING",
     });
 
+    if (error) throw error;
     return { success: true };
   },
   zod$({
@@ -72,49 +77,67 @@ export const usePaySubscriptionAction = routeAction$(
     const db = getDB(requestEvent);
     const subscriptionId = data.subscriptionId;
 
-    const sub = await db.query.studentSubscriptions.findFirst({
-      where: eq(studentSubscriptions.id, subscriptionId),
-      with: { student: true }, // Need this relation in schema or fetch separately
-    });
+    const { data: subData, error: subErr } = await db
+      .from(studentSubscriptions)
+      .select("*")
+      .eq("id", subscriptionId)
+      .maybeSingle();
 
-    if (!sub) return { success: false, message: "Cuota no encontrada" };
+    if (subErr || !subData) return { success: false, message: "Cuota no encontrada" };
+    const sub = camelize<any>(subData);
 
-    // We fetch student manually since relation might not be defined explicitly in query
-    const st = await db.query.students.findFirst({
-      where: eq(students.id, sub.studentId),
-    });
+    const { data: stData, error: stErr } = await db
+      .from(students)
+      .select("*")
+      .eq("id", sub.studentId)
+      .maybeSingle();
 
-    await db
-      .update(studentSubscriptions)
-      .set({ status: "PAID" })
-      .where(eq(studentSubscriptions.id, subscriptionId));
+    if (stErr) throw stErr;
+    const st = camelize<any>(stData);
+
+    const { error: updErr } = await db
+      .from(studentSubscriptions)
+      .update({ status: "PAID" })
+      .eq("id", subscriptionId);
+
+    if (updErr) throw updErr;
 
     const paymentId = crypto.randomUUID();
-    await db.insert(studentPayments).values({
+    const { error: payErr } = await db.from(studentPayments).insert({
       id: paymentId,
-      subscriptionId: subscriptionId,
+      subscription_id: subscriptionId,
       amount: sub.price,
-      paymentMethod: data.paymentMethod as any,
+      payment_method: data.paymentMethod,
     });
+
+    if (payErr) throw payErr;
 
     // Impact open cash register
     if (data.paymentMethod && data.paymentMethod !== "NONE") {
-      const openRegister = await db.query.cashRegisters.findFirst({
-        where: eq(cashRegisters.status, "OPEN"),
-        orderBy: [desc(cashRegisters.openedAt)],
-      });
+      const { data: openRegisterData, error: regErr } = await db
+        .from(cashRegisters)
+        .select("*")
+        .eq("status", "OPEN")
+        .order("opened_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (regErr) throw regErr;
+      const openRegister = camelize<any>(openRegisterData);
 
       if (openRegister) {
-        await db.insert(cashMovements).values({
+        const { error: movErr } = await db.from(cashMovements).insert({
           id: crypto.randomUUID(),
-          registerId: openRegister.id,
+          register_id: openRegister.id,
           type: "INCOME",
           category: "SCHOOL",
           amount: sub.price,
           description: `Cuota ${sub.month}/${sub.year} - ${st?.name || "Alumno"}`,
-          paymentMethod: data.paymentMethod as any,
-          referenceId: paymentId,
+          payment_method: data.paymentMethod,
+          reference_id: paymentId,
         });
+
+        if (movErr) throw movErr;
       }
     }
 

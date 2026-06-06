@@ -1,8 +1,7 @@
 import { component$ } from "@builder.io/qwik";
 import { routeLoader$, Link } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { cashMovements, cashRegisters, siteSettings } from "~/db/schema";
-import { and, eq, gte, lte } from "drizzle-orm";
 import { CashSectionNav } from "~/components/admin/cash/CashSectionNav";
 import { resolveMovementCategories } from "~/lib/admin/cash-settings-defaults";
 
@@ -18,20 +17,24 @@ export const useBalancesData = routeLoader$(async (requestEvent) => {
   const startDate = new Date(selectedYear, selectedMonth - 1, 1, 0, 0, 0);
   const endDate = new Date(selectedYear, selectedMonth, 0, 23, 59, 59);
 
-  const movements = await db.query.cashMovements.findMany({
-    where: and(
-      gte(cashMovements.createdAt, startDate),
-      lte(cashMovements.createdAt, endDate),
-    ),
-  });
+  const { data: movementsData, error: movementsErr } = await db
+    .from(cashMovements)
+    .select("*")
+    .gte("created_at", startDate.toISOString())
+    .lte("created_at", endDate.toISOString());
+
+  if (movementsErr) throw movementsErr;
+  const movements = camelize<any[]>(movementsData || []);
 
   // Contar registros del mes
-  const allRegisters = await db.query.cashRegisters.findMany({
-    where: and(
-      gte(cashRegisters.openedAt, startDate),
-      lte(cashRegisters.openedAt, endDate),
-    ),
-  });
+  const { data: registersData, error: registersErr } = await db
+    .from(cashRegisters)
+    .select("*")
+    .gte("opened_at", startDate.toISOString())
+    .lte("opened_at", endDate.toISOString());
+
+  if (registersErr) throw registersErr;
+  const allRegisters = camelize<any[]>(registersData || []);
 
   const balancesByCategory: Record<
     string,
@@ -44,9 +47,14 @@ export const useBalancesData = routeLoader$(async (requestEvent) => {
   let totalIncomes = 0,
     totalExpenses = 0;
 
-  const settings = await db.query.siteSettings.findFirst({
-    where: eq(siteSettings.id, 1),
-  });
+  const { data: settingsData, error: settingsErr } = await db
+    .from(siteSettings)
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (settingsErr) throw settingsErr;
+  const settings = camelize<any>(settingsData);
   const paymentMethods = (settings?.paymentMethods || []) as {
     id: string;
     name: string;

@@ -7,8 +7,7 @@ import {
   zod$,
   type DocumentHead,
 } from "@builder.io/qwik-city";
-import { eq, inArray, desc } from "drizzle-orm";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { users } from "~/db/schema";
 import { Button, Modal } from "~/components/ui";
 import { LuPlus, LuTrash2, LuSettings } from "@qwikest/icons/lucide";
@@ -20,9 +19,14 @@ export const useAdminUser = routeLoader$(async (requestEvent) => {
   const adminId = requestEvent.cookie.get("auth_session")?.value;
   if (!adminId) throw requestEvent.redirect(302, "/admin/login");
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, adminId),
-  });
+  const { data: userData, error } = await db
+    .from(users)
+    .select("*")
+    .eq("id", adminId)
+    .maybeSingle();
+
+  if (error) throw error;
+  const user = camelize<any>(userData);
 
   if (!user || !["DEV", "OWNER", "MANAGER"].includes(user.role)) {
     throw requestEvent.redirect(302, "/admin");
@@ -33,10 +37,15 @@ export const useAdminUser = routeLoader$(async (requestEvent) => {
 
 export const useUsersData = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  return await db.query.users.findMany({
-    where: inArray(users.role, ["DEV", "OWNER", "MANAGER", "EMPLOYEE"]),
-    orderBy: [desc(users.role), desc(users.createdAt)],
-  });
+  const { data, error } = await db
+    .from(users)
+    .select("*")
+    .in("role", ["DEV", "OWNER", "MANAGER", "EMPLOYEE"])
+    .order("role", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return camelize<any[]>(data);
 });
 
 // 2. Actions
@@ -47,10 +56,14 @@ export const useSaveUserAction = routeAction$(
 
     if (!adminId) return requestEvent.fail(401, { message: "No autorizado" });
 
-    const admin = await db.query.users.findFirst({
-      where: eq(users.id, adminId),
-    });
-    if (!admin) return requestEvent.fail(401, { message: "No autorizado" });
+    const { data: adminData, error: adminErr } = await db
+      .from(users)
+      .select("*")
+      .eq("id", adminId)
+      .maybeSingle();
+
+    if (adminErr || !adminData) return requestEvent.fail(401, { message: "No autorizado" });
+    const admin = camelize<any>(adminData);
 
     // Jerarquía
     if (admin.role === "MANAGER" && data.role !== "EMPLOYEE") {
@@ -73,25 +86,21 @@ export const useSaveUserAction = routeAction$(
       // Editar
       // Prevenir editar a un OWNER si sos MANAGER
       if (admin.role === "MANAGER") {
-        const target = await db.query.users.findFirst({
-          where: eq(users.id, data.id),
-        });
+        const { data: targetData, error: targetErr } = await db
+          .from(users)
+          .select("*")
+          .eq("id", data.id)
+          .maybeSingle();
+
+        if (targetErr) throw targetErr;
+        const target = camelize<any>(targetData);
+
         if (target && (target.role === "OWNER" || target.role === "DEV")) {
           return requestEvent.fail(403, {
             message: "No puedes editar al Dueño o Desarrollador.",
           });
         }
       }
-
-      // Update username si se envió (en la base es 'email', pero nosotros usamos 'name' para el username y name para nombre?)
-      // Ojo: en la schema hay 'name' (nombre) y 'email' (usado a veces para login/username).
-      // En admin/login/index.tsx busca por users.name. Entonces name = username.
-      // Así que 'username' form field -> users.name. Y 'nombreReal' -> users.email o agregamos column?
-      // Espera, schema.ts:
-      // name: text("name").notNull(), -> usado para username en login.
-      // phone: text("phone")
-      // No hay columna 'fullName'. Usaremos 'name' para el username (acceso) y 'email' o 'phone' extra.
-      // Mejor: el form tendrá "username" mapped to "name" en DB.
 
       const updatePayload: any = {
         name: data.username.toLowerCase(),
@@ -100,7 +109,12 @@ export const useSaveUserAction = routeAction$(
       if (data.password)
         updatePayload.password = bcrypt.hashSync(data.password, 10);
 
-      await db.update(users).set(updatePayload).where(eq(users.id, data.id));
+      const { error: updErr } = await db
+        .from(users)
+        .update(updatePayload)
+        .eq("id", data.id);
+
+      if (updErr) throw updErr;
     } else {
       // Crear
       if (!data.password)
@@ -108,18 +122,26 @@ export const useSaveUserAction = routeAction$(
           message: "La contraseña es obligatoria para nuevos usuarios.",
         });
 
-      const existing = await db.query.users.findFirst({
-        where: eq(users.name, data.username.toLowerCase()),
-      });
-      if (existing)
+      const { data: existingData, error: existErr } = await db
+        .from(users)
+        .select("*")
+        .eq("name", data.username.toLowerCase())
+        .maybeSingle();
+
+      if (existErr) throw existErr;
+      if (existingData)
         return requestEvent.fail(400, { message: "El usuario ya existe." });
 
-      await db.insert(users).values({
-        id: crypto.randomUUID(),
-        name: data.username.toLowerCase(),
-        password: bcrypt.hashSync(data.password, 10),
-        role: data.role as any,
-      });
+      const { error: insErr } = await db
+        .from(users)
+        .insert({
+          id: crypto.randomUUID(),
+          name: data.username.toLowerCase(),
+          password: bcrypt.hashSync(data.password, 10),
+          role: data.role,
+        });
+
+      if (insErr) throw insErr;
     }
 
     return { success: true };
@@ -138,10 +160,14 @@ export const useDeleteUserAction = routeAction$(
     const adminId = requestEvent.cookie.get("auth_session")?.value;
 
     if (!adminId) return requestEvent.fail(401, { message: "No autorizado" });
-    const admin = await db.query.users.findFirst({
-      where: eq(users.id, adminId),
-    });
-    if (!admin) return requestEvent.fail(401, { message: "No autorizado" });
+    const { data: adminData, error: adminErr } = await db
+      .from(users)
+      .select("*")
+      .eq("id", adminId)
+      .maybeSingle();
+
+    if (adminErr || !adminData) return requestEvent.fail(401, { message: "No autorizado" });
+    const admin = camelize<any>(adminData);
 
     if (data.id === adminId) {
       return requestEvent.fail(400, {
@@ -149,11 +175,16 @@ export const useDeleteUserAction = routeAction$(
       });
     }
 
-    const target = await db.query.users.findFirst({
-      where: eq(users.id, data.id),
-    });
-    if (!target)
+    const { data: targetData, error: targetErr } = await db
+      .from(users)
+      .select("*")
+      .eq("id", data.id)
+      .maybeSingle();
+
+    if (targetErr) throw targetErr;
+    if (!targetData)
       return requestEvent.fail(404, { message: "Usuario no encontrado." });
+    const target = camelize<any>(targetData);
 
     if (admin.role === "MANAGER" && target.role !== "EMPLOYEE") {
       return requestEvent.fail(403, {
@@ -161,7 +192,12 @@ export const useDeleteUserAction = routeAction$(
       });
     }
 
-    await db.delete(users).where(eq(users.id, data.id));
+    const { error: delErr } = await db
+      .from(users)
+      .delete()
+      .eq("id", data.id);
+
+    if (delErr) throw delErr;
     return { success: true };
   },
   zod$({ id: z.string() }),
