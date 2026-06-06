@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@auth/core':
+        specifier: ^0.41.2
+        version: 0.41.2
       '@auth/supabase-adapter':
         specifier: ^1.11.2
         version: 1.11.2(@supabase/supabase-js@2.107.0)
