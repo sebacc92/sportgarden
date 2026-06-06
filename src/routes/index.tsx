@@ -1,6 +1,6 @@
 import { component$, useSignal, $ } from "@builder.io/qwik";
 import { routeLoader$, routeAction$, zod$, z, type DocumentHead } from "@builder.io/qwik-city";
-import { getDB } from "~/db";
+import { getDB, camelize } from "~/db";
 import { products, orders } from "~/db/schema";
 import { StoreSection } from "~/components/home/store-section";
 import {
@@ -41,14 +41,13 @@ export {
 };
 export { getDailyBookings } from "~/lib/home-page/loaders";
 
-// --- Store loaders & actions ---
 export const useActiveProducts = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
-  const { data, error } = await db.from(products).select("*").eq("isActive", true);
+  const { data, error } = await db.from(products).select("*").eq("is_active", true);
   if (error) {
     throw new Error(error.message);
   }
-  return data || [];
+  return camelize<any[]>(data || []);
 });
 
 export const useCheckoutAction = routeAction$(

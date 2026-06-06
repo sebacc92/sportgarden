@@ -5,8 +5,8 @@ let globalSupabase: SupabaseClient | undefined;
 
 export function getDB(requestEvent: RequestEventBase): SupabaseClient {
   const url =
-    requestEvent.env.get("SUPABASE_URL") ||
-    (typeof process !== "undefined" ? process.env.SUPABASE_URL : undefined);
+    requestEvent.env.get("PUBLIC_SUPABASE_URL") ||
+    (typeof process !== "undefined" ? process.env.PUBLIC_SUPABASE_URL : undefined);
   const key =
     requestEvent.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
     requestEvent.env.get("SUPABASE_ANON_KEY") ||
@@ -16,7 +16,7 @@ export function getDB(requestEvent: RequestEventBase): SupabaseClient {
 
   if (!url || !key) {
     console.warn(
-      "WARNING: SUPABASE_URL or SUPABASE_KEY (SERVICE_ROLE/ANON) is not defined. Returning mock client for build-time / SSG compatibility."
+      "WARNING: PUBLIC_SUPABASE_URL or SUPABASE_KEY (SERVICE_ROLE/ANON) is not defined. Returning mock client for build-time / SSG compatibility."
     );
     return new Proxy(
       {},
