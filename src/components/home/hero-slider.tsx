@@ -24,9 +24,8 @@ export const HeroSlider = component$((props: { slides?: any[] | null }) => {
       {slides.map((slide, index) => (
         <div
           key={slide.image}
-          class={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-            activeSlide.value === index ? "z-10 opacity-100" : "z-0 opacity-0"
-          }`}
+          class={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${activeSlide.value === index ? "z-10 opacity-100" : "z-0 opacity-0"
+            }`}
         >
           <div class="absolute inset-0 z-10 bg-slate-950/60 mix-blend-multiply" />
           <div class="absolute inset-0 z-10 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
@@ -56,7 +55,7 @@ export const HeroSlider = component$((props: { slides?: any[] | null }) => {
                     href="#canchas"
                     class="inline-block rounded-full bg-[#F5F2EB] px-8 py-4 text-lg font-black tracking-widest text-slate-950 uppercase shadow-xl transition-all hover:-translate-y-1 hover:bg-[#EAE6DB] hover:shadow-black/25"
                   >
-                    Reservar Ahora
+                    Reservar Ahora.
                   </a>
                 </div>
               )}
@@ -71,11 +70,10 @@ export const HeroSlider = component$((props: { slides?: any[] | null }) => {
             key={slide.image}
             type="button"
             onClick$={() => (activeSlide.value = index)}
-            class={`h-3 rounded-full transition-all ${
-              activeSlide.value === index
+            class={`h-3 rounded-full transition-all ${activeSlide.value === index
                 ? "w-8 bg-[#F5F2EB]"
                 : "w-3 bg-[#F5F2EB]/40 hover:bg-[#F5F2EB]/80"
-            }`}
+              }`}
             aria-label={`Ir a diapositiva ${index + 1}`}
           />
         ))}
