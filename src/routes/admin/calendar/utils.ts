@@ -150,11 +150,22 @@ export const toBALocalISOString = (d: Date | string | number): string => {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
 };
 
-export const parseDatabaseDate = (dateStr: string): Date => {
+export const parseDatabaseDate = (dateVal: any): Date => {
+  if (!dateVal) return new Date();
+  if (dateVal instanceof Date) return dateVal;
+  const dateStr = String(dateVal);
   const normalized = dateStr.replace(" ", "T");
   if (!normalized.includes("+") && !normalized.slice(10).includes("-") && !normalized.endsWith("Z")) {
-    return new Date(`${normalized}-03:00`);
+    const localized = new Date(`${normalized}-03:00`);
+    if (!isNaN(localized.getTime())) {
+      return localized;
+    }
   }
-  return new Date(normalized);
+  const parsed = new Date(normalized);
+  if (isNaN(parsed.getTime())) {
+    console.error("[parseDatabaseDate] Invalid date value encountered:", dateVal);
+    return new Date();
+  }
+  return parsed;
 };
 

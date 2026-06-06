@@ -66,7 +66,7 @@ export const useClientsData = routeLoader$(async (requestEvent) => {
     const { data: accountsData, error: accountsErr } = await db
       .from("accounts")
       .select("*")
-      .in("user_id", clientIds);
+      .in("userId", clientIds);
 
     if (accountsErr) throw accountsErr;
     const camelAccounts = camelize<any[]>(accountsData || []);

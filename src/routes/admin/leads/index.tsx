@@ -8,6 +8,7 @@ import {
 } from "@builder.io/qwik-city";
 import { getDB, camelize } from "~/db";
 import { bookings, siteSettings } from "~/db/schema";
+import { parseDatabaseDate } from "~/routes/admin/calendar/utils";
 
 // Loader to fetch pending leads
 export const usePendingLeads = routeLoader$(async (requestEvent) => {
@@ -47,8 +48,8 @@ export const usePendingLeads = routeLoader$(async (requestEvent) => {
         booking: {
           id: l.id,
           pitchId: l.pitchId,
-          startTime: new Date(l.startTime).toISOString(),
-          endTime: new Date(l.endTime).toISOString(),
+          startTime: parseDatabaseDate(l.startTime).toISOString(),
+          endTime: parseDatabaseDate(l.endTime).toISOString(),
           status: l.status,
           totalPrice: l.totalPrice,
           paidAmount: l.paidAmount,
@@ -61,7 +62,7 @@ export const usePendingLeads = routeLoader$(async (requestEvent) => {
           name: guestObj.name,
           phone: guestObj.phone,
           email: guestObj.email,
-          createdAt: new Date(guestObj.createdAt).toISOString(),
+          createdAt: parseDatabaseDate(guestObj.createdAt).toISOString(),
         } : null,
         pitch: {
           name: pitchObj?.name || "Cancha",
