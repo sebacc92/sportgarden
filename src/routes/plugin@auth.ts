@@ -9,6 +9,10 @@ export const { onRequest, useSession, useSignIn, useSignOut } = QwikAuth$(
   (event) => {
     const db = getDB(event);
     return {
+      secret:
+        event.env.get("AUTH_SECRET") ||
+        (typeof process !== "undefined" ? process.env.AUTH_SECRET : undefined) ||
+        "dummy_auth_secret_for_build_only",
       trustHost: true,
       providers: [
         Google({

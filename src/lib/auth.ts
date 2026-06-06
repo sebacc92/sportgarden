@@ -1,9 +1,13 @@
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "default_super_secret_key_for_dev_only_change_this"
-);
+const getJWTSecret = () => {
+  const secret =
+    typeof process !== "undefined"
+      ? process.env.JWT_SECRET || "default_super_secret_key_for_dev_only_change_this"
+      : "default_super_secret_key_for_dev_only_change_this";
+  return new TextEncoder().encode(secret);
+};
 
 export const hashPassword = async (password: string) => {
   return await bcrypt.hash(password, 10);
@@ -18,12 +22,12 @@ export const createSessionJWT = async (userId: string, role: string) => {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(JWT_SECRET);
+    .sign(getJWTSecret());
 };
 
 export const verifySessionJWT = async (token: string) => {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJWTSecret());
     return payload as { userId: string; role: string };
   } catch (error) {
     return null;
