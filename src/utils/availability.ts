@@ -1,6 +1,6 @@
 import { bookings, pitchOverlaps, siteSettings } from "~/db/schema";
 import { camelize } from "~/db";
-import { getBADayOfWeek, getBAHoursAndMinutes } from "~/routes/admin/calendar/utils";
+import { getBADayOfWeek, getBAHoursAndMinutes, toBALocalISOString } from "~/routes/admin/calendar/utils";
 
 /**
  * Checks if a pitch (and its overlapping counterparts) is available for a given time range.
@@ -46,8 +46,8 @@ export async function isPitchAvailable(
       pitch:pitches(*)
     `)
     .in("pitch_id", relatedPitchIds)
-    .lt("start_time", endTime.toISOString())
-    .gt("end_time", startTime.toISOString())
+    .lt("start_time", toBALocalISOString(endTime))
+    .gt("end_time", toBALocalISOString(startTime))
     .in("status", ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]);
 
   if (excludeBookingId) {

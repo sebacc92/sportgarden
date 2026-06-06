@@ -104,3 +104,31 @@ export function playNotificationBeep() {
     console.error("Failed to play notification sound:", err);
   }
 }
+
+export const toBALocalISOString = (d: Date | string | number): string => {
+  const date = new Date(d);
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+  const parts = fmt.split(", ");
+  if (parts.length === 2) {
+    return `${parts[0]}T${parts[1]}`;
+  }
+  return fmt.replace(" ", "T");
+};
+
+export const parseDatabaseDate = (dateStr: string): Date => {
+  const normalized = dateStr.replace(" ", "T");
+  if (!normalized.includes("+") && !normalized.slice(10).includes("-") && !normalized.endsWith("Z")) {
+    return new Date(`${normalized}-03:00`);
+  }
+  return new Date(normalized);
+};
+

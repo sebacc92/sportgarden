@@ -6,6 +6,7 @@ import {
   useComputed$,
   useStore,
   useStyles$,
+  useTask$,
 } from "@builder.io/qwik";
 import {
   routeLoader$,
@@ -13,7 +14,6 @@ import {
   zod$,
   z,
   useNavigate,
-  useLocation,
   server$,
 } from "@builder.io/qwik-city";
 import { createClient } from "@supabase/supabase-js";
@@ -44,7 +44,6 @@ import { CalendarMonthView } from "~/components/admin/calendar/CalendarMonthView
 import { BookingDetailsModal } from "~/components/admin/calendar/BookingDetailsModal";
 import { CreateBookingModal } from "~/components/admin/calendar/CreateBookingModal";
 
-// Utilities
 import {
   getStartOfWeek,
   getEndOfWeek,
@@ -54,7 +53,10 @@ import {
   getBADayOfWeek,
   getBAHoursAndMinutes,
   playNotificationBeep,
+  toBALocalISOString,
+  parseDatabaseDate,
 } from "./utils";
+
 
 export const useUpdateBookingStatusAction = routeAction$(
   async (data, requestEvent) => {
@@ -118,8 +120,8 @@ export const useUpdateBookingStatusAction = routeAction$(
       const { error: updErr } = await db
         .from(bookings)
         .update({
-          start_time: newStart.toISOString(),
-          end_time: newEnd.toISOString(),
+          start_time: toBALocalISOString(newStart),
+          end_time: toBALocalISOString(newEnd),
           status: "CONFIRMED",
         })
         .eq("id", booking.id);
@@ -372,8 +374,8 @@ export const useCreateAdminBookingAction = routeAction$(
       .from(bookings)
       .select("*")
       .in("pitch_id", pitchIds)
-      .gte("start_time", startDate.toISOString())
-      .lte("end_time", endDate.toISOString());
+      .gte("start_time", toBALocalISOString(startDate))
+      .lte("end_time", toBALocalISOString(endDate));
 
     if (existErr) throw existErr;
     const allExistingBookings = camelize<any[]>(existingData || []);
@@ -440,8 +442,8 @@ export const useCreateAdminBookingAction = routeAction$(
         id: bookingId,
         user_id: finalUserId,
         pitch_id: item.pitchId,
-        start_time: startDateTime.toISOString(),
-        end_time: endDateTime.toISOString(),
+        start_time: toBALocalISOString(startDateTime),
+        end_time: toBALocalISOString(endDateTime),
         status: "CONFIRMED",
         total_price: item.price,
         paid_amount: i === 0 ? Number(data.paidAmount) || 0 : 0,
@@ -512,7 +514,7 @@ export const useCreateAdminBookingAction = routeAction$(
           day_of_week: Number(s.dayOfWeek),
           start_time: s.startTime,
           end_time: s.endTime,
-          start_date: startDate.toISOString(),
+          start_date: toBALocalISOString(startDate).split("T")[0],
           price_per_match: Number(s.price),
           is_active: true,
         }));
@@ -527,7 +529,7 @@ export const useCreateAdminBookingAction = routeAction$(
           day_of_week: startDate.getDay(),
           start_time: data.startTime,
           end_time: data.endTime,
-          start_date: startDate.toISOString(),
+          start_date: toBALocalISOString(startDate).split("T")[0],
           price_per_match: globalPrice,
           is_active: true,
         });
@@ -733,7 +735,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     .from(bookings)
     .update({ status: "COMPLETED" })
     .eq("status", "CONFIRMED")
-    .lt("end_time", now.toISOString())
+    .lt("end_time", toBALocalISOString(now))
     .not("payment_method", "in", '("CUENTA_CORRIENTE","CURRENT_ACCOUNT")');
 
   if (completeErr) throw completeErr;
@@ -834,14 +836,15 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     const { data: allMonthBookingsData, error: monthErr } = await db
       .from(bookings)
       .select("id, start_time")
-      .gte("start_time", startDate.toISOString())
-      .lte("start_time", endDate.toISOString());
+      .gte("start_time", toBALocalISOString(startDate))
+      .lte("start_time", toBALocalISOString(endDate));
 
     if (monthErr) throw monthErr;
     const allMonthBookings = camelize<any[]>(allMonthBookingsData || []);
 
     for (const b of allMonthBookings) {
-      const dStr = getBAFormatDate(new Date(b.startTime));
+      const parsedStart = parseDatabaseDate(b.startTime);
+      const dStr = getBAFormatDate(parsedStart);
       monthCounts[dStr] = (monthCounts[dStr] || 0) + 1;
     }
   } else {
@@ -849,11 +852,18 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     const { data: bookingsData, error: bookingsErr } = await db
       .from(bookings)
       .select("*")
-      .gte("start_time", startDate.toISOString())
-      .lte("start_time", endDate.toISOString());
+      .gte("start_time", toBALocalISOString(startDate))
+      .lte("start_time", toBALocalISOString(endDate));
 
     if (bookingsErr) throw bookingsErr;
-    const bookingsRaw = camelize<any[]>(bookingsData || []);
+
+    const sanitizedBookings = (bookingsData || []).map((b: any) => ({
+      ...b,
+      start_time: parseDatabaseDate(b.start_time).toISOString(),
+      end_time: parseDatabaseDate(b.end_time).toISOString(),
+    }));
+
+    const bookingsRaw = camelize<any[]>(sanitizedBookings);
 
     if (bookingsRaw.length > 0) {
       const userIds = Array.from(new Set(bookingsRaw.map((b) => b.userId).filter(Boolean)));
@@ -1025,16 +1035,16 @@ export const getAdminDailyBookings = server$(async function (
     .from(bookings)
     .select("start_time, end_time")
     .in("pitch_id", relatedIds)
-    .gte("start_time", startOfDay.toISOString())
-    .lt("start_time", endOfDay.toISOString())
+    .gte("start_time", toBALocalISOString(startOfDay))
+    .lt("start_time", toBALocalISOString(endOfDay))
     .in("status", ["CONFIRMED", "PENDING_APPROVAL", "COMPLETED"]);
 
   if (dailyErr) throw dailyErr;
   const daily = camelize<any[]>(dailyData || []);
 
   return daily.map((b) => ({
-    startTime: new Date(b.startTime).toISOString(),
-    endTime: new Date(b.endTime).toISOString(),
+    startTime: parseDatabaseDate(b.startTime).toISOString(),
+    endTime: parseDatabaseDate(b.endTime).toISOString(),
   }));
 });
 
@@ -1059,8 +1069,13 @@ export default component$(() => {
   const addPaymentAction = useAddBookingPaymentAction();
   const confirmAttendanceAction = useConfirmAttendanceAction();
   const nav = useNavigate();
-  const loc = useLocation();
   const isSoundEnabled = useSignal(false);
+  const localBookings = useSignal<any[]>([]);
+
+  useTask$(({ track }) => {
+    const b = track(() => calendarData.value.bookings);
+    localBookings.value = [...(b || [])];
+  });
 
   useStyles$(`
     @media print {
@@ -1178,7 +1193,7 @@ export default component$(() => {
     isModalOpen.value = true;
   });
 
-  const selectedBookingDetails = calendarData.value.bookings.find(
+  const selectedBookingDetails = localBookings.value.find(
     (b: any) => b.booking?.id === selectedBookingId.value,
   );
 
@@ -1244,7 +1259,24 @@ export default component$(() => {
   });
 
   // eslint-disable-next-line qwik/no-use-visible-task
-  useVisibleTask$(({ cleanup }) => {
+  useVisibleTask$(() => {
+    const stored = localStorage.getItem("calendar_sound_enabled");
+    if (stored !== null) {
+      isSoundEnabled.value = stored === "true";
+    }
+  });
+
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ track }) => {
+    const val = track(() => isSoundEnabled.value);
+    localStorage.setItem("calendar_sound_enabled", String(val));
+  });
+
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ track, cleanup }) => {
+    const soundEnabled = track(() => isSoundEnabled.value);
+    if (!soundEnabled) return;
+
     const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseAnonKey) return;
@@ -1260,11 +1292,104 @@ export default component$(() => {
           schema: "public",
           table: "bookings",
         },
-        (payload) => {
-          if (payload.eventType === "INSERT" && isSoundEnabled.value) {
+        async (payload) => {
+          if (payload.eventType === "INSERT") {
             playNotificationBeep();
+
+            const newRaw = payload.new as any;
+            const b = {
+              id: newRaw.id,
+              userId: newRaw.user_id,
+              pitchId: newRaw.pitch_id,
+              startTime: parseDatabaseDate(newRaw.start_time).toISOString(),
+              endTime: parseDatabaseDate(newRaw.end_time).toISOString(),
+              status: newRaw.status,
+              totalPrice: Number(newRaw.total_price) || 0,
+              paidAmount: Number(newRaw.paid_amount) || 0,
+              paymentStatus: newRaw.payment_status,
+              paymentMethod: newRaw.payment_method,
+              isSubscription: !!newRaw.is_subscription,
+              bookingType: newRaw.booking_type,
+              notes: newRaw.notes,
+              extras: newRaw.extras,
+              createdAt: newRaw.created_at,
+              updatedAt: newRaw.updated_at,
+            };
+
+            // Check if within current view range
+            const bookingDate = new Date(b.startTime);
+            const viewStart = new Date(calendarData.value.startDateStr);
+            const viewEnd = new Date(calendarData.value.endDateStr);
+            if (bookingDate >= viewStart && bookingDate <= viewEnd) {
+              let user = null;
+              if (b.userId) {
+                const { data: userData } = await supabaseClient
+                  .from("users")
+                  .select("id, name, phone")
+                  .eq("id", b.userId)
+                  .maybeSingle();
+                if (userData) {
+                  user = {
+                    id: userData.id,
+                    name: userData.name,
+                    phone: userData.phone,
+                  };
+                }
+              }
+
+              let guest = null;
+              const { data: guestData } = await supabaseClient
+                .from("guest_requests")
+                .select("id, booking_id, name, phone")
+                .eq("booking_id", b.id)
+                .maybeSingle();
+              if (guestData) {
+                guest = {
+                  id: guestData.id,
+                  bookingId: guestData.booking_id,
+                  name: guestData.name,
+                  phone: guestData.phone,
+                };
+              }
+
+              if (!localBookings.value.some((item) => item.booking.id === b.id)) {
+                localBookings.value = [
+                  ...localBookings.value,
+                  { booking: b, user, guest },
+                ];
+              }
+            }
+          } else if (payload.eventType === "UPDATE") {
+            const updatedRaw = payload.new as any;
+            localBookings.value = localBookings.value.map((item) => {
+              if (item.booking.id === updatedRaw.id) {
+                return {
+                  ...item,
+                  booking: {
+                    ...item.booking,
+                    startTime: parseDatabaseDate(updatedRaw.start_time).toISOString(),
+                    endTime: parseDatabaseDate(updatedRaw.end_time).toISOString(),
+                    status: updatedRaw.status,
+                    totalPrice: Number(updatedRaw.total_price) || 0,
+                    paidAmount: Number(updatedRaw.paid_amount) || 0,
+                    paymentStatus: updatedRaw.payment_status,
+                    paymentMethod: updatedRaw.payment_method,
+                    isSubscription: !!updatedRaw.is_subscription,
+                    bookingType: updatedRaw.booking_type,
+                    notes: updatedRaw.notes,
+                    extras: updatedRaw.extras,
+                    updatedAt: updatedRaw.updated_at,
+                  }
+                };
+              }
+              return item;
+            });
+          } else if (payload.eventType === "DELETE") {
+            const deletedRaw = payload.old as any;
+            localBookings.value = localBookings.value.filter(
+              (item) => item.booking.id !== deletedRaw.id
+            );
           }
-          nav(loc.url.pathname + loc.url.search, { replaceState: true });
         }
       )
       .subscribe();
@@ -1352,7 +1477,7 @@ export default component$(() => {
             <div class="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <BookingListView
                 pitches={calendarData.value.pitches}
-                bookings={calendarData.value.bookings as any}
+                bookings={localBookings.value as any}
                 onBookingClick$={handleBookingClick}
               />
             </div>
@@ -1362,7 +1487,7 @@ export default component$(() => {
             <div class="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <BookingTimelineView
                 pitches={calendarData.value.pitches}
-                bookings={calendarData.value.bookings as any}
+                bookings={localBookings.value as any}
                 slotMinutes={30}
                 startHour={CALENDAR_START_HOUR}
                 endHour={CALENDAR_END_HOUR}
@@ -1528,7 +1653,7 @@ export default component$(() => {
                     </tr>
                   </thead>
                   <tbody>
-                    {calendarData.value.bookings
+                    {localBookings.value
                       .sort(
                         (a: any, b: any) =>
                           new Date(a.booking.startTime).getTime() -
@@ -1583,7 +1708,7 @@ export default component$(() => {
                           </td>
                         </tr>
                       ))}
-                    {calendarData.value.bookings.length === 0 && (
+                    {localBookings.value.length === 0 && (
                       <tr>
                         <td
                           colSpan={4}
