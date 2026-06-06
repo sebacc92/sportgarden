@@ -990,7 +990,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     openRegister: openRegister
       ? {
           id: openRegister.id,
-          openedAt: openRegister.openedAt.toISOString(),
+          openedAt: new Date(openRegister.openedAt).toISOString(),
         }
       : null,
   };
