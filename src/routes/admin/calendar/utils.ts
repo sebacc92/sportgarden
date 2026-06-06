@@ -22,40 +22,74 @@ export const getEndOfMonth = (d: Date) => {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
 };
 
-export const getArgentinaDate = (d: Date | string | number): Date => {
+export const getArgentinaParts = (d: Date | string | number) => {
   const date = new Date(d);
-  return new Date(date.getTime() - 3 * 60 * 60 * 1000);
+  if (isNaN(date.getTime())) {
+    return { year: 1970, month: 0, day: 1, hour: 0, minute: 0, second: 0 };
+  }
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(date);
+  
+  const getValue = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value || "0";
+    
+  return {
+    year: parseInt(getValue("year"), 10),
+    month: parseInt(getValue("month"), 10) - 1,
+    day: parseInt(getValue("day"), 10),
+    hour: parseInt(getValue("hour"), 10),
+    minute: parseInt(getValue("minute"), 10),
+    second: parseInt(getValue("second"), 10),
+  };
+};
+
+export const getArgentinaDate = (d: Date | string | number): Date => {
+  const p = getArgentinaParts(d);
+  return new Date(Date.UTC(p.year, p.month, p.day, p.hour, p.minute, p.second));
 };
 
 export const getBAHoursAndMinutes = (d: Date | string | number) => {
-  const argDate = getArgentinaDate(d);
+  const p = getArgentinaParts(d);
   return {
-    hour: argDate.getUTCHours(),
-    minute: argDate.getUTCMinutes(),
+    hour: p.hour,
+    minute: p.minute,
   };
 };
 
 export const getBADayOfWeek = (d: Date | string | number) => {
-  return getArgentinaDate(d).getUTCDay();
+  const p = getArgentinaParts(d);
+  return new Date(Date.UTC(p.year, p.month, p.day)).getUTCDay();
 };
 
 export const getBADateOfMonth = (d: Date | string | number) => {
-  return getArgentinaDate(d).getUTCDate();
+  const p = getArgentinaParts(d);
+  return p.day;
 };
 
 export const getBAMonth = (d: Date | string | number) => {
-  return getArgentinaDate(d).getUTCMonth();
+  const p = getArgentinaParts(d);
+  return p.month;
 };
 
 export const getBAYear = (d: Date | string | number) => {
-  return getArgentinaDate(d).getUTCFullYear();
+  const p = getArgentinaParts(d);
+  return p.year;
 };
 
 export const getBAFormatDate = (d: Date | string | number) => {
-  const arg = getArgentinaDate(d);
-  const year = arg.getUTCFullYear();
-  const month = String(arg.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(arg.getUTCDate()).padStart(2, "0");
+  const p = getArgentinaParts(d);
+  const year = p.year;
+  const month = String(p.month + 1).padStart(2, "0");
+  const day = String(p.day).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
 
@@ -106,22 +140,14 @@ export function playNotificationBeep() {
 }
 
 export const toBALocalISOString = (d: Date | string | number): string => {
-  const date = new Date(d);
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Argentina/Buenos_Aires",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).format(date);
-  const parts = fmt.split(", ");
-  if (parts.length === 2) {
-    return `${parts[0]}T${parts[1]}`;
-  }
-  return fmt.replace(" ", "T");
+  const p = getArgentinaParts(d);
+  const year = p.year;
+  const month = String(p.month + 1).padStart(2, "0");
+  const day = String(p.day).padStart(2, "0");
+  const hour = String(p.hour).padStart(2, "0");
+  const minute = String(p.minute).padStart(2, "0");
+  const second = String(p.second).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}`;
 };
 
 export const parseDatabaseDate = (dateStr: string): Date => {

@@ -1273,15 +1273,66 @@ export default component$(() => {
   });
 
   // eslint-disable-next-line qwik/no-use-visible-task
-  useVisibleTask$(({ track, cleanup }) => {
-    const soundEnabled = track(() => isSoundEnabled.value);
-    if (!soundEnabled) return;
-
+  useVisibleTask$(({ cleanup }) => {
     const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
     const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseAnonKey) return;
 
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
+    const mapDbBookingToEntry = async (raw: any) => {
+      const b = {
+        id: raw.id,
+        userId: raw.user_id,
+        pitchId: raw.pitch_id,
+        startTime: parseDatabaseDate(raw.start_time).toISOString(),
+        endTime: parseDatabaseDate(raw.end_time).toISOString(),
+        status: raw.status,
+        totalPrice: Number(raw.total_price) || 0,
+        paidAmount: Number(raw.paid_amount) || 0,
+        paymentStatus: raw.payment_status,
+        paymentMethod: raw.payment_method,
+        isSubscription: !!raw.is_subscription,
+        bookingType: raw.booking_type,
+        notes: raw.notes,
+        extras: raw.extras,
+        createdAt: raw.created_at,
+        updatedAt: raw.updated_at,
+      };
+
+      let user = null;
+      if (b.userId) {
+        const { data: userData } = await supabaseClient
+          .from("users")
+          .select("id, name, phone")
+          .eq("id", b.userId)
+          .maybeSingle();
+        if (userData) {
+          user = {
+            id: userData.id,
+            name: userData.name,
+            phone: userData.phone,
+          };
+        }
+      }
+
+      let guest = null;
+      const { data: guestData } = await supabaseClient
+        .from("guest_requests")
+        .select("id, booking_id, name, phone")
+        .eq("booking_id", b.id)
+        .maybeSingle();
+      if (guestData) {
+        guest = {
+          id: guestData.id,
+          bookingId: guestData.booking_id,
+          name: guestData.name,
+          phone: guestData.phone,
+        };
+      }
+
+      return { booking: b, user, guest };
+    };
 
     const channel = supabaseClient
       .channel("bookings-realtime-admin")
@@ -1293,97 +1344,51 @@ export default component$(() => {
           table: "bookings",
         },
         async (payload) => {
+          console.log("[Realtime SDK]", payload);
+
           if (payload.eventType === "INSERT") {
-            playNotificationBeep();
+            if (isSoundEnabled.value) {
+              playNotificationBeep();
+            }
 
-            const newRaw = payload.new as any;
-            const b = {
-              id: newRaw.id,
-              userId: newRaw.user_id,
-              pitchId: newRaw.pitch_id,
-              startTime: parseDatabaseDate(newRaw.start_time).toISOString(),
-              endTime: parseDatabaseDate(newRaw.end_time).toISOString(),
-              status: newRaw.status,
-              totalPrice: Number(newRaw.total_price) || 0,
-              paidAmount: Number(newRaw.paid_amount) || 0,
-              paymentStatus: newRaw.payment_status,
-              paymentMethod: newRaw.payment_method,
-              isSubscription: !!newRaw.is_subscription,
-              bookingType: newRaw.booking_type,
-              notes: newRaw.notes,
-              extras: newRaw.extras,
-              createdAt: newRaw.created_at,
-              updatedAt: newRaw.updated_at,
-            };
-
+            const entry = await mapDbBookingToEntry(payload.new);
+            
             // Check if within current view range
-            const bookingDate = new Date(b.startTime);
+            const bookingDate = new Date(entry.booking.startTime);
             const viewStart = new Date(calendarData.value.startDateStr);
             const viewEnd = new Date(calendarData.value.endDateStr);
             if (bookingDate >= viewStart && bookingDate <= viewEnd) {
-              let user = null;
-              if (b.userId) {
-                const { data: userData } = await supabaseClient
-                  .from("users")
-                  .select("id, name, phone")
-                  .eq("id", b.userId)
-                  .maybeSingle();
-                if (userData) {
-                  user = {
-                    id: userData.id,
-                    name: userData.name,
-                    phone: userData.phone,
-                  };
-                }
-              }
-
-              let guest = null;
-              const { data: guestData } = await supabaseClient
-                .from("guest_requests")
-                .select("id, booking_id, name, phone")
-                .eq("booking_id", b.id)
-                .maybeSingle();
-              if (guestData) {
-                guest = {
-                  id: guestData.id,
-                  bookingId: guestData.booking_id,
-                  name: guestData.name,
-                  phone: guestData.phone,
-                };
-              }
-
-              if (!localBookings.value.some((item) => item.booking.id === b.id)) {
+              if (!localBookings.value.some((item) => item.booking.id === entry.booking.id)) {
                 localBookings.value = [
                   ...localBookings.value,
-                  { booking: b, user, guest },
+                  entry,
                 ];
               }
             }
           } else if (payload.eventType === "UPDATE") {
-            const updatedRaw = payload.new as any;
-            localBookings.value = localBookings.value.map((item) => {
-              if (item.booking.id === updatedRaw.id) {
-                return {
-                  ...item,
-                  booking: {
-                    ...item.booking,
-                    startTime: parseDatabaseDate(updatedRaw.start_time).toISOString(),
-                    endTime: parseDatabaseDate(updatedRaw.end_time).toISOString(),
-                    status: updatedRaw.status,
-                    totalPrice: Number(updatedRaw.total_price) || 0,
-                    paidAmount: Number(updatedRaw.paid_amount) || 0,
-                    paymentStatus: updatedRaw.payment_status,
-                    paymentMethod: updatedRaw.payment_method,
-                    isSubscription: !!updatedRaw.is_subscription,
-                    bookingType: updatedRaw.booking_type,
-                    notes: updatedRaw.notes,
-                    extras: updatedRaw.extras,
-                    updatedAt: updatedRaw.updated_at,
-                  }
-                };
+            const entry = await mapDbBookingToEntry(payload.new);
+            
+            const bookingDate = new Date(entry.booking.startTime);
+            const viewStart = new Date(calendarData.value.startDateStr);
+            const viewEnd = new Date(calendarData.value.endDateStr);
+
+            if (bookingDate >= viewStart && bookingDate <= viewEnd) {
+              const exists = localBookings.value.some((item) => item.booking.id === entry.booking.id);
+              if (exists) {
+                localBookings.value = localBookings.value.map((item) => 
+                  item.booking.id === entry.booking.id ? entry : item
+                );
+              } else {
+                localBookings.value = [
+                  ...localBookings.value,
+                  entry,
+                ];
               }
-              return item;
-            });
+            } else {
+              localBookings.value = localBookings.value.filter(
+                (item) => item.booking.id !== entry.booking.id
+              );
+            }
           } else if (payload.eventType === "DELETE") {
             const deletedRaw = payload.old as any;
             localBookings.value = localBookings.value.filter(
