@@ -278,21 +278,21 @@ export default component$(() => {
   );
 
   return (
-    <div class="min-h-screen bg-slate-900 px-6 py-8 text-white sm:px-8">
+    <div class="min-h-screen bg-slate-50 px-6 py-8 text-slate-800 sm:px-8">
       {/* Header section */}
-      <div class="mb-8 flex flex-col items-start justify-between gap-4 border-b border-white/5 pb-6 lg:flex-row lg:items-center">
+      <div class="mb-8 flex flex-col items-start justify-between gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-center">
         <div>
-          <h1 class="text-3xl font-black tracking-tight text-white uppercase">
-            Tienda <span class="text-emerald-400">Sport Garden</span>
+          <h1 class="text-3xl font-black tracking-tight text-slate-800 uppercase">
+            Tienda <span class="text-emerald-600">Sport Garden</span>
           </h1>
-          <p class="mt-1 text-sm text-slate-400">
+          <p class="mt-1 text-sm text-slate-500">
             Administra tus productos, indumentaria, bebidas, control de stock y pedidos de clientes.
           </p>
         </div>
 
         <div class="flex flex-wrap items-center gap-4">
-          <div class="flex items-center gap-3 rounded-2xl bg-slate-950/40 border border-white/5 px-4 py-2.5">
-            <span class="text-xs font-black tracking-widest uppercase text-slate-400">Estado Tienda:</span>
+          <div class="flex items-center gap-3 rounded-2xl bg-white border border-slate-200 px-4 py-2.5 shadow-sm">
+            <span class="text-xs font-black tracking-widest uppercase text-slate-500">Estado Tienda:</span>
             <button
               type="button"
               onClick$={async () => {
@@ -315,7 +315,7 @@ export default component$(() => {
             </button>
             <span class={[
               "text-xs font-black uppercase tracking-wider",
-              storeEnabledSignal.value ? "text-emerald-400" : "text-slate-400"
+              storeEnabledSignal.value ? "text-emerald-600" : "text-slate-400"
             ]}>
               {storeEnabledSignal.value ? "Activa" : "Pausada"}
             </span>
@@ -326,7 +326,7 @@ export default component$(() => {
               editingProduct.value = null;
               isAddModalOpen.value = true;
             }}
-            class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black tracking-widest text-white uppercase shadow-lg shadow-emerald-950/20 transition-all hover:bg-emerald-500 hover:-translate-y-0.5 active:scale-95"
+            class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-black tracking-widest text-white uppercase shadow-lg shadow-emerald-600/20 transition-all hover:bg-emerald-500 hover:-translate-y-0.5 active:scale-95"
           >
             <svg class="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -338,23 +338,23 @@ export default component$(() => {
 
       {/* Metrics Cards row */}
       <div class="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
-        <div class="rounded-3xl border border-white/5 bg-slate-950/40 p-6 backdrop-blur-md">
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div class="text-xs font-black tracking-widest text-slate-500 uppercase">Productos Activos</div>
-          <div class="mt-2 text-3xl font-black text-white">
+          <div class="mt-2 text-3xl font-black text-slate-800">
             {storeData.value.products.filter(p => p.isActive).length}
           </div>
         </div>
 
-        <div class="rounded-3xl border border-white/5 bg-slate-950/40 p-6 backdrop-blur-md">
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div class="text-xs font-black tracking-widest text-slate-500 uppercase">Pedidos Pendientes</div>
-          <div class="mt-2 text-3xl font-black text-amber-400">
+          <div class="mt-2 text-3xl font-black text-amber-600">
             {pendingOrdersCount.value}
           </div>
         </div>
 
-        <div class="rounded-3xl border border-white/5 bg-slate-950/40 p-6 backdrop-blur-md">
+        <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div class="text-xs font-black tracking-widest text-slate-500 uppercase">Recaudación Total (Entregados)</div>
-          <div class="mt-2 text-3xl font-black text-emerald-400">
+          <div class="mt-2 text-3xl font-black text-emerald-600">
             ${totalRevenue.value.toLocaleString("es-AR")} ARS
           </div>
         </div>

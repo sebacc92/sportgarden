@@ -129,14 +129,14 @@ export default component$(() => {
   });
 
   return (
-    <div class="flex-1 overflow-y-auto bg-slate-950 p-6 text-slate-100 font-sans">
+    <div class="flex-1 overflow-y-auto bg-slate-50 p-6 text-slate-800 font-sans">
       {/* Header */}
-      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-slate-800 pb-6 mb-8">
+      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-slate-200 pb-6 mb-8">
         <div>
-          <h1 class="text-3xl font-black tracking-tight text-white uppercase">
-            Solicitudes <span class="text-emerald-400">Leads</span>
+          <h1 class="text-3xl font-black tracking-tight text-slate-800 uppercase">
+            Solicitudes <span class="text-emerald-600">Leads</span>
           </h1>
-          <p class="text-sm text-slate-400 font-medium mt-1">
+          <p class="text-sm text-slate-500 font-medium mt-1">
             Gestiona los turnos solicitados por invitados sin registro de forma directa.
           </p>
         </div>
@@ -145,61 +145,61 @@ export default component$(() => {
       {/* Stats Cards */}
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 mb-8">
         {/* Card 1 */}
-        <div class="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 p-6 shadow-md backdrop-blur-md">
+        <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-black tracking-widest text-slate-400 uppercase">
+            <span class="text-xs font-black tracking-widest text-slate-500 uppercase">
               Total Pendientes
             </span>
-            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
+            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
               ⏳
             </span>
           </div>
           <div class="mt-4 flex items-baseline gap-2">
-            <span class="text-4xl font-black text-white">{totalLeads.value}</span>
-            <span class="text-xs font-bold text-slate-500">solicitudes</span>
+            <span class="text-4xl font-black text-slate-800">{totalLeads.value}</span>
+            <span class="text-xs font-bold text-slate-400">solicitudes</span>
           </div>
         </div>
 
         {/* Card 2 */}
-        <div class="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 p-6 shadow-md backdrop-blur-md">
+        <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-black tracking-widest text-slate-400 uppercase">
+            <span class="text-xs font-black tracking-widest text-slate-500 uppercase">
               Para Hoy
             </span>
-            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
               ⚡
             </span>
           </div>
           <div class="mt-4 flex items-baseline gap-2">
-            <span class="text-4xl font-black text-white">{todayLeadsCount.value}</span>
-            <span class="text-xs font-bold text-slate-500">solicitudes</span>
+            <span class="text-4xl font-black text-slate-800">{todayLeadsCount.value}</span>
+            <span class="text-xs font-bold text-slate-400">solicitudes</span>
           </div>
         </div>
 
         {/* Card 3 */}
-        <div class="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/50 p-6 shadow-md backdrop-blur-md">
+        <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-black tracking-widest text-slate-400 uppercase">
+            <span class="text-xs font-black tracking-widest text-slate-500 uppercase">
               Tasa Aceptación
             </span>
-            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+            <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               📈
             </span>
           </div>
           <div class="mt-4 flex items-baseline gap-2">
-            <span class="text-4xl font-black text-white">100%</span>
-            <span class="text-xs font-bold text-slate-500">objetivo</span>
+            <span class="text-4xl font-black text-slate-800">100%</span>
+            <span class="text-xs font-bold text-slate-400">objetivo</span>
           </div>
         </div>
       </div>
 
       {/* Main List */}
       {leads.value.length === 0 ? (
-        <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-800 bg-slate-900/10 py-16 px-4 text-center">
-          <div class="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900 text-3xl mb-4">
+        <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white py-16 px-4 text-center">
+          <div class="flex h-16 w-16 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-3xl mb-4">
             🎉
           </div>
-          <h3 class="text-lg font-black text-white uppercase tracking-widest">
+          <h3 class="text-lg font-black text-slate-800 uppercase tracking-widest">
             ¡Todo al día!
           </h3>
           <p class="mt-2 text-sm text-slate-500 font-semibold max-w-sm">
@@ -207,11 +207,11 @@ export default component$(() => {
           </p>
         </div>
       ) : (
-        <div class="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/30 shadow-md backdrop-blur-xs">
+        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div class="overflow-x-auto">
             <table class="w-full border-collapse text-left text-sm">
               <thead>
-                <tr class="border-b border-slate-800 bg-slate-950/40 text-xs font-black tracking-widest text-slate-400 uppercase">
+                <tr class="border-b border-slate-200 bg-slate-50 text-xs font-black tracking-widest text-slate-500 uppercase">
                   <th class="py-4 px-6">Cliente</th>
                   <th class="py-4 px-6">Cancha / Deporte</th>
                   <th class="py-4 px-6">Fecha y Hora</th>
@@ -219,7 +219,7 @@ export default component$(() => {
                   <th class="py-4 px-6 text-right">Acciones</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-slate-800/60">
+              <tbody class="divide-y divide-slate-100">
                 {leads.value.map((lead: any) => {
                   const b = lead.booking;
                   const g = lead.guest;
@@ -258,16 +258,16 @@ export default component$(() => {
                   return (
                     <tr
                       key={b.id}
-                      class="transition-colors hover:bg-slate-900/35"
+                      class="transition-colors hover:bg-slate-50"
                     >
                       {/* Cliente */}
                       <td class="py-5 px-6">
-                        <div class="font-black text-white">{g?.name || "Invitado"}</div>
-                        <div class="flex items-center gap-2 mt-1 text-slate-400">
+                        <div class="font-black text-slate-800">{g?.name || "Invitado"}</div>
+                        <div class="flex items-center gap-2 mt-1 text-slate-500">
                           <span class="text-xs font-semibold">{g?.phone}</span>
                           {g?.email && (
                             <>
-                              <span class="text-slate-600">•</span>
+                              <span class="text-slate-300">•</span>
                               <span class="text-xs truncate font-medium text-slate-500 max-w-[150px]" title={g.email}>
                                 {g.email}
                               </span>
@@ -278,27 +278,27 @@ export default component$(() => {
 
                       {/* Cancha */}
                       <td class="py-5 px-6">
-                        <span class="inline-flex items-center rounded-lg bg-emerald-500/10 px-2.5 py-1 text-xs font-black tracking-wide text-emerald-400 uppercase ring-1 ring-emerald-500/20">
+                        <span class="inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-black tracking-wide text-emerald-700 uppercase ring-1 ring-emerald-200">
                           {lead.pitch?.name || "Cancha"}
                         </span>
                       </td>
 
                       {/* Horario */}
                       <td class="py-5 px-6">
-                        <div class="font-bold text-white capitalize">{dateFormatted}</div>
-                        <div class="mt-1 text-xs font-semibold text-slate-400">
+                        <div class="font-bold text-slate-800 capitalize">{dateFormatted}</div>
+                        <div class="mt-1 text-xs font-semibold text-slate-500">
                           {timeFormatted} a {endTimeFormatted} ({durationMinutes} mins)
                         </div>
                       </td>
 
                       {/* Precio / Pago */}
                       <td class="py-5 px-6">
-                        <div class="font-black text-white">
+                        <div class="font-black text-slate-800">
                           ${b.totalPrice.toLocaleString("es-AR")}
                         </div>
-                        <div class="mt-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-amber-400">
+                        <div class="mt-1 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-amber-600">
                           <span>{b.paymentMethod === "CASH" ? "Efectivo" : b.paymentMethod}</span>
-                          <span class="text-slate-600">•</span>
+                          <span class="text-slate-300">•</span>
                           <span>Pendiente</span>
                         </div>
                       </td>
@@ -310,7 +310,7 @@ export default component$(() => {
                           <a
                             href={waLink}
                             target="_blank"
-                            class="flex h-9 w-9 items-center justify-center rounded-xl border border-[#25D366]/20 bg-[#25D366]/5 text-[#25D366] transition-all hover:bg-[#25D366]/15 active:scale-[0.95]"
+                            class="flex h-9 w-9 items-center justify-center rounded-xl border border-[#25D366]/30 bg-[#25D366]/10 text-[#25D366] transition-all hover:bg-[#25D366]/20 active:scale-[0.95]"
                             title="Contactar por WhatsApp"
                           >
                             <svg
@@ -346,7 +346,7 @@ export default component$(() => {
                                   el.closest("form")?.submit();
                                 }
                               })}
-                              class="rounded-xl border border-red-500/30 bg-red-500/5 px-3 py-2 text-xs font-black tracking-wider text-red-400 uppercase transition-all hover:bg-red-500/10 active:scale-[0.95]"
+                              class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black tracking-wider text-red-600 uppercase transition-all hover:bg-red-100 active:scale-[0.95]"
                             >
                               Rechazar
                             </button>
