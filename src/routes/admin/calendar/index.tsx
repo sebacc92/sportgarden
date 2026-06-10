@@ -43,6 +43,7 @@ import { CalendarWeekView } from "~/components/admin/calendar/CalendarWeekView";
 import { CalendarMonthView } from "~/components/admin/calendar/CalendarMonthView";
 import { BookingDetailsModal } from "~/components/admin/calendar/BookingDetailsModal";
 import { CreateBookingModal } from "~/components/admin/calendar/CreateBookingModal";
+import { PrintDayView } from "~/components/admin/calendar/PrintDayView";
 
 import {
   getStartOfWeek,
@@ -1110,18 +1111,207 @@ export default component$(() => {
 
   useStyles$(`
     @media print {
+      @page { size: A4 landscape; margin: 10mm; }
       body * { visibility: hidden; }
       .print-area, .print-area * { visibility: visible; }
-      .print-area { 
-        position: absolute; 
-        left: 0; 
-        top: 0; 
-        width: 100%; 
+      .print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
         border: none !important;
-        shadow: none !important;
+        box-shadow: none !important;
+        background: #fff !important;
       }
       .no-print { display: none !important; }
+      .print-day-view, .print-day-view * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
     }
+
+    /* Print day view styles (also used as on-screen preview) */
+    .print-day-view {
+      color: #0f172a;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.3;
+      background: #fff;
+      padding: 4mm;
+    }
+    .print-day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      border-bottom: 1.5px solid #0f172a;
+      padding-bottom: 4px;
+      margin-bottom: 8px;
+    }
+    .print-day-club { font-size: 16px; font-weight: 900; letter-spacing: -0.01em; }
+    .print-day-club-sub { font-size: 10px; color: #475569; }
+    .print-day-header-right { text-align: right; }
+    .print-day-date {
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: capitalize;
+    }
+    .print-day-meta { font-size: 9px; color: #64748b; }
+
+    .print-day-grid-wrap {
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .print-day-grid {
+      display: grid;
+      grid-template-rows: 26px auto;
+      width: 100%;
+    }
+    .print-day-corner {
+      background: #f1f5f9;
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1.5px solid #cbd5e1;
+    }
+    .print-day-pitch-head {
+      background: #f1f5f9;
+      border-right: 1px solid #e2e8f0;
+      border-bottom: 1.5px solid #cbd5e1;
+      text-align: center;
+      padding: 2px;
+    }
+    .print-day-pitch-head:last-child { border-right: 0; }
+    .print-day-pitch-name { font-size: 11px; font-weight: 800; }
+    .print-day-pitch-sub { font-size: 8px; color: #64748b; font-weight: 700; }
+
+    .print-day-hours {
+      position: relative;
+      border-right: 1px solid #e2e8f0;
+      background: #fff;
+    }
+    .print-day-hour-label {
+      position: absolute;
+      right: 4px;
+      transform: translateY(-50%);
+      font-size: 9px;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .print-day-col {
+      position: relative;
+      border-right: 1px solid #e2e8f0;
+    }
+    .print-day-col:last-child { border-right: 0; }
+    .print-day-gridline {
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 1px dashed #e2e8f0;
+    }
+    .print-day-booking {
+      position: absolute;
+      left: 2px;
+      right: 2px;
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-left: 3px solid #3b82f6;
+      border-radius: 3px;
+      padding: 2px 4px;
+      overflow: hidden;
+      font-size: 9px;
+    }
+    .print-day-booking-time { font-weight: 700; color: #334155; font-size: 8px; }
+    .print-day-booking-tag {
+      display: inline-block;
+      background: #f1f5f9;
+      color: #475569;
+      padding: 0 3px;
+      border-radius: 2px;
+      font-size: 7px;
+      font-weight: 800;
+      margin-left: 2px;
+    }
+    .print-day-booking-name {
+      font-weight: 700;
+      color: #0f172a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .print-day-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 9px;
+      color: #475569;
+      margin: 4px 0 8px;
+    }
+    .print-day-legend span { display: inline-flex; align-items: center; gap: 4px; }
+    .print-day-legend i {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+    .print-day-legend-note { font-style: italic; color: #64748b; }
+
+    .print-day-detail-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 3px;
+      color: #334155;
+    }
+    .print-day-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+    }
+    .print-day-table th {
+      text-align: left;
+      background: #f1f5f9;
+      padding: 3px 6px;
+      border-bottom: 1px solid #cbd5e1;
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 8px;
+      color: #475569;
+      letter-spacing: 0.04em;
+    }
+    .print-day-table td {
+      padding: 3px 6px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+    .print-day-row-school td { color: #9a3412; background: #fff7ed; }
+    .print-day-row-tag {
+      background: #e2e8f0;
+      color: #334155;
+      padding: 0 3px;
+      border-radius: 2px;
+      font-size: 8px;
+      font-weight: 800;
+    }
+    .print-day-paid { font-weight: 800; color: #047857; }
+    .print-day-owes { font-weight: 800; color: #b45309; }
+    .print-day-empty { padding: 16px; color: #94a3b8; font-style: italic; }
+
+    .print-day-totals {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 6px;
+      padding-top: 4px;
+      border-top: 1.5px solid #0f172a;
+      font-size: 10px;
+    }
+    .print-day-totals span { margin-right: 10px; }
+    .print-day-totals strong { font-size: 11px; }
   `);
 
   // Layout mode: 'timeline' (pitches×time) | 'list' (table)
@@ -1583,7 +1773,7 @@ export default component$(() => {
 
       {/* Modal para Imprimir Agenda */}
       <Modal.Root bind:show={isPrintModalOpen}>
-        <Modal.Panel class="relative mx-auto w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-xl">
+        <Modal.Panel class="relative mx-auto w-full max-w-6xl overflow-hidden rounded-2xl bg-white shadow-xl">
           <div class="p-8">
             <div class="no-print mb-6 flex items-center justify-between">
               <h3 class="flex items-center gap-2 text-xl font-black text-slate-800">
@@ -1625,120 +1815,14 @@ export default component$(() => {
               </button>
             </div>
 
-            <div class="print-area overflow-hidden rounded-2xl border shadow-sm">
-              <div class="flex items-center justify-between bg-slate-900 p-6 text-white">
-                <div>
-                  <h1 class="text-2xl font-black tracking-tight uppercase">
-                    Agenda de Reservas
-                  </h1>
-                  <p class="text-[10px] font-bold tracking-widest text-emerald-400 uppercase">
-                    {calendarData.value.settings?.clubName ||
-                      "SportGarden Futbol"}
-                  </p>
-                </div>
-                <div class="text-right">
-                  <div class="text-xl font-black">
-                    {new Date(
-                      calendarData.value.selectedDateStr + "T12:00:00",
-                    ).toLocaleDateString("es-ES", {
-                      weekday: "long",
-                      day: "numeric",
-                      month: "long",
-                    })}
-                  </div>
-                  <div class="text-[10px] font-bold text-slate-400 uppercase">
-                    Reporte Generado: {new Date().toLocaleTimeString()}
-                  </div>
-                </div>
-              </div>
-
-              <div class="p-0">
-                <table class="w-full border-collapse text-left">
-                  <thead>
-                    <tr class="border-b border-slate-200 bg-slate-100">
-                      <th class="px-4 py-3 text-[10px] font-black tracking-widest text-slate-500 uppercase">
-                        Hora
-                      </th>
-                      <th class="px-4 py-3 text-[10px] font-black tracking-widest text-slate-500 uppercase">
-                        Cancha
-                      </th>
-                      <th class="px-4 py-3 text-[10px] font-black tracking-widest text-slate-500 uppercase">
-                        Cliente / Contacto
-                      </th>
-                      <th class="px-4 py-3 text-right text-[10px] font-black tracking-widest text-slate-500 uppercase">
-                        Saldo
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {localBookings.value
-                      .sort(
-                        (a: any, b: any) =>
-                          new Date(a.booking.startTime).getTime() -
-                          new Date(b.booking.startTime).getTime(),
-                      )
-                      .map((b: any) => (
-                        <tr
-                          key={b.booking.id}
-                          class="border-b border-slate-100 transition-colors hover:bg-slate-50"
-                        >
-                          <td class="px-4 py-4">
-                            <div class="text-sm font-black whitespace-nowrap text-slate-800">
-                              {new Date(b.booking.startTime).toLocaleTimeString(
-                                [],
-                                { hour: "2-digit", minute: "2-digit" },
-                              )}{" "}
-                              -{" "}
-                              {new Date(b.booking.endTime).toLocaleTimeString(
-                                [],
-                                { hour: "2-digit", minute: "2-digit" },
-                              )}
-                            </div>
-                          </td>
-                          <td class="px-4 py-4">
-                            <div class="text-xs font-bold text-slate-600">
-                              {calendarData.value.pitches.find(
-                                (p: any) => p.id === b.booking.pitchId,
-                              )?.name || "Cancha"}
-                            </div>
-                          </td>
-                          <td class="px-4 py-4">
-                            <div class="text-sm font-black text-slate-800">
-                              {b.user?.name || b.guest?.name || "S/N"}
-                            </div>
-                            <div class="text-[10px] font-bold text-slate-500">
-                              {b.user?.phone || b.guest?.phone || "-"}
-                            </div>
-                          </td>
-                          <td class="px-4 py-4 text-right">
-                            <div
-                              class={cn(
-                                "inline-block rounded px-2 py-1 text-[10px] font-black tracking-tighter uppercase",
-                                b.booking.paymentStatus === "PAID"
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-amber-100 text-amber-700",
-                              )}
-                            >
-                              {b.booking.paymentStatus === "PAID"
-                                ? "PAGADO"
-                                : `RESTA $${(b.booking.totalPrice - b.booking.paidAmount).toLocaleString()}`}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    {localBookings.value.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          class="px-4 py-12 text-center font-bold text-slate-400 italic"
-                        >
-                          No hay reservas para este día.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <div class="print-area max-h-[70vh] overflow-auto rounded-2xl border shadow-sm">
+              <PrintDayView
+                selectedDateStr={calendarData.value.selectedDateStr}
+                bookings={localBookings.value}
+                pitches={calendarData.value.pitches}
+                settings={calendarData.value.settings}
+                todaySchedule={todaySchedule}
+              />
             </div>
 
             <div class="no-print mt-8 flex justify-end gap-3">
