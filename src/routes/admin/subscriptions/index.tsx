@@ -342,6 +342,19 @@ export default component$(() => {
   const editingSubPrice = useSignal("");
   const editApplyToFuture = useSignal(true);
 
+  // Confirmation modal state (dar de baja / reactivar)
+  const isConfirmModalOpen = useSignal(false);
+  const pendingToggleSub = useSignal<any>(null);
+
+  // Close confirm modal on success
+  useTask$(({ track }) => {
+    const success = track(() => toggleSubAction.value?.success);
+    if (success) {
+      isConfirmModalOpen.value = false;
+      pendingToggleSub.value = null;
+    }
+  });
+
   // Search owner logic with debounce
   useTask$(({ track, cleanup }) => {
     const term = track(() => searchTerm.value);
@@ -594,18 +607,9 @@ export default component$(() => {
                             <Button
                               look={sub.isActive ? "secondary" : "primary"}
                               type="button"
-                              disabled={toggleSubAction.isRunning}
-                              onClick$={async () => {
-                                if (sub.isActive) {
-                                  const count = stat?.futureCount ?? 0;
-                                  const ok = confirm(
-                                    `Se cancelarán ${count} reservas futuras pendientes de pago de este abono. ¿Dar de baja?`,
-                                  );
-                                  if (!ok) return;
-                                }
-                                await toggleSubAction.submit({
-                                  subscriptionId: sub.id,
-                                });
+                              onClick$={() => {
+                                pendingToggleSub.value = sub;
+                                isConfirmModalOpen.value = true;
                               }}
                               class={`rounded-lg px-3 py-1.5 text-xs font-bold tracking-wide ${sub.isActive ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-emerald-500 text-white hover:bg-emerald-600"}`}
                             >
@@ -622,6 +626,119 @@ export default component$(() => {
           </div>
         </div>
       </div>
+
+      {/* Modal de Confirmación (dar de baja / reactivar) */}
+      <Modal.Root bind:show={isConfirmModalOpen}>
+        <Modal.Panel class="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="p-6">
+            <div class="mb-5 flex items-start gap-4">
+              <div
+                class={`flex-shrink-0 rounded-xl p-3 ${pendingToggleSub.value?.isActive ? "bg-red-100" : "bg-emerald-100"}`}
+              >
+                {pendingToggleSub.value?.isActive ? (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="text-red-600"
+                  >
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="text-emerald-600"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <h3 class="text-lg font-black text-slate-800">
+                  {pendingToggleSub.value?.isActive
+                    ? "¿Dar de baja el abono?"
+                    : "¿Reactivar el abono?"}
+                </h3>
+                <p class="mt-1 text-sm text-slate-500">
+                  {pendingToggleSub.value?.isActive
+                    ? `Se cancelarán las reservas futuras pendientes de pago de este abono${
+                        data.value.stats[pendingToggleSub.value?.id]
+                          ?.futureCount != null
+                          ? ` (${data.value.stats[pendingToggleSub.value.id].futureCount} turnos)`
+                          : ""
+                      }.`
+                    : "Se reactivarán las reservas futuras disponibles de este abono y volverá a extenderse automáticamente."}
+                </p>
+                {pendingToggleSub.value && (
+                  <div class="mt-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm">
+                    <div class="font-bold text-slate-800">
+                      {pendingToggleSub.value.pitch?.name}
+                    </div>
+                    <div class="text-xs text-slate-500">
+                      {formatDayOfWeek(pendingToggleSub.value.dayOfWeek)} ·{" "}
+                      {pendingToggleSub.value.startTime} -{" "}
+                      {pendingToggleSub.value.endTime}
+                    </div>
+                    <div class="text-xs text-slate-500">
+                      {pendingToggleSub.value.user?.name ||
+                        pendingToggleSub.value.group?.name ||
+                        "Desconocido"}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <Form action={toggleSubAction} class="flex flex-col gap-3">
+              <input
+                type="hidden"
+                name="subscriptionId"
+                value={pendingToggleSub.value?.id ?? ""}
+              />
+              <div class="flex gap-3">
+                <Button
+                  type="button"
+                  look="ghost"
+                  onClick$={() => {
+                    isConfirmModalOpen.value = false;
+                    pendingToggleSub.value = null;
+                  }}
+                  class="flex-1 rounded-xl border border-slate-200 py-2.5 font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={toggleSubAction.isRunning}
+                  class={`flex-1 rounded-xl py-2.5 font-bold text-white ${pendingToggleSub.value?.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-500 hover:bg-emerald-600"}`}
+                >
+                  {toggleSubAction.isRunning
+                    ? "Procesando..."
+                    : pendingToggleSub.value?.isActive
+                      ? "Sí, dar de baja"
+                      : "Sí, reactivar"}
+                </Button>
+              </div>
+            </Form>
+          </div>
+        </Modal.Panel>
+      </Modal.Root>
 
       {/* Modal para Editar Abono (precio) */}
       <Modal.Root bind:show={isEditModalOpen}>
