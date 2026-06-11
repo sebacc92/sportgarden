@@ -8,7 +8,25 @@ import {
   server$,
 } from "@builder.io/qwik-city";
 import { getDB, camelize } from "~/db";
-import { pitchSubscriptions, pitches, bookings, users, groups } from "~/db/schema";
+import {
+  pitchSubscriptions,
+  pitches,
+  bookings,
+  users,
+  groups,
+} from "~/db/schema";
+import {
+  HORIZON_WEEKS,
+  createSubscriptionWithBookings,
+  extendActiveSubscriptions,
+  findDuplicateActiveSubscription,
+  generateOccurrences,
+} from "~/lib/admin/subscriptions";
+import {
+  getBAFormatDate,
+  parseDatabaseDate,
+  toBALocalISOString,
+} from "~/routes/admin/calendar/utils";
 import { isPitchAvailable } from "~/utils/availability";
 import { Button, Modal } from "~/components/ui";
 
@@ -33,10 +51,65 @@ export const useSubscriptionsData = routeLoader$(async (requestEvent) => {
     .order("created_at", { ascending: false });
 
   if (subsErr) throw subsErr;
+  const subscriptions = camelize<any[]>(subsData || []);
+
+  // Per-subscription stats: future bookings, last generated date, conflicts
+  const now = new Date();
+  const { data: futureData, error: futureErr } = await db
+    .from(bookings)
+    .select("notes, start_time, status")
+    .like("notes", "subscription:%")
+    .gte("start_time", toBALocalISOString(now));
+
+  if (futureErr) throw futureErr;
+  const futureRows = camelize<any[]>(futureData || []);
+
+  const bySub: Record<
+    string,
+    { dates: Set<string>; futureCount: number; lastDateStr: string | null }
+  > = {};
+  for (const row of futureRows) {
+    const subId = String(row.notes || "").replace("subscription:", "");
+    if (!subId) continue;
+    const dateStr = getBAFormatDate(parseDatabaseDate(row.startTime));
+    if (!bySub[subId]) {
+      bySub[subId] = { dates: new Set(), futureCount: 0, lastDateStr: null };
+    }
+    bySub[subId].dates.add(dateStr);
+    if (row.status === "CONFIRMED") bySub[subId].futureCount++;
+    if (!bySub[subId].lastDateStr || dateStr > bySub[subId].lastDateStr!) {
+      bySub[subId].lastDateStr = dateStr;
+    }
+  }
+
+  const stats: Record<
+    string,
+    { futureCount: number; lastDateStr: string | null; conflictCount: number }
+  > = {};
+  for (const sub of subscriptions) {
+    const agg = bySub[sub.id];
+    if (!agg || !agg.lastDateStr) {
+      stats[sub.id] = { futureCount: 0, lastDateStr: null, conflictCount: 0 };
+      continue;
+    }
+    // Expected occurrences between today and last generated date that have
+    // no booking row at all → they were skipped due to a conflict.
+    const lastDate = new Date(`${agg.lastDateStr}T12:00:00-03:00`);
+    const expected = generateOccurrences(sub, now, lastDate);
+    const conflictCount = expected.filter(
+      (o) => !agg.dates.has(o.dateStr),
+    ).length;
+    stats[sub.id] = {
+      futureCount: agg.futureCount,
+      lastDateStr: agg.lastDateStr,
+      conflictCount,
+    };
+  }
 
   return {
     pitches: camelize<any[]>(allPitches || []),
-    subscriptions: camelize<any[]>(subsData || []),
+    subscriptions,
+    stats,
   };
 });
 
@@ -71,101 +144,44 @@ export const useCreateSubscriptionAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
 
-    const subId = crypto.randomUUID();
-    const startDate = new Date(`${data.startDate}T12:00:00-03:00`);
-    const endDate = new Date(startDate);
-    endDate.setFullYear(endDate.getFullYear() + 1);
-
-    const datesToBook: any[] = [];
-    const current = new Date(startDate);
-    
-    // Find the first date that matches dayOfWeek
-    while (current.getDay() !== Number(data.dayOfWeek)) {
-      current.setDate(current.getDate() + 1);
+    if (data.startTime >= data.endTime) {
+      return {
+        failed: true,
+        message: "La hora de inicio debe ser anterior a la hora de fin.",
+      };
     }
 
+    const duplicate = await findDuplicateActiveSubscription(db, {
+      pitchId: data.pitchId,
+      dayOfWeek: Number(data.dayOfWeek),
+      startTime: data.startTime,
+      endTime: data.endTime,
+    });
+
+    if (duplicate) {
+      return {
+        failed: true,
+        message:
+          "Ya existe un abono activo en esa cancha con el mismo día y un horario que se superpone. Revisá el listado.",
+      };
+    }
+
+    const startDate = new Date(`${data.startDate}T12:00:00-03:00`);
     const userId = data.ownerType === "USER" ? data.ownerId : null;
     const groupId = data.ownerType === "GROUP" ? data.ownerId : null;
 
-    let count = 0;
-    while (current <= endDate && count < 52) {
-      const startDateTime = new Date(`${current.toISOString().split("T")[0]}T${data.startTime}:00-03:00`);
-      const endDateTime = new Date(`${current.toISOString().split("T")[0]}T${data.endTime}:00-03:00`);
-
-      // Check availability
-      const { available } = await isPitchAvailable(db, {
-        pitchId: data.pitchId,
-        startTime: startDateTime,
-        endTime: endDateTime,
-      });
-
-      if (available) {
-        datesToBook.push({
-          id: crypto.randomUUID(),
-          userId,
-          groupId,
-          pitchId: data.pitchId,
-          startTime: startDateTime,
-          endTime: endDateTime,
-          status: "CONFIRMED",
-          bookingType: "FIXED",
-          isSubscription: true,
-          totalPrice: Number(data.pricePerMatch),
-          paidAmount: 0,
-          paymentStatus: "PENDING",
-          paymentMethod: "CASH",
-          notes: `subscription:${subId}`,
-        });
-      }
-      current.setDate(current.getDate() + 7);
-      count++;
-    }
-
-    const { error: subErr } = await db.from(pitchSubscriptions).insert({
-      id: subId,
-      pitch_id: data.pitchId,
-      user_id: userId,
-      group_id: groupId,
-      day_of_week: Number(data.dayOfWeek),
-      start_time: data.startTime,
-      end_time: data.endTime,
-      start_date: startDate.toISOString(),
-      price_per_match: Number(data.pricePerMatch),
-      is_active: true,
+    const { created, skipped } = await createSubscriptionWithBookings(db, {
+      pitchId: data.pitchId,
+      userId,
+      groupId,
+      dayOfWeek: Number(data.dayOfWeek),
+      startTime: data.startTime,
+      endTime: data.endTime,
+      startDate,
+      pricePerMatch: Number(data.pricePerMatch),
     });
 
-    if (subErr) {
-      throw subErr;
-    }
-
-    if (datesToBook.length > 0) {
-      // Snakize datesToBook items
-      const snakizedBookings = datesToBook.map((b) => ({
-        id: b.id,
-        user_id: b.userId,
-        group_id: b.groupId,
-        pitch_id: b.pitchId,
-        start_time: b.startTime.toISOString(),
-        end_time: b.endTime.toISOString(),
-        status: b.status,
-        booking_type: b.bookingType,
-        is_subscription: b.isSubscription,
-        total_price: b.totalPrice,
-        paid_amount: b.paidAmount,
-        payment_status: b.paymentStatus,
-        payment_method: b.paymentMethod,
-        notes: b.notes,
-      }));
-
-      const CHUNK_SIZE = 50;
-      for (let i = 0; i < snakizedBookings.length; i += CHUNK_SIZE) {
-        const chunk = snakizedBookings.slice(i, i + CHUNK_SIZE);
-        const { error: bookErr } = await db.from(bookings).insert(chunk);
-        if (bookErr) throw bookErr;
-      }
-    }
-
-    return { success: true };
+    return { success: true, created, skipped };
   },
   zod$({
     pitchId: z.string().min(1),
@@ -177,6 +193,54 @@ export const useCreateSubscriptionAction = routeAction$(
     startDate: z.string(),
     pricePerMatch: z.string(),
   }),
+);
+
+export const useUpdateSubscriptionPriceAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const price = Number(data.pricePerMatch);
+
+    if (!price || price <= 0) {
+      return { failed: true, message: "El precio debe ser mayor a 0." };
+    }
+
+    const { error: updSubErr } = await db
+      .from(pitchSubscriptions)
+      .update({ price_per_match: price })
+      .eq("id", data.subscriptionId);
+
+    if (updSubErr) throw updSubErr;
+
+    let updatedBookings = 0;
+    if (data.applyToFuture === "true") {
+      const { data: updData, error: updBookErr } = await db
+        .from(bookings)
+        .update({ total_price: price })
+        .eq("notes", `subscription:${data.subscriptionId}`)
+        .gte("start_time", toBALocalISOString(new Date()))
+        .eq("payment_status", "PENDING")
+        .neq("status", "CANCELLED")
+        .select("id");
+
+      if (updBookErr) throw updBookErr;
+      updatedBookings = (updData || []).length;
+    }
+
+    return { success: true, updatedBookings };
+  },
+  zod$({
+    subscriptionId: z.string().min(1),
+    pricePerMatch: z.string(),
+    applyToFuture: z.string().optional(),
+  }),
+);
+
+export const useExtendSubscriptionsAction = routeAction$(
+  async (_data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const summary = await extendActiveSubscriptions(db);
+    return { success: true, ...summary };
+  },
 );
 
 export const useToggleSubscriptionAction = routeAction$(
@@ -260,6 +324,8 @@ export default component$(() => {
   const data = useSubscriptionsData();
   const createSubAction = useCreateSubscriptionAction();
   const toggleSubAction = useToggleSubscriptionAction();
+  const updatePriceAction = useUpdateSubscriptionPriceAction();
+  const extendAction = useExtendSubscriptionsAction();
 
   const isModalOpen = useSignal(false);
   const ownerType = useSignal<"USER" | "GROUP">("USER");
@@ -268,6 +334,13 @@ export default component$(() => {
   const isSearching = useSignal(false);
   const selectedOwnerId = useSignal("");
   const selectedOwnerName = useSignal("");
+
+  // Edit price modal state
+  const isEditModalOpen = useSignal(false);
+  const editingSubId = useSignal("");
+  const editingSubLabel = useSignal("");
+  const editingSubPrice = useSignal("");
+  const editApplyToFuture = useSignal(true);
 
   // Search owner logic with debounce
   useTask$(({ track, cleanup }) => {
@@ -316,6 +389,11 @@ export default component$(() => {
     return day + "s";
   };
 
+  const formatShortDate = (dateStr: string) => {
+    const [y, m, d] = dateStr.split("-");
+    return `${d}/${m}/${y}`;
+  };
+
   return (
     <div class="min-h-full bg-slate-50 p-6 font-sans">
       <div class="mx-auto max-w-6xl space-y-6">
@@ -325,34 +403,83 @@ export default component$(() => {
               Abonos de Canchas
             </h1>
             <p class="mt-1 text-slate-500">
-              Administración de reservas recurrentes fijas.
+              Reservas recurrentes fijas. Se generan {HORIZON_WEEKS} semanas
+              hacia adelante y se extienden automáticamente cada semana.
             </p>
           </div>
-          <Button
-            look="primary"
-            onClick$={() => (isModalOpen.value = true)}
-            class="flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 font-bold text-white shadow-md shadow-emerald-100 transition-all hover:scale-[1.02] hover:bg-emerald-600 active:scale-95"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="3"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+          <div class="flex items-center gap-3">
+            <Button
+              look="ghost"
+              onClick$={() => extendAction.submit({})}
+              disabled={extendAction.isRunning}
+              class="rounded-xl px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-100"
             >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Nuevo Abono Fijo
-          </Button>
+              {extendAction.isRunning ? "Extendiendo..." : "↻ Extender ahora"}
+            </Button>
+            <Button
+              look="primary"
+              onClick$={() => (isModalOpen.value = true)}
+              class="flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 font-bold text-white shadow-md shadow-emerald-100 transition-all hover:scale-[1.02] hover:bg-emerald-600 active:scale-95"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Nuevo Abono Fijo
+            </Button>
+          </div>
         </div>
 
+        {/* Result banners */}
+        {createSubAction.value?.success && (
+          <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+            Abono creado: se generaron {createSubAction.value.created} reservas.
+            {(createSubAction.value.skipped?.length ?? 0) > 0 && (
+              <span class="mt-1 block font-semibold text-amber-700">
+                {createSubAction.value.skipped.length} fechas no se generaron
+                por conflicto de horario:{" "}
+                {createSubAction.value.skipped
+                  .map((d: string) => formatShortDate(d))
+                  .join(", ")}
+                . Resolvelas desde el calendario.
+              </span>
+            )}
+          </div>
+        )}
+        {createSubAction.value?.failed && createSubAction.value?.message && (
+          <div class="rounded-xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-600">
+            {createSubAction.value.message}
+          </div>
+        )}
+        {updatePriceAction.value?.success && (
+          <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+            Precio actualizado.
+            {(updatePriceAction.value.updatedBookings ?? 0) > 0 &&
+              ` Se aplicó a ${updatePriceAction.value.updatedBookings} reservas futuras pendientes.`}
+          </div>
+        )}
+        {extendAction.value?.success && (
+          <div class="rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-700">
+            Abonos extendidos: {extendAction.value.processed} procesados,{" "}
+            {extendAction.value.created} reservas nuevas
+            {extendAction.value.skipped > 0 &&
+              `, ${extendAction.value.skipped} fechas con conflicto`}
+            .
+          </div>
+        )}
+
         {/* Subscriptions List */}
-        <div class="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm w-full">
+        <div class="flex w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div class="overflow-auto p-0">
             <table class="w-full border-collapse text-left">
               <thead>
@@ -360,6 +487,8 @@ export default component$(() => {
                   <th class="p-4">Cancha</th>
                   <th class="p-4">Horario Fijo</th>
                   <th class="p-4">Titular</th>
+                  <th class="p-4">Precio/Turno</th>
+                  <th class="p-4">Vigencia</th>
                   <th class="p-4">Estado</th>
                   <th class="p-4 text-center">Acciones</th>
                 </tr>
@@ -367,75 +496,229 @@ export default component$(() => {
               <tbody class="text-sm font-semibold text-slate-700">
                 {data.value.subscriptions.length === 0 ? (
                   <tr>
-                    <td colSpan={5} class="p-8 text-center text-slate-500">
+                    <td colSpan={7} class="p-8 text-center text-slate-500">
                       No hay abonos registrados.
                     </td>
                   </tr>
                 ) : (
-                  data.value.subscriptions.map((sub: any) => (
-                    <tr
-                      key={sub.id}
-                      class={`border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/50 ${!sub.isActive ? "opacity-60" : ""}`}
-                    >
-                      <td class="p-4">
-                        <div class="font-black text-slate-800">
-                          {sub.pitch?.name}
-                        </div>
-                        <div class="text-[10px] font-bold text-slate-400 uppercase">
-                          {sub.pitch?.type}
-                        </div>
-                      </td>
-                      <td class="p-4">
-                        <div class="font-bold text-emerald-600">
-                          Todos los {formatDayOfWeek(sub.dayOfWeek)}
-                        </div>
-                        <div class="text-xs font-bold text-slate-500">
-                          {sub.startTime} - {sub.endTime}
-                        </div>
-                      </td>
-                      <td class="p-4">
-                        <div class="font-bold">
-                          {sub.user
-                            ? sub.user.name
-                            : sub.group
-                              ? sub.group.name
-                              : "Desconocido"}
-                        </div>
-                        <div class="text-[10px] font-bold text-slate-400 uppercase">
-                          {sub.user ? "USUARIO" : "GRUPO"}
-                        </div>
-                      </td>
-                      <td class="p-4">
-                        <span
-                          class={`rounded-md px-2 py-1 text-[10px] font-bold tracking-wider uppercase ${sub.isActive ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}
-                        >
-                          {sub.isActive ? "ACTIVO" : "CANCELADO"}
-                        </span>
-                      </td>
-                      <td class="p-4 text-center">
-                        <Form action={toggleSubAction}>
-                          <input
-                            type="hidden"
-                            name="subscriptionId"
-                            value={sub.id}
-                          />
-                          <Button
-                            look={sub.isActive ? "secondary" : "primary"}
-                            type="submit"
-                            class={`rounded-lg px-3 py-1.5 text-xs font-bold tracking-wide ${sub.isActive ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-emerald-500 text-white hover:bg-emerald-600"}`}
+                  data.value.subscriptions.map((sub: any) => {
+                    const stat = data.value.stats[sub.id];
+                    const subLabel = `${sub.pitch?.name || "Cancha"} · ${formatDayOfWeek(sub.dayOfWeek)} ${sub.startTime}-${sub.endTime} · ${sub.user?.name || sub.group?.name || ""}`;
+                    return (
+                      <tr
+                        key={sub.id}
+                        class={`border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/50 ${!sub.isActive ? "opacity-60" : ""}`}
+                      >
+                        <td class="p-4">
+                          <div class="font-black text-slate-800">
+                            {sub.pitch?.name}
+                          </div>
+                          <div class="text-[10px] font-bold text-slate-400 uppercase">
+                            {sub.pitch?.type}
+                          </div>
+                        </td>
+                        <td class="p-4">
+                          <div class="font-bold text-emerald-600">
+                            Todos los {formatDayOfWeek(sub.dayOfWeek)}
+                          </div>
+                          <div class="text-xs font-bold text-slate-500">
+                            {sub.startTime} - {sub.endTime}
+                          </div>
+                        </td>
+                        <td class="p-4">
+                          <div class="font-bold">
+                            {sub.user
+                              ? sub.user.name
+                              : sub.group
+                                ? sub.group.name
+                                : "Desconocido"}
+                          </div>
+                          <div class="text-[10px] font-bold text-slate-400 uppercase">
+                            {sub.user ? "USUARIO" : "GRUPO"}
+                          </div>
+                        </td>
+                        <td class="p-4">
+                          <div class="font-black text-slate-800">
+                            ${Number(sub.pricePerMatch).toLocaleString("es-AR")}
+                          </div>
+                        </td>
+                        <td class="p-4">
+                          {!sub.isActive ? (
+                            <span class="text-xs text-slate-400">—</span>
+                          ) : stat?.lastDateStr ? (
+                            <div>
+                              <div class="text-xs font-bold text-slate-600">
+                                hasta {formatShortDate(stat.lastDateStr)}
+                              </div>
+                              <div class="text-[10px] font-bold text-slate-400">
+                                {stat.futureCount} turnos futuros
+                              </div>
+                              {stat.conflictCount > 0 && (
+                                <span class="mt-1 inline-block rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-700 uppercase">
+                                  {stat.conflictCount} con conflicto
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span class="rounded-md bg-red-100 px-2 py-1 text-[10px] font-bold tracking-wider text-red-700 uppercase">
+                              Sin reservas
+                            </span>
+                          )}
+                        </td>
+                        <td class="p-4">
+                          <span
+                            class={`rounded-md px-2 py-1 text-[10px] font-bold tracking-wider uppercase ${sub.isActive ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}
                           >
-                            {sub.isActive ? "Dar de baja" : "Reactivar"}
-                          </Button>
-                        </Form>
-                      </td>
-                    </tr>
-                  ))
+                            {sub.isActive ? "ACTIVO" : "CANCELADO"}
+                          </span>
+                        </td>
+                        <td class="p-4">
+                          <div class="flex items-center justify-center gap-2">
+                            <Button
+                              look="secondary"
+                              type="button"
+                              disabled={!sub.isActive}
+                              onClick$={() => {
+                                editingSubId.value = sub.id;
+                                editingSubLabel.value = subLabel;
+                                editingSubPrice.value = String(
+                                  sub.pricePerMatch,
+                                );
+                                editApplyToFuture.value = true;
+                                isEditModalOpen.value = true;
+                              }}
+                              class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold tracking-wide text-slate-600 hover:bg-slate-200"
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              look={sub.isActive ? "secondary" : "primary"}
+                              type="button"
+                              disabled={toggleSubAction.isRunning}
+                              onClick$={async () => {
+                                if (sub.isActive) {
+                                  const count = stat?.futureCount ?? 0;
+                                  const ok = confirm(
+                                    `Se cancelarán ${count} reservas futuras pendientes de pago de este abono. ¿Dar de baja?`,
+                                  );
+                                  if (!ok) return;
+                                }
+                                await toggleSubAction.submit({
+                                  subscriptionId: sub.id,
+                                });
+                              }}
+                              class={`rounded-lg px-3 py-1.5 text-xs font-bold tracking-wide ${sub.isActive ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-emerald-500 text-white hover:bg-emerald-600"}`}
+                            >
+                              {sub.isActive ? "Dar de baja" : "Reactivar"}
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
         </div>
       </div>
+
+      {/* Modal para Editar Abono (precio) */}
+      <Modal.Root bind:show={isEditModalOpen}>
+        <Modal.Panel class="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="p-6">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="text-xl font-black text-slate-800">Editar Abono</h3>
+              <button
+                onClick$={() => (isEditModalOpen.value = false)}
+                class="p-2 text-slate-400 transition-colors hover:text-slate-600"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="mb-4 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-600">
+              {editingSubLabel.value}
+            </div>
+
+            <Form
+              action={updatePriceAction}
+              class="space-y-4"
+              onSubmitCompleted$={() => {
+                if (updatePriceAction.value?.success) {
+                  isEditModalOpen.value = false;
+                }
+              }}
+            >
+              <input
+                type="hidden"
+                name="subscriptionId"
+                value={editingSubId.value}
+              />
+              <div>
+                <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                  Precio por Turno *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  name="pricePerMatch"
+                  required
+                  value={editingSubPrice.value}
+                  onInput$={(_, el) => (editingSubPrice.value = el.value)}
+                  class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+              <label class="flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  name="applyToFuture"
+                  value="true"
+                  checked={editApplyToFuture.value}
+                  onChange$={(_, el) =>
+                    (editApplyToFuture.value = el.checked)
+                  }
+                  class="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-500"
+                />
+                Actualizar precio en reservas futuras pendientes
+              </label>
+              <div class="flex justify-end gap-3 pt-2">
+                <Button
+                  look="ghost"
+                  type="button"
+                  onClick$={() => (isEditModalOpen.value = false)}
+                  class="rounded-xl px-5 py-2.5 font-bold text-slate-500"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  look="primary"
+                  type="submit"
+                  disabled={updatePriceAction.isRunning}
+                  class="rounded-xl bg-slate-800 px-6 py-2.5 font-bold text-white hover:bg-slate-900"
+                >
+                  {updatePriceAction.isRunning
+                    ? "Guardando..."
+                    : "Guardar cambios"}
+                </Button>
+              </div>
+            </Form>
+          </div>
+        </Modal.Panel>
+      </Modal.Root>
 
       {/* Modal para Crear Abono Fijo */}
       <Modal.Root bind:show={isModalOpen}>
@@ -465,12 +748,6 @@ export default component$(() => {
                 </svg>
               </button>
             </div>
-
-            {createSubAction.value?.success && (
-              <div class="mb-4 rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-xs font-bold text-emerald-600">
-                Abono creado correctamente.
-              </div>
-            )}
 
             <Form
               action={createSubAction}
@@ -545,7 +822,7 @@ export default component$(() => {
                       class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                     />
                     {isSearching.value && (
-                      <div class="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-emerald-500"></div>
+                      <div class="absolute top-1/2 right-3 h-3.5 w-3.5 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-emerald-500"></div>
                     )}
                   </div>
 
@@ -705,6 +982,7 @@ export default component$(() => {
                     type="date"
                     name="startDate"
                     required
+                    value={getBAFormatDate(new Date())}
                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
@@ -721,6 +999,19 @@ export default component$(() => {
                   />
                 </div>
               </div>
+
+              <p class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-relaxed font-semibold text-blue-700">
+                El abono no tiene fecha de fin: se generan las próximas{" "}
+                {HORIZON_WEEKS} semanas de reservas y el sistema las extiende
+                automáticamente cada semana hasta que lo des de baja.
+              </p>
+
+              {createSubAction.value?.failed &&
+                createSubAction.value?.message && (
+                  <div class="rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-600">
+                    {createSubAction.value.message}
+                  </div>
+                )}
 
               <Button
                 look="primary"

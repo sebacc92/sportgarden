@@ -32,6 +32,7 @@ import {
   siteSettings,
 } from "~/db/schema";
 import { isPitchAvailable } from "~/utils/availability";
+import { HORIZON_WEEKS } from "~/lib/admin/subscriptions";
 import { BookingListView } from "~/components/admin/booking-list-view";
 import { BookingTimelineView } from "~/components/admin/booking-timeline-view";
 import { cn } from "@qwik-ui/utils";
@@ -213,24 +214,31 @@ export const useCreateAdminBookingAction = routeAction$(
     // Parse start date
     const startDate = new Date(`${data.date}T12:00:00-03:00`);
 
-    // Parse end date if recurring
+    // Parse end date if recurring. Without an explicit end date the
+    // subscription uses the rolling horizon and is later extended weekly
+    // by /api/cron/subscriptions.
     let endDate = startDate;
-    if (data.isSubscription && data.endDate) {
-      endDate = new Date(`${data.endDate}T12:00:00-03:00`);
+    if (data.isSubscription) {
+      if (data.endDate) {
+        endDate = new Date(`${data.endDate}T12:00:00-03:00`);
 
-      const maxDate = new Date(startDate);
-      maxDate.setFullYear(maxDate.getFullYear() + 1);
+        const maxDate = new Date(startDate);
+        maxDate.setFullYear(maxDate.getFullYear() + 1);
 
-      if (endDate > maxDate) {
-        endDate = maxDate; // Limit to 1 year max
-      }
+        if (endDate > maxDate) {
+          endDate = maxDate; // Limit to 1 year max
+        }
 
-      if (endDate < startDate) {
-        return {
-          success: false,
-          failed: true,
-          message: "La fecha de fin debe ser posterior a la de inicio",
-        };
+        if (endDate < startDate) {
+          return {
+            success: false,
+            failed: true,
+            message: "La fecha de fin debe ser posterior a la de inicio",
+          };
+        }
+      } else {
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + HORIZON_WEEKS * 7);
       }
     }
 
@@ -383,13 +391,16 @@ export const useCreateAdminBookingAction = routeAction$(
 
     const bookingsToInsert: any[] = [];
     const guestsToInsert: any[] = [];
+    const skippedDates: string[] = [];
     let bookingsCount = 0;
 
     for (let i = 0; i < datesToBook.length; i++) {
       const item = datesToBook[i];
       const startDateTime = new Date(`${item.date}T${item.startTime}:00-03:00`);
       const endDateTime = new Date(`${item.date}T${item.endTime}:00-03:00`);
-      const bookingId = i === 0 ? firstBookingId : crypto.randomUUID();
+      // The first successfully created booking carries the payment info
+      const isFirstCreated = bookingsCount === 0;
+      const bookingId = isFirstCreated ? firstBookingId : crypto.randomUUID();
 
       // Validate operating hours
       const holidaysList = (settings?.holidays as any[]) || [];
@@ -398,6 +409,10 @@ export const useCreateAdminBookingAction = routeAction$(
       const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
 
       if (!schedule || schedule.isClosed) {
+        if (data.isSubscription) {
+          skippedDates.push(item.date);
+          continue;
+        }
         throw new Error(
           `El club está cerrado el día seleccionado (${item.date}).`,
         );
@@ -421,6 +436,10 @@ export const useCreateAdminBookingAction = routeAction$(
       if (closeMins === 0) closeMins = 24 * 60;
 
       if (startMins < openMins || endMins > closeMins) {
+        if (data.isSubscription) {
+          skippedDates.push(item.date);
+          continue;
+        }
         throw new Error(
           `El horario seleccionado (${item.startTime} - ${item.endTime}) está fuera del horario de atención del club para el día ${item.date}.`,
         );
@@ -434,6 +453,10 @@ export const useCreateAdminBookingAction = routeAction$(
       });
 
       if (!available) {
+        if (data.isSubscription) {
+          skippedDates.push(item.date);
+          continue;
+        }
         throw new Error(
           `Conflicto de horario: ${item.date} ${item.startTime} - ${item.endTime} en ${conflicts[0].pitch.name}.`,
         );
@@ -447,16 +470,15 @@ export const useCreateAdminBookingAction = routeAction$(
         end_time: toBALocalISOString(endDateTime),
         status: "CONFIRMED",
         total_price: item.price,
-        paid_amount: i === 0 ? Number(data.paidAmount) || 0 : 0,
-        payment_status:
-          i === 0
-            ? data.paymentStatus ||
-              ((Number(data.paidAmount) || 0) >= Number(data.price)
-                ? "PAID"
-                : (Number(data.paidAmount) || 0) > 0
-                  ? "PARTIAL"
-                  : "PENDING")
-            : "PENDING",
+        paid_amount: isFirstCreated ? Number(data.paidAmount) || 0 : 0,
+        payment_status: isFirstCreated
+          ? data.paymentStatus ||
+            ((Number(data.paidAmount) || 0) >= Number(data.price)
+              ? "PAID"
+              : (Number(data.paidAmount) || 0) > 0
+                ? "PARTIAL"
+                : "PENDING")
+          : "PENDING",
         payment_method: data.paymentMethod,
         is_subscription: data.isSubscription,
         booking_type:
@@ -475,7 +497,7 @@ export const useCreateAdminBookingAction = routeAction$(
         });
       }
 
-      if (i === 0 && firstPaidAmount > 0 && openRegisterId) {
+      if (isFirstCreated && firstPaidAmount > 0 && openRegisterId) {
         const { error: insMovErr } = await db.from(cashMovements).insert({
           id: crypto.randomUUID(),
           register_id: openRegisterId,
@@ -547,14 +569,21 @@ export const useCreateAdminBookingAction = routeAction$(
       return {
         failed: true,
         message:
-          "No se pudo crear ninguna reserva. Verifique conflictos de horario.",
+          skippedDates.length > 0
+            ? `No se pudo crear ninguna reserva: todas las fechas (${skippedDates.length}) tienen conflicto de horario o el club está cerrado.`
+            : "No se pudo crear ninguna reserva. Verifique conflictos de horario.",
       };
     }
 
     return {
       success: true,
       bookingId: firstBookingId,
-      message: `Se crearon ${bookingsCount} reservas.`,
+      skippedDates,
+      message:
+        `Se crearon ${bookingsCount} reservas.` +
+        (skippedDates.length > 0
+          ? ` ${skippedDates.length} fechas no se generaron por conflicto: ${skippedDates.join(", ")}.`
+          : ""),
     };
   },
   zod$({
