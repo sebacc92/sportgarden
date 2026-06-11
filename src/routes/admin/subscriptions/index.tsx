@@ -151,18 +151,15 @@ export const useCreateSubscriptionAction = routeAction$(
       };
     }
 
-    const duplicate = await findDuplicateActiveSubscription(db, {
-      pitchId: data.pitchId,
-      dayOfWeek: Number(data.dayOfWeek),
-      startTime: data.startTime,
-      endTime: data.endTime,
-    });
+    const days = data.daysOfWeek
+      .split(",")
+      .map((d) => Number(d.trim()))
+      .filter((n) => !Number.isNaN(n) && n >= 0 && n <= 6);
 
-    if (duplicate) {
+    if (days.length === 0) {
       return {
         failed: true,
-        message:
-          "Ya existe un abono activo en esa cancha con el mismo día y un horario que se superpone. Revisá el listado.",
+        message: "Seleccioná al menos un día de la semana.",
       };
     }
 
@@ -170,28 +167,121 @@ export const useCreateSubscriptionAction = routeAction$(
     const userId = data.ownerType === "USER" ? data.ownerId : null;
     const groupId = data.ownerType === "GROUP" ? data.ownerId : null;
 
-    const { created, skipped } = await createSubscriptionWithBookings(db, {
-      pitchId: data.pitchId,
-      userId,
-      groupId,
-      dayOfWeek: Number(data.dayOfWeek),
-      startTime: data.startTime,
-      endTime: data.endTime,
-      startDate,
-      pricePerMatch: Number(data.pricePerMatch),
-    });
+    let totalCreated = 0;
+    const totalSkipped: string[] = [];
+    const subIds: string[] = [];
+    const duplicateDays: string[] = [];
+    const dayLabels = [
+      "Domingo",
+      "Lunes",
+      "Martes",
+      "Miércoles",
+      "Jueves",
+      "Viernes",
+      "Sábado",
+    ];
 
-    return { success: true, created, skipped };
+    for (const dayOfWeek of days) {
+      const duplicate = await findDuplicateActiveSubscription(db, {
+        pitchId: data.pitchId,
+        dayOfWeek,
+        startTime: data.startTime,
+        endTime: data.endTime,
+      });
+
+      if (duplicate) {
+        duplicateDays.push(dayLabels[dayOfWeek]);
+        continue;
+      }
+
+      const { subId, created, skipped } = await createSubscriptionWithBookings(
+        db,
+        {
+          pitchId: data.pitchId,
+          userId,
+          groupId,
+          dayOfWeek,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          startDate,
+          pricePerMatch: Number(data.pricePerMatch),
+        },
+      );
+
+      subIds.push(subId);
+      totalCreated += created;
+      totalSkipped.push(...skipped);
+    }
+
+    if (subIds.length === 0) {
+      return {
+        failed: true,
+        message:
+          duplicateDays.length > 0
+            ? `No se creó ningún abono: ya existe uno activo en esa cancha y horario para ${duplicateDays.join(", ")}.`
+            : "No se pudo crear ningún abono.",
+      };
+    }
+
+    return {
+      success: true,
+      created: totalCreated,
+      skipped: totalSkipped,
+      subscriptionsCreated: subIds.length,
+      duplicateDays,
+    };
   },
   zod$({
     pitchId: z.string().min(1),
     ownerType: z.enum(["USER", "GROUP"]),
     ownerId: z.string().min(1),
-    dayOfWeek: z.string(),
+    daysOfWeek: z.string().min(1),
     startTime: z.string(),
     endTime: z.string(),
     startDate: z.string(),
     pricePerMatch: z.string(),
+  }),
+);
+
+export const useDeleteSubscriptionAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+
+    const { data: subData, error: getSubErr } = await db
+      .from(pitchSubscriptions)
+      .select("id, is_active")
+      .eq("id", data.subscriptionId)
+      .maybeSingle();
+
+    if (getSubErr) throw getSubErr;
+    if (!subData) {
+      return { failed: true, message: "Abono no encontrado." };
+    }
+    const sub = camelize<any>(subData);
+
+    if (sub.isActive) {
+      return {
+        failed: true,
+        message:
+          "El abono está activo. Dalo de baja antes de eliminarlo definitivamente.",
+      };
+    }
+
+    // We delete only the subscription record. Booking rows that referenced
+    // this subscription (notes = "subscription:<id>") are kept so historical
+    // balances/reports remain intact. Cancelled future bookings stay as
+    // cancelled history.
+    const { error: delErr } = await db
+      .from(pitchSubscriptions)
+      .delete()
+      .eq("id", sub.id);
+
+    if (delErr) throw delErr;
+
+    return { success: true };
+  },
+  zod$({
+    subscriptionId: z.string().min(1),
   }),
 );
 
@@ -326,6 +416,7 @@ export default component$(() => {
   const toggleSubAction = useToggleSubscriptionAction();
   const updatePriceAction = useUpdateSubscriptionPriceAction();
   const extendAction = useExtendSubscriptionsAction();
+  const deleteSubAction = useDeleteSubscriptionAction();
 
   const isModalOpen = useSignal(false);
   const ownerType = useSignal<"USER" | "GROUP">("USER");
@@ -334,6 +425,14 @@ export default component$(() => {
   const isSearching = useSignal(false);
   const selectedOwnerId = useSignal("");
   const selectedOwnerName = useSignal("");
+
+  // New subscription form state
+  const formPitchId = useSignal("");
+  const formStartTime = useSignal("");
+  const formEndTime = useSignal("");
+  const formPrice = useSignal("");
+  const priceTouched = useSignal(false);
+  const selectedDays = useSignal<number[]>([]);
 
   // Edit price modal state
   const isEditModalOpen = useSignal(false);
@@ -346,6 +445,10 @@ export default component$(() => {
   const isConfirmModalOpen = useSignal(false);
   const pendingToggleSub = useSignal<any>(null);
 
+  // Delete modal state
+  const isDeleteModalOpen = useSignal(false);
+  const pendingDeleteSub = useSignal<any>(null);
+
   // Close confirm modal on success
   useTask$(({ track }) => {
     const success = track(() => toggleSubAction.value?.success);
@@ -353,6 +456,47 @@ export default component$(() => {
       isConfirmModalOpen.value = false;
       pendingToggleSub.value = null;
     }
+  });
+
+  // Close delete modal on success
+  useTask$(({ track }) => {
+    const success = track(() => deleteSubAction.value?.success);
+    if (success) {
+      isDeleteModalOpen.value = false;
+      pendingDeleteSub.value = null;
+    }
+  });
+
+  // Reset form when opening the create modal
+  useTask$(({ track }) => {
+    const open = track(() => isModalOpen.value);
+    if (open) {
+      formPitchId.value = "";
+      formStartTime.value = "";
+      formEndTime.value = "";
+      formPrice.value = "";
+      priceTouched.value = false;
+      selectedDays.value = [];
+    }
+  });
+
+  // Auto-fill price when pitch / start / end change (unless the user typed it)
+  useTask$(({ track }) => {
+    const pitchId = track(() => formPitchId.value);
+    const start = track(() => formStartTime.value);
+    const end = track(() => formEndTime.value);
+    if (priceTouched.value) return;
+    if (!pitchId || !start || !end || start >= end) return;
+    const pitch = data.value.pitches.find((p: any) => p.id === pitchId);
+    if (!pitch?.pricePerHour) return;
+    const [sh, sm] = start.split(":").map(Number);
+    const [eh, em] = end.split(":").map(Number);
+    const durationMins = eh * 60 + em - (sh * 60 + sm);
+    if (durationMins <= 0) return;
+    const computed = Math.round(
+      (durationMins / 60) * Number(pitch.pricePerHour),
+    );
+    formPrice.value = String(computed);
   });
 
   // Search owner logic with debounce
@@ -410,8 +554,8 @@ export default component$(() => {
   return (
     <div class="min-h-full bg-slate-50 p-6 font-sans">
       <div class="mx-auto max-w-6xl space-y-6">
-        <div class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div>
+        <div class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:flex-row md:items-center md:justify-between">
+          <div class="min-w-0">
             <h1 class="text-3xl font-black tracking-tight text-slate-800">
               Abonos de Canchas
             </h1>
@@ -420,19 +564,19 @@ export default component$(() => {
               hacia adelante y se extienden automáticamente cada semana.
             </p>
           </div>
-          <div class="flex items-center gap-3">
+          <div class="flex shrink-0 items-center gap-3">
             <Button
               look="ghost"
               onClick$={() => extendAction.submit({})}
               disabled={extendAction.isRunning}
-              class="rounded-xl px-4 py-3 text-sm font-bold text-slate-500 hover:bg-slate-100"
+              class="rounded-xl px-4 py-3 text-sm font-bold whitespace-nowrap text-slate-500 hover:bg-slate-100"
             >
               {extendAction.isRunning ? "Extendiendo..." : "↻ Extender ahora"}
             </Button>
             <Button
               look="primary"
               onClick$={() => (isModalOpen.value = true)}
-              class="flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 font-bold text-white shadow-md shadow-emerald-100 transition-all hover:scale-[1.02] hover:bg-emerald-600 active:scale-95"
+              class="flex items-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 font-bold whitespace-nowrap text-white shadow-md shadow-emerald-100 transition-all hover:scale-[1.02] hover:bg-emerald-600 active:scale-95"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -456,7 +600,15 @@ export default component$(() => {
         {/* Result banners */}
         {createSubAction.value?.success && (
           <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-            Abono creado: se generaron {createSubAction.value.created} reservas.
+            {(createSubAction.value.subscriptionsCreated ?? 1) > 1
+              ? `Se crearon ${createSubAction.value.subscriptionsCreated} abonos con ${createSubAction.value.created} reservas en total.`
+              : `Abono creado: se generaron ${createSubAction.value.created} reservas.`}
+            {(createSubAction.value.duplicateDays?.length ?? 0) > 0 && (
+              <span class="mt-1 block font-semibold text-amber-700">
+                Se omitieron días con un abono activo superpuesto:{" "}
+                {createSubAction.value.duplicateDays.join(", ")}.
+              </span>
+            )}
             {(createSubAction.value.skipped?.length ?? 0) > 0 && (
               <span class="mt-1 block font-semibold text-amber-700">
                 {createSubAction.value.skipped.length} fechas no se generaron
@@ -467,6 +619,17 @@ export default component$(() => {
                 . Resolvelas desde el calendario.
               </span>
             )}
+          </div>
+        )}
+        {deleteSubAction.value?.success && (
+          <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+            Abono eliminado definitivamente. El historial de reservas pasadas se
+            conserva en el calendario.
+          </div>
+        )}
+        {deleteSubAction.value?.failed && deleteSubAction.value?.message && (
+          <div class="rounded-xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-600">
+            {deleteSubAction.value.message}
           </div>
         )}
         {createSubAction.value?.failed && createSubAction.value?.message && (
@@ -587,34 +750,62 @@ export default component$(() => {
                         </td>
                         <td class="p-4">
                           <div class="flex items-center justify-center gap-2">
-                            <Button
-                              look="secondary"
-                              type="button"
-                              disabled={!sub.isActive}
-                              onClick$={() => {
-                                editingSubId.value = sub.id;
-                                editingSubLabel.value = subLabel;
-                                editingSubPrice.value = String(
-                                  sub.pricePerMatch,
-                                );
-                                editApplyToFuture.value = true;
-                                isEditModalOpen.value = true;
-                              }}
-                              class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold tracking-wide text-slate-600 hover:bg-slate-200"
-                            >
-                              Editar
-                            </Button>
-                            <Button
-                              look={sub.isActive ? "secondary" : "primary"}
-                              type="button"
-                              onClick$={() => {
-                                pendingToggleSub.value = sub;
-                                isConfirmModalOpen.value = true;
-                              }}
-                              class={`rounded-lg px-3 py-1.5 text-xs font-bold tracking-wide ${sub.isActive ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-emerald-500 text-white hover:bg-emerald-600"}`}
-                            >
-                              {sub.isActive ? "Dar de baja" : "Reactivar"}
-                            </Button>
+                            {sub.isActive ? (
+                              <>
+                                <Button
+                                  look="secondary"
+                                  type="button"
+                                  onClick$={() => {
+                                    editingSubId.value = sub.id;
+                                    editingSubLabel.value = subLabel;
+                                    editingSubPrice.value = String(
+                                      sub.pricePerMatch,
+                                    );
+                                    editApplyToFuture.value = true;
+                                    isEditModalOpen.value = true;
+                                  }}
+                                  class="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold tracking-wide text-slate-600 hover:bg-slate-200"
+                                >
+                                  Editar
+                                </Button>
+                                <Button
+                                  look="secondary"
+                                  type="button"
+                                  onClick$={() => {
+                                    pendingToggleSub.value = sub;
+                                    isConfirmModalOpen.value = true;
+                                  }}
+                                  class="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold tracking-wide text-red-600 hover:bg-red-100"
+                                >
+                                  Dar de baja
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  look="primary"
+                                  type="button"
+                                  onClick$={() => {
+                                    pendingToggleSub.value = sub;
+                                    isConfirmModalOpen.value = true;
+                                  }}
+                                  class="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold tracking-wide text-white hover:bg-emerald-600"
+                                >
+                                  Reactivar
+                                </Button>
+                                <Button
+                                  look="secondary"
+                                  type="button"
+                                  onClick$={() => {
+                                    pendingDeleteSub.value = sub;
+                                    isDeleteModalOpen.value = true;
+                                  }}
+                                  class="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold tracking-wide text-red-600 hover:bg-red-100"
+                                >
+                                  Eliminar
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -733,6 +924,92 @@ export default component$(() => {
                     : pendingToggleSub.value?.isActive
                       ? "Sí, dar de baja"
                       : "Sí, reactivar"}
+                </Button>
+              </div>
+            </Form>
+          </div>
+        </Modal.Panel>
+      </Modal.Root>
+
+      {/* Modal de Eliminación Definitiva */}
+      <Modal.Root bind:show={isDeleteModalOpen}>
+        <Modal.Panel class="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="p-6">
+            <div class="mb-5 flex items-start gap-4">
+              <div class="flex-shrink-0 rounded-xl bg-red-100 p-3">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="text-red-600"
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-lg font-black text-slate-800">
+                  ¿Eliminar el abono definitivamente?
+                </h3>
+                <p class="mt-1 text-sm text-slate-500">
+                  Esta acción no se puede deshacer. El historial de reservas
+                  pasadas y las balanzas del cliente{" "}
+                  <strong>se conservan</strong>; solo se borra la regla del
+                  abono.
+                </p>
+                {pendingDeleteSub.value && (
+                  <div class="mt-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm">
+                    <div class="font-bold text-slate-800">
+                      {pendingDeleteSub.value.pitch?.name}
+                    </div>
+                    <div class="text-xs text-slate-500">
+                      {formatDayOfWeek(pendingDeleteSub.value.dayOfWeek)} ·{" "}
+                      {pendingDeleteSub.value.startTime} -{" "}
+                      {pendingDeleteSub.value.endTime}
+                    </div>
+                    <div class="text-xs text-slate-500">
+                      {pendingDeleteSub.value.user?.name ||
+                        pendingDeleteSub.value.group?.name ||
+                        "Desconocido"}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <Form action={deleteSubAction} class="flex flex-col gap-3">
+              <input
+                type="hidden"
+                name="subscriptionId"
+                value={pendingDeleteSub.value?.id ?? ""}
+              />
+              <div class="flex gap-3">
+                <Button
+                  type="button"
+                  look="ghost"
+                  onClick$={() => {
+                    isDeleteModalOpen.value = false;
+                    pendingDeleteSub.value = null;
+                  }}
+                  class="flex-1 rounded-xl border border-slate-200 py-2.5 font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={deleteSubAction.isRunning}
+                  class="flex-1 rounded-xl bg-red-500 py-2.5 font-bold text-white hover:bg-red-600"
+                >
+                  {deleteSubAction.isRunning ? "Eliminando..." : "Sí, eliminar"}
                 </Button>
               </div>
             </Form>
@@ -885,9 +1162,11 @@ export default component$(() => {
                 <select
                   name="pitchId"
                   required
+                  value={formPitchId.value}
+                  onChange$={(_, el) => (formPitchId.value = el.value)}
                   class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 >
-                  <option value="" disabled selected>
+                  <option value="" disabled>
                     Seleccionar cancha...
                   </option>
                   {data.value.pitches.map((p) => (
@@ -1030,23 +1309,40 @@ export default component$(() => {
               />
 
               <div>
-                <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
-                  Día Fijo *
+                <label class="mb-2 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                  Días Fijos *
                 </label>
-                <select
-                  name="dayOfWeek"
-                  required
-                  class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                >
-                  <option value="" disabled selected>
-                    Seleccionar día...
-                  </option>
-                  {daysOfWeek.map((day, idx) => (
-                    <option key={idx} value={idx}>
-                      {day}
-                    </option>
-                  ))}
-                </select>
+                <div class="flex flex-wrap gap-2">
+                  {daysOfWeek.map((day, idx) => {
+                    const checked = selectedDays.value.includes(idx);
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick$={() => {
+                          selectedDays.value = checked
+                            ? selectedDays.value.filter((d) => d !== idx)
+                            : [...selectedDays.value, idx].sort((a, b) => a - b);
+                        }}
+                        class={`rounded-full border px-3.5 py-1.5 text-xs font-bold tracking-wide transition-all ${
+                          checked
+                            ? "border-emerald-500 bg-emerald-500 text-white shadow-sm shadow-emerald-200"
+                            : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                        }`}
+                      >
+                        {day.slice(0, 3)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p class="mt-1.5 text-[11px] font-semibold text-slate-400">
+                  Si elegís más de uno se crea un abono por día.
+                </p>
+                <input
+                  type="hidden"
+                  name="daysOfWeek"
+                  value={selectedDays.value.join(",")}
+                />
               </div>
 
               <div class="grid grid-cols-2 gap-4">
@@ -1057,9 +1353,11 @@ export default component$(() => {
                   <select
                     name="startTime"
                     required
+                    value={formStartTime.value}
+                    onChange$={(_, el) => (formStartTime.value = el.value)}
                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   >
-                    <option value="" disabled selected>
+                    <option value="" disabled>
                       --:-- hs
                     </option>
                     {timeOptions.map((t) => (
@@ -1076,9 +1374,11 @@ export default component$(() => {
                   <select
                     name="endTime"
                     required
+                    value={formEndTime.value}
+                    onChange$={(_, el) => (formEndTime.value = el.value)}
                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   >
-                    <option value="" disabled selected>
+                    <option value="" disabled>
                       --:-- hs
                     </option>
                     {timeOptions.map((t) => (
@@ -1104,16 +1404,41 @@ export default component$(() => {
                   />
                 </div>
                 <div>
-                  <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
-                    Precio por Turno *
+                  <label class="mb-1 flex items-center justify-between text-xs font-bold tracking-wider text-slate-500 uppercase">
+                    <span>Precio por Turno *</span>
+                    {priceTouched.value && formPitchId.value && (
+                      <button
+                        type="button"
+                        onClick$={() => {
+                          priceTouched.value = false;
+                          // re-trigger the autofill task by nudging a tracked signal
+                          const s = formStartTime.value;
+                          formStartTime.value = "";
+                          formStartTime.value = s;
+                        }}
+                        class="text-[10px] font-bold text-emerald-600 normal-case hover:underline"
+                      >
+                        Volver al precio sugerido
+                      </button>
+                    )}
                   </label>
                   <input
                     type="number"
                     step="0.01"
                     name="pricePerMatch"
                     required
+                    value={formPrice.value}
+                    onInput$={(_, el) => {
+                      formPrice.value = el.value;
+                      priceTouched.value = true;
+                    }}
+                    placeholder={formPitchId.value ? "0" : "Elegí cancha y horario"}
                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   />
+                  <p class="mt-1 text-[11px] font-semibold text-slate-400">
+                    Sugerido por hora de cancha; editalo si el abonado tiene un
+                    precio especial.
+                  </p>
                 </div>
               </div>
 
