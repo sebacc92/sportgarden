@@ -333,6 +333,76 @@ export const useExtendSubscriptionsAction = routeAction$(
   },
 );
 
+export const useCreateOwnerAction = routeAction$(
+  async (data, requestEvent) => {
+    const db = getDB(requestEvent);
+    const name = data.name.trim();
+
+    if (!name) {
+      return { failed: true, message: "El nombre es obligatorio." };
+    }
+
+    if (data.type === "USER") {
+      const phone = data.phone?.trim() || null;
+      const email = data.email?.trim() || null;
+
+      if (phone) {
+        const { data: existingByPhone } = await db
+          .from(users)
+          .select("id, name")
+          .eq("phone", phone)
+          .maybeSingle();
+        if (existingByPhone) {
+          const u = camelize<any>(existingByPhone);
+          return {
+            success: true,
+            id: u.id,
+            name: u.name,
+            existed: true,
+          };
+        }
+      }
+
+      const id = crypto.randomUUID();
+      const { error } = await db.from(users).insert({
+        id,
+        name,
+        phone,
+        email,
+        role: "GUEST",
+      });
+      if (error) {
+        return { failed: true, message: error.message };
+      }
+      return { success: true, id, name, existed: false };
+    }
+
+    // GROUP
+    const id = crypto.randomUUID();
+    const { error } = await db.from(groups).insert({
+      id,
+      name,
+      contact_name: data.contactName?.trim() || null,
+      contact_phone: data.contactPhone?.trim() || null,
+      contact_email: data.contactEmail?.trim() || null,
+      balance: 0,
+    });
+    if (error) {
+      return { failed: true, message: error.message };
+    }
+    return { success: true, id, name, existed: false };
+  },
+  zod$({
+    type: z.enum(["USER", "GROUP"]),
+    name: z.string().min(1),
+    phone: z.string().optional(),
+    email: z.string().optional(),
+    contactName: z.string().optional(),
+    contactPhone: z.string().optional(),
+    contactEmail: z.string().optional(),
+  }),
+);
+
 export const useToggleSubscriptionAction = routeAction$(
   async (data, requestEvent) => {
     const db = getDB(requestEvent);
@@ -417,6 +487,7 @@ export default component$(() => {
   const updatePriceAction = useUpdateSubscriptionPriceAction();
   const extendAction = useExtendSubscriptionsAction();
   const deleteSubAction = useDeleteSubscriptionAction();
+  const createOwnerAction = useCreateOwnerAction();
 
   const isModalOpen = useSignal(false);
   const ownerType = useSignal<"USER" | "GROUP">("USER");
@@ -448,6 +519,37 @@ export default component$(() => {
   // Delete modal state
   const isDeleteModalOpen = useSignal(false);
   const pendingDeleteSub = useSignal<any>(null);
+
+  // Create owner sub-modal state
+  const isCreateOwnerModalOpen = useSignal(false);
+  const newOwnerName = useSignal("");
+  const newOwnerPhone = useSignal("");
+  const newOwnerEmail = useSignal("");
+  const newOwnerContactName = useSignal("");
+  const newOwnerContactPhone = useSignal("");
+  const newOwnerContactEmail = useSignal("");
+
+  // After owner creation succeeds: auto-select and close sub-modal
+  useTask$(({ track }) => {
+    const result = track(() => createOwnerAction.value);
+    if (result?.success && result.id && result.name) {
+      const displayName =
+        ownerType.value === "USER"
+          ? `${result.name}${newOwnerPhone.value ? ` (${newOwnerPhone.value})` : ""}`.trim()
+          : result.name;
+      selectedOwnerId.value = result.id;
+      selectedOwnerName.value = displayName;
+      searchTerm.value = "";
+      searchResults.value = [];
+      isCreateOwnerModalOpen.value = false;
+      newOwnerName.value = "";
+      newOwnerPhone.value = "";
+      newOwnerEmail.value = "";
+      newOwnerContactName.value = "";
+      newOwnerContactPhone.value = "";
+      newOwnerContactEmail.value = "";
+    }
+  });
 
   // Close confirm modal on success
   useTask$(({ track }) => {
@@ -1114,6 +1216,179 @@ export default component$(() => {
         </Modal.Panel>
       </Modal.Root>
 
+      {/* Sub-modal: Crear Cliente / Grupo desde el flujo de abono */}
+      <Modal.Root bind:show={isCreateOwnerModalOpen}>
+        <Modal.Panel class="relative mx-auto w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="p-6">
+            <div class="mb-5 flex items-start justify-between">
+              <div>
+                <h3 class="text-xl font-black text-slate-800">
+                  Nuevo {ownerType.value === "USER" ? "Cliente" : "Grupo"}
+                </h3>
+                <p class="mt-0.5 text-xs font-semibold text-slate-500">
+                  Se va a guardar y seleccionar automáticamente para el abono.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick$={() => (isCreateOwnerModalOpen.value = false)}
+                class="p-2 text-slate-400 transition-colors hover:text-slate-600"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {createOwnerAction.value?.failed &&
+              createOwnerAction.value?.message && (
+                <div class="mb-4 rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-bold text-red-600">
+                  {createOwnerAction.value.message}
+                </div>
+              )}
+
+            <Form action={createOwnerAction} class="space-y-4">
+              <input
+                type="hidden"
+                name="type"
+                value={ownerType.value}
+              />
+
+              <div>
+                <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                  {ownerType.value === "USER"
+                    ? "Nombre completo *"
+                    : "Nombre del grupo *"}
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  value={newOwnerName.value}
+                  onInput$={(_, el) => (newOwnerName.value = el.value)}
+                  class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                />
+              </div>
+
+              {ownerType.value === "USER" ? (
+                <>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                        Teléfono
+                      </label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={newOwnerPhone.value}
+                        onInput$={(_, el) => (newOwnerPhone.value = el.value)}
+                        placeholder="Ej: 1123456789"
+                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        name="email"
+                        value={newOwnerEmail.value}
+                        onInput$={(_, el) => (newOwnerEmail.value = el.value)}
+                        placeholder="opcional"
+                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <p class="text-[11px] font-semibold text-slate-400">
+                    Recomendado al menos teléfono para poder identificarlo
+                    después.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                      Nombre del contacto
+                    </label>
+                    <input
+                      type="text"
+                      name="contactName"
+                      value={newOwnerContactName.value}
+                      onInput$={(_, el) =>
+                        (newOwnerContactName.value = el.value)
+                      }
+                      class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                        Teléfono contacto
+                      </label>
+                      <input
+                        type="tel"
+                        name="contactPhone"
+                        value={newOwnerContactPhone.value}
+                        onInput$={(_, el) =>
+                          (newOwnerContactPhone.value = el.value)
+                        }
+                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label class="mb-1 block text-xs font-bold tracking-wider text-slate-500 uppercase">
+                        Email contacto
+                      </label>
+                      <input
+                        type="email"
+                        name="contactEmail"
+                        value={newOwnerContactEmail.value}
+                        onInput$={(_, el) =>
+                          (newOwnerContactEmail.value = el.value)
+                        }
+                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div class="flex justify-end gap-3 pt-2">
+                <Button
+                  type="button"
+                  look="ghost"
+                  onClick$={() => (isCreateOwnerModalOpen.value = false)}
+                  class="rounded-xl px-5 py-2.5 font-bold text-slate-500"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createOwnerAction.isRunning}
+                  class="rounded-xl bg-emerald-500 px-6 py-2.5 font-bold text-white hover:bg-emerald-600"
+                >
+                  {createOwnerAction.isRunning
+                    ? "Creando..."
+                    : `Crear y seleccionar`}
+                </Button>
+              </div>
+            </Form>
+          </div>
+        </Modal.Panel>
+      </Modal.Root>
+
       {/* Modal para Crear Abono Fijo */}
       <Modal.Root bind:show={isModalOpen}>
         <Modal.Panel class="relative mx-auto w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-xl">
@@ -1223,43 +1498,77 @@ export default component$(() => {
                   </div>
 
                   {searchTerm.value.length >= 2 && !selectedOwnerId.value && (
-                    <div class="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
-                      {searchResults.value.length > 0 ? (
-                        searchResults.value.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick$={() => {
-                              selectedOwnerId.value = item.id;
-                              selectedOwnerName.value =
-                                ownerType.value === "USER"
-                                  ? `${item.name} ${item.phone ? `(${item.phone})` : ""}`.trim()
-                                  : item.name;
-                              searchTerm.value = "";
-                              searchResults.value = [];
-                            }}
-                            class="flex w-full flex-col border-b border-slate-50 px-4 py-2.5 text-left last:border-0 hover:bg-slate-50"
-                          >
-                            <span class="text-sm font-bold text-slate-800">
-                              {item.name}
+                    <div class="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                      {searchResults.value.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick$={() => {
+                            selectedOwnerId.value = item.id;
+                            selectedOwnerName.value =
+                              ownerType.value === "USER"
+                                ? `${item.name} ${item.phone ? `(${item.phone})` : ""}`.trim()
+                                : item.name;
+                            searchTerm.value = "";
+                            searchResults.value = [];
+                          }}
+                          class="flex w-full flex-col border-b border-slate-50 px-4 py-2.5 text-left last:border-0 hover:bg-slate-50"
+                        >
+                          <span class="text-sm font-bold text-slate-800">
+                            {item.name}
+                          </span>
+                          {ownerType.value === "USER" && (
+                            <span class="text-[11px] text-slate-400">
+                              {item.phone || item.email}
                             </span>
-                            {ownerType.value === "USER" && (
-                              <span class="text-[11px] text-slate-400">
-                                {item.phone || item.email}
-                              </span>
-                            )}
-                            {ownerType.value === "GROUP" && item.contactName && (
-                              <span class="text-[11px] text-slate-400">
-                                Contacto: {item.contactName}
-                              </span>
-                            )}
-                          </button>
-                        ))
-                      ) : !isSearching.value ? (
-                        <div class="px-4 py-3 text-center text-xs font-semibold text-slate-400">
-                          Sin resultados
-                        </div>
-                      ) : null}
+                          )}
+                          {ownerType.value === "GROUP" && item.contactName && (
+                            <span class="text-[11px] text-slate-400">
+                              Contacto: {item.contactName}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                      {!isSearching.value && (
+                        <button
+                          type="button"
+                          onClick$={() => {
+                            newOwnerName.value = searchTerm.value;
+                            newOwnerPhone.value = "";
+                            newOwnerEmail.value = "";
+                            newOwnerContactName.value = "";
+                            newOwnerContactPhone.value = "";
+                            newOwnerContactEmail.value = "";
+                            isCreateOwnerModalOpen.value = true;
+                          }}
+                          class={`flex w-full items-center gap-2 px-4 py-3 text-left font-bold text-emerald-700 hover:bg-emerald-50 ${
+                            searchResults.value.length > 0
+                              ? "border-t border-slate-100"
+                              : ""
+                          }`}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          >
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                          </svg>
+                          <span class="text-xs">
+                            {searchResults.value.length === 0
+                              ? `Crear ${ownerType.value === "USER" ? "nuevo cliente" : "nuevo grupo"}: `
+                              : `Crear nuevo ${ownerType.value === "USER" ? "cliente" : "grupo"}: `}
+                            <span class="font-black">"{searchTerm.value}"</span>
+                          </span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
