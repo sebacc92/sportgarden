@@ -88,6 +88,7 @@ export const useCreateSubscriptionAction = routeAction$(
     const userId = data.ownerType === "USER" ? data.ownerId : null;
     const groupId = data.ownerType === "GROUP" ? data.ownerId : null;
 
+    const warnings: string[] = [];
     let count = 0;
     while (current <= endDate && count < 52) {
       // Use BA date string from current (which is at noon BA time) to avoid UTC date shift
@@ -119,6 +120,9 @@ export const useCreateSubscriptionAction = routeAction$(
           paymentMethod: "CASH",
           notes: `subscription:${subId}`,
         });
+      } else {
+        const formattedDate = baDateStr.split("-").reverse().join("/");
+        warnings.push(`${formattedDate} ${data.startTime} - ${data.endTime}`);
       }
       current.setDate(current.getDate() + 7);
       count++;
@@ -168,7 +172,7 @@ export const useCreateSubscriptionAction = routeAction$(
       }
     }
 
-    return { success: true };
+    return { success: true, warnings: warnings.length > 0 ? warnings : undefined };
   },
   zod$({
     pitchId: z.string().min(1),
@@ -723,6 +727,12 @@ export default component$(() => {
               class="space-y-4"
               onSubmitCompleted$={() => {
                 if (createSubAction.value?.success) {
+                  const warnings = createSubAction.value?.warnings;
+                  if (warnings && warnings.length > 0) {
+                    alert(
+                      `Abono creado con éxito.\n\n⚠️ Se omitieron las siguientes fechas por conflicto:\n- ${warnings.join("\n- ")}`
+                    );
+                  }
                   isModalOpen.value = false;
                   selectedOwnerId.value = "";
                   selectedOwnerName.value = "";
