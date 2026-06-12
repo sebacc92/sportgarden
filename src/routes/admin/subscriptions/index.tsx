@@ -512,10 +512,47 @@ export const useDeleteSubscriptionAction = routeAction$(
       };
     }
 
-    // We delete only the subscription record. Booking rows that referenced
-    // this subscription (notes = "subscription:<id>") are kept so historical
-    // balances/reports remain intact. Cancelled future bookings stay as
-    // cancelled history.
+    // Bookings without historical value are removed too so the calendar
+    // grid stops showing them: CANCELLED rows with no money attached, and
+    // any future row (CONFIRMED / pending) without payment that never made
+    // it through. Rows with paid_amount > 0 (balances) or that were
+    // actually played (COMPLETED / ATTENDED) are preserved.
+    const startOfTodayBA = new Date(
+      `${getBAFormatDate(new Date())}T00:00:00-03:00`,
+    );
+
+    const { data: deletedCancelled, error: delCancelledErr } = await db
+      .from(bookings)
+      .delete()
+      .eq("notes", `subscription:${sub.id}`)
+      .eq("status", "CANCELLED")
+      .eq("paid_amount", 0)
+      .select("id");
+
+    if (delCancelledErr) throw delCancelledErr;
+
+    const { data: deletedFuture, error: delFutureErr } = await db
+      .from(bookings)
+      .delete()
+      .eq("notes", `subscription:${sub.id}`)
+      .in("status", ["CONFIRMED", "PENDING_PAYMENT", "PENDING_APPROVAL"])
+      .eq("paid_amount", 0)
+      .gte("start_time", toBALocalISOString(startOfTodayBA))
+      .select("id");
+
+    if (delFutureErr) throw delFutureErr;
+
+    const deletedBookings =
+      (deletedCancelled?.length || 0) + (deletedFuture?.length || 0);
+
+    // Whatever remains is real history we keep on the calendar
+    const { count: keptCount, error: countErr } = await db
+      .from(bookings)
+      .select("id", { count: "exact", head: true })
+      .eq("notes", `subscription:${sub.id}`);
+
+    if (countErr) throw countErr;
+
     const { error: delErr } = await db
       .from(pitchSubscriptions)
       .delete()
@@ -523,7 +560,11 @@ export const useDeleteSubscriptionAction = routeAction$(
 
     if (delErr) throw delErr;
 
-    return { success: true };
+    return {
+      success: true,
+      deletedBookings,
+      keptBookings: keptCount || 0,
+    };
   },
   zod$({
     subscriptionId: z.string().min(1),
@@ -993,8 +1034,13 @@ export default component$(() => {
         )}
         {deleteSubAction.value?.success && (
           <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-            Abono eliminado definitivamente. El historial de reservas pasadas se
-            conserva en el calendario.
+            Abono eliminado.{" "}
+            {(deleteSubAction.value.deletedBookings ?? 0) > 0
+              ? `Se quitaron ${deleteSubAction.value.deletedBookings} reservas sin valor histórico del calendario`
+              : "No había reservas para limpiar"}
+            {(deleteSubAction.value.keptBookings ?? 0) > 0
+              ? ` y se conservaron ${deleteSubAction.value.keptBookings} con pago o asistencia confirmada.`
+              : "."}
           </div>
         )}
         {deleteSubAction.value?.failed && deleteSubAction.value?.message && (
@@ -1491,10 +1537,10 @@ export default component$(() => {
                   ¿Eliminar el abono definitivamente?
                 </h3>
                 <p class="mt-1 text-sm text-slate-500">
-                  Esta acción no se puede deshacer. El historial de reservas
-                  pasadas y las balanzas del cliente{" "}
-                  <strong>se conservan</strong>; solo se borra la regla del
-                  abono.
+                  Esta acción no se puede deshacer. Se borran las reservas
+                  canceladas y las futuras sin pago; las reservas con plata
+                  cobrada o asistencia confirmada{" "}
+                  <strong>se conservan</strong> en el calendario.
                 </p>
                 {pendingDeleteSub.value && (
                   <div class="mt-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-sm">
