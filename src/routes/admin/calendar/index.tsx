@@ -303,7 +303,6 @@ export const useCreateAdminBookingAction = routeAction$(
       }
     }
 
-    const firstBookingId = crypto.randomUUID();
     const firstPaidAmount = Number(data.paidAmount) || 0;
     let openRegisterId: string | null = null;
 
@@ -391,16 +390,15 @@ export const useCreateAdminBookingAction = routeAction$(
 
     const bookingsToInsert: any[] = [];
     const guestsToInsert: any[] = [];
-    const skippedDates: string[] = [];
+    const warnings: string[] = [];
     let bookingsCount = 0;
+    let actualFirstBookingId = "";
 
     for (let i = 0; i < datesToBook.length; i++) {
       const item = datesToBook[i];
       const startDateTime = new Date(`${item.date}T${item.startTime}:00-03:00`);
       const endDateTime = new Date(`${item.date}T${item.endTime}:00-03:00`);
-      // The first successfully created booking carries the payment info
-      const isFirstCreated = bookingsCount === 0;
-      const bookingId = isFirstCreated ? firstBookingId : crypto.randomUUID();
+      const bookingId = crypto.randomUUID();
 
       // Validate operating hours
       const holidaysList = (settings?.holidays as any[]) || [];
@@ -410,12 +408,14 @@ export const useCreateAdminBookingAction = routeAction$(
 
       if (!schedule || schedule.isClosed) {
         if (data.isSubscription) {
-          skippedDates.push(item.date);
+          const formattedDate = item.date.split("-").reverse().join("/");
+          warnings.push(`${formattedDate} (Club cerrado)`);
           continue;
+        } else {
+          throw new Error(
+            `El club está cerrado el día seleccionado (${item.date}).`,
+          );
         }
-        throw new Error(
-          `El club está cerrado el día seleccionado (${item.date}).`,
-        );
       }
 
       const startBA = getBAHoursAndMinutes(startDateTime);
@@ -437,12 +437,14 @@ export const useCreateAdminBookingAction = routeAction$(
 
       if (startMins < openMins || endMins > closeMins) {
         if (data.isSubscription) {
-          skippedDates.push(item.date);
+          const formattedDate = item.date.split("-").reverse().join("/");
+          warnings.push(`${formattedDate} ${item.startTime} - ${item.endTime} (Fuera de horario)`);
           continue;
+        } else {
+          throw new Error(
+            `El horario seleccionado (${item.startTime} - ${item.endTime}) está fuera del horario de atención del club para el día ${item.date}.`,
+          );
         }
-        throw new Error(
-          `El horario seleccionado (${item.startTime} - ${item.endTime}) está fuera del horario de atención del club para el día ${item.date}.`,
-        );
       }
 
       // Check conflict including overlaps
@@ -454,12 +456,18 @@ export const useCreateAdminBookingAction = routeAction$(
 
       if (!available) {
         if (data.isSubscription) {
-          skippedDates.push(item.date);
+          const formattedDate = item.date.split("-").reverse().join("/");
+          warnings.push(`${formattedDate} ${item.startTime} - ${item.endTime} (Ya reservado)`);
           continue;
+        } else {
+          throw new Error(
+            `Conflicto de horario: ${item.date} ${item.startTime} - ${item.endTime} en ${conflicts[0].pitch.name}.`,
+          );
         }
-        throw new Error(
-          `Conflicto de horario: ${item.date} ${item.startTime} - ${item.endTime} en ${conflicts[0].pitch.name}.`,
-        );
+      }
+
+      if (!actualFirstBookingId) {
+        actualFirstBookingId = bookingId;
       }
 
       bookingsToInsert.push({
@@ -470,15 +478,16 @@ export const useCreateAdminBookingAction = routeAction$(
         end_time: toBALocalISOString(endDateTime),
         status: "CONFIRMED",
         total_price: item.price,
-        paid_amount: isFirstCreated ? Number(data.paidAmount) || 0 : 0,
-        payment_status: isFirstCreated
-          ? data.paymentStatus ||
-            ((Number(data.paidAmount) || 0) >= Number(data.price)
-              ? "PAID"
-              : (Number(data.paidAmount) || 0) > 0
-                ? "PARTIAL"
-                : "PENDING")
-          : "PENDING",
+        paid_amount: bookingsCount === 0 ? Number(data.paidAmount) || 0 : 0,
+        payment_status:
+          bookingsCount === 0
+            ? data.paymentStatus ||
+              ((Number(data.paidAmount) || 0) >= Number(data.price)
+                ? "PAID"
+                : (Number(data.paidAmount) || 0) > 0
+                  ? "PARTIAL"
+                  : "PENDING")
+            : "PENDING",
         payment_method: data.paymentMethod,
         is_subscription: data.isSubscription,
         booking_type:
@@ -497,7 +506,7 @@ export const useCreateAdminBookingAction = routeAction$(
         });
       }
 
-      if (isFirstCreated && firstPaidAmount > 0 && openRegisterId) {
+      if (bookingsCount === 0 && firstPaidAmount > 0 && openRegisterId) {
         const { error: insMovErr } = await db.from(cashMovements).insert({
           id: crypto.randomUUID(),
           register_id: openRegisterId,
@@ -569,21 +578,15 @@ export const useCreateAdminBookingAction = routeAction$(
       return {
         failed: true,
         message:
-          skippedDates.length > 0
-            ? `No se pudo crear ninguna reserva: todas las fechas (${skippedDates.length}) tienen conflicto de horario o el club está cerrado.`
-            : "No se pudo crear ninguna reserva. Verifique conflictos de horario.",
+          "No se pudo crear ninguna reserva. Todos los turnos del rango horario están ocupados.",
       };
     }
 
     return {
       success: true,
-      bookingId: firstBookingId,
-      skippedDates,
-      message:
-        `Se crearon ${bookingsCount} reservas.` +
-        (skippedDates.length > 0
-          ? ` ${skippedDates.length} fechas no se generaron por conflicto: ${skippedDates.join(", ")}.`
-          : ""),
+      bookingId: actualFirstBookingId,
+      message: `Se crearon ${bookingsCount} reservas.`,
+      warnings: warnings.length > 0 ? warnings : undefined,
     };
   },
   zod$({
@@ -1501,6 +1504,12 @@ export default component$(() => {
 
     const successCreate = track(() => createBookingAction.value?.success);
     if (successCreate) {
+      const warnings = createBookingAction.value?.warnings;
+      if (warnings && warnings.length > 0) {
+        alert(
+          `Abono creado con éxito.\n\n⚠️ Se omitieron las siguientes fechas por conflicto o club cerrado/fuera de horario:\n- ${warnings.join("\n- ")}`
+        );
+      }
       isCreateModalOpen.value = false;
       adminFormDate.value = "";
       adminFormTime.value = "";

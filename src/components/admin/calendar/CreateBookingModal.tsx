@@ -187,6 +187,44 @@ export const CreateBookingModal = component$<CreateBookingModalProps>(
       return `${String(Math.floor(totalMins / 60) % 24).padStart(2, "0")}:${String(totalMins % 60).padStart(2, "0")}`;
     });
 
+    // Reset/clear schedules when modal is closed
+    useTask$(({ track }) => {
+      const isOpen = track(() => isCreateModalOpen.value);
+      if (!isOpen) {
+        adminSubSchedules.slots = [];
+        adminApplyDiscount.value = false;
+        adminDiscountAmount.value = "";
+        adminDiscountType.value = "FIXED";
+        adminSelectedExtras.value = [];
+        adminNotes.value = "";
+      }
+    });
+
+    // Auto-populate schedules when subscription mode is activated
+    useTask$(({ track }) => {
+      const isSub = track(() => adminIsSubscription.value);
+      if (isSub) {
+        if (adminSubSchedules.slots.length === 0 && adminFormDate.value) {
+          const dateObj = new Date(`${adminFormDate.value}T12:00:00-03:00`);
+          const dayOfWeek = dateObj.getDay();
+          adminSubSchedules.slots = [
+            {
+              id: crypto.randomUUID(),
+              dayOfWeek,
+              startTime: adminFormTime.value || "18:00",
+              duration: adminFormDuration.value || "60",
+              pitchId: adminFormPitchId.value || calendarData.pitches[0]?.id,
+            },
+          ];
+        }
+        if (!adminEndDate.value && adminFormDate.value) {
+          const dateObj = new Date(`${adminFormDate.value}T12:00:00-03:00`);
+          dateObj.setMonth(dateObj.getMonth() + 6);
+          adminEndDate.value = dateObj.toISOString().split("T")[0];
+        }
+      }
+    });
+
     // Search user logic
     useTask$(({ track, cleanup }) => {
       const term = track(() => adminSearchTerm.value);
