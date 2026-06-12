@@ -26,15 +26,30 @@ export const usePitchData = routeLoader$(async (requestEvent) => {
   const id = requestEvent.params.id;
   const { data: pitchData, error: pitchErr } = await db
     .from(pitches)
-    .select("*, pricingRules:pitch_pricing_rules(*), overlaps:pitch_overlaps(*)")
+    .select("*, pricingRules:pitch_pricing_rules(*), overlaps:pitch_overlaps!pitch_id(*)")
     .eq("id", id)
     .maybeSingle();
 
   if (pitchErr) throw pitchErr;
-  if (!pitchData) {
-    throw requestEvent.redirect(302, "/admin/pitches");
+  const camelized = camelize<any>(pitchData);
+  if (camelized.pricingRules && Array.isArray(camelized.pricingRules)) {
+    camelized.pricingRules = camelized.pricingRules.map((rule: any) => ({
+      id: rule.id,
+      pitchId: rule.pitch_id,
+      dayOfWeek: rule.day_of_week,
+      startTime: rule.start_time,
+      endTime: rule.end_time,
+      price: rule.price,
+    }));
   }
-  return camelize<any>(pitchData);
+  if (camelized.overlaps && Array.isArray(camelized.overlaps)) {
+    camelized.overlaps = camelized.overlaps.map((overlap: any) => ({
+      id: overlap.id,
+      pitchId: overlap.pitch_id,
+      overlapPitchId: overlap.overlap_pitch_id,
+    }));
+  }
+  return camelized;
 });
 
 export const useAllPitches = routeLoader$(async (requestEvent) => {
