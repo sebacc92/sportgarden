@@ -848,19 +848,33 @@ export default component$(() => {
                           src={reel.videoUrl}
                           poster={reel.posterUrl}
                           preload="none"
-                          controls
                           playsInline
                           muted
+                          loop
                           class="h-full w-full object-cover"
+                          onMouseEnter$={(e, el) => {
+                            (el as HTMLVideoElement).play().catch(() => {});
+                          }}
+                          onMouseLeave$={(e, el) => {
+                            (el as HTMLVideoElement).pause();
+                          }}
+                          onClick$={(e, el) => {
+                            const video = el as HTMLVideoElement;
+                            if (video.paused) {
+                              video.play().catch(() => {});
+                            } else {
+                              video.pause();
+                            }
+                          }}
                         />
 
                         {/* Overlay with Delete button */}
-                        <div class="absolute inset-0 bg-black/0 transition-all duration-200 group-hover:bg-black/40 flex flex-col justify-between p-4">
+                        <div class="absolute inset-0 bg-black/0 transition-all duration-200 group-hover:bg-black/40 flex flex-col justify-between p-4 pointer-events-none">
                           <div class="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               type="button"
                               onClick$={() => (confirmDeleteReelId.value = reel.id)}
-                              class="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white transition-all hover:bg-red-600 active:scale-95"
+                              class="flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-white transition-all hover:bg-red-600 active:scale-95 pointer-events-auto"
                               title="Eliminar Reel"
                             >
                               <svg
