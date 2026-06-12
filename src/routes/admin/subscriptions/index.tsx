@@ -14,6 +14,8 @@ import {
   bookings,
   users,
   groups,
+  guestRequests,
+  siteSettings,
 } from "~/db/schema";
 import {
   HORIZON_WEEKS,
@@ -21,9 +23,12 @@ import {
   extendActiveSubscriptions,
   findDuplicateActiveSubscription,
   generateOccurrences,
+  getHorizonEndDate,
 } from "~/lib/admin/subscriptions";
 import {
+  getBADayOfWeek,
   getBAFormatDate,
+  getBAHoursAndMinutes,
   parseDatabaseDate,
   toBALocalISOString,
 } from "~/routes/admin/calendar/utils";
@@ -111,6 +116,230 @@ export const useSubscriptionsData = routeLoader$(async (requestEvent) => {
     subscriptions,
     stats,
   };
+});
+
+type ConflictReason =
+  | { type: "BOOKING"; pitchName: string; customer: string; range: string }
+  | { type: "SCHOOL"; categoryName: string; range: string }
+  | { type: "CLOSED"; note: string }
+  | { type: "UNKNOWN" };
+
+export interface SubscriptionConflictDetail {
+  dateStr: string; // YYYY-MM-DD in BA
+  reasons: ConflictReason[];
+}
+
+export const getSubscriptionConflicts = server$(async function (
+  subscriptionId: string,
+): Promise<SubscriptionConflictDetail[]> {
+  const db = getDB(this as any);
+
+  const { data: subData, error: subErr } = await db
+    .from(pitchSubscriptions)
+    .select("*")
+    .eq("id", subscriptionId)
+    .maybeSingle();
+  if (subErr) throw subErr;
+  if (!subData) return [];
+  const sub = camelize<any>(subData);
+
+  const { data: settingsData } = await db
+    .from(siteSettings)
+    .select("*")
+    .maybeSingle();
+  const settings = camelize<any>(settingsData);
+  const schoolCategories = (settings?.schoolCategories || []) as any[];
+  const operatingHours = (() => {
+    try {
+      if (typeof settings?.operatingHours === "string")
+        return JSON.parse(settings.operatingHours);
+      if (Array.isArray(settings?.operatingHours))
+        return settings.operatingHours;
+      return [];
+    } catch {
+      return [];
+    }
+  })();
+  const holidays = (settings?.holidays || []) as any[];
+
+  // Related pitch IDs (bidirectional overlaps)
+  const { data: overlapsData } = await db
+    .from("pitch_overlaps")
+    .select("*")
+    .or(
+      `pitch_id.eq.${sub.pitchId},overlap_pitch_id.eq.${sub.pitchId}`,
+    );
+  const overlaps = camelize<any[]>(overlapsData || []);
+  const relatedPitchIds = [
+    sub.pitchId,
+    ...overlaps.map((o: any) =>
+      o.pitchId === sub.pitchId ? o.overlapPitchId : o.pitchId,
+    ),
+  ];
+
+  const { data: pitchesData } = await db
+    .from(pitches)
+    .select("id, name");
+  const pitchById = new Map(
+    camelize<any[]>(pitchesData || []).map((p: any) => [p.id, p.name]),
+  );
+
+  // Already-created bookings for this subscription
+  const { data: existingData } = await db
+    .from(bookings)
+    .select("start_time")
+    .eq("notes", `subscription:${sub.id}`);
+  const existingDates = new Set(
+    camelize<any[]>(existingData || []).map((r: any) =>
+      getBAFormatDate(parseDatabaseDate(r.startTime)),
+    ),
+  );
+
+  // Build expected occurrences from now to the rolling horizon
+  const now = new Date();
+  const horizonEnd = getHorizonEndDate(now);
+  const occurrences = generateOccurrences(sub, now, horizonEnd);
+  const missing = occurrences.filter((o) => !existingDates.has(o.dateStr));
+  if (missing.length === 0) return [];
+
+  // Pre-fetch all blocking bookings in a single query
+  const minStart = missing[0].start;
+  const maxEnd = missing[missing.length - 1].end;
+  const { data: blockingData } = await db
+    .from(bookings)
+    .select(
+      "id, pitch_id, start_time, end_time, status, user_id, notes",
+    )
+    .in("pitch_id", relatedPitchIds)
+    .lt("start_time", toBALocalISOString(maxEnd))
+    .gt("end_time", toBALocalISOString(minStart))
+    .in("status", [
+      "CONFIRMED",
+      "PENDING_APPROVAL",
+      "PENDING_PAYMENT",
+      "COMPLETED",
+    ])
+    .neq("notes", `subscription:${sub.id}`);
+  const blocking = camelize<any[]>(blockingData || []).map((b: any) => ({
+    ...b,
+    _start: parseDatabaseDate(b.startTime),
+    _end: parseDatabaseDate(b.endTime),
+  }));
+
+  // Resolve customer names in bulk
+  const userIds = Array.from(
+    new Set(blocking.map((b) => b.userId).filter(Boolean)),
+  );
+  const bookingIds = blocking.map((b) => b.id);
+  const [{ data: usersData }, { data: guestsData }] = await Promise.all([
+    userIds.length > 0
+      ? db.from(users).select("id, name").in("id", userIds)
+      : Promise.resolve({ data: [] as any[] }),
+    bookingIds.length > 0
+      ? db
+          .from(guestRequests)
+          .select("booking_id, name")
+          .in("booking_id", bookingIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const userById = new Map(
+    camelize<any[]>(usersData || []).map((u: any) => [u.id, u.name]),
+  );
+  const guestByBooking = new Map(
+    camelize<any[]>(guestsData || []).map((g: any) => [g.bookingId, g.name]),
+  );
+
+  const fmtHHMM = (d: Date) => {
+    const p = getBAHoursAndMinutes(d);
+    return `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+  };
+
+  const details: SubscriptionConflictDetail[] = [];
+  for (const occ of missing) {
+    const reasons: ConflictReason[] = [];
+
+    // 1. Closed (holiday or no operating hours)
+    const isHoliday = holidays.some((h: any) => h.date === occ.dateStr);
+    const dayOfWeek = isHoliday ? 7 : getBADayOfWeek(occ.start);
+    const schedule = operatingHours.find((h: any) => h.day === dayOfWeek);
+    if (!schedule || schedule.isClosed) {
+      reasons.push({
+        type: "CLOSED",
+        note: isHoliday ? "Feriado" : "Club cerrado ese día",
+      });
+    } else {
+      // Check fits within operating hours
+      const [openH, openM] = (schedule.openTime || "0:0").split(":").map(Number);
+      const [closeH, closeM] = (schedule.closeTime || "24:0")
+        .split(":")
+        .map(Number);
+      const openMins = openH * 60 + (openM || 0);
+      let closeMins = closeH * 60 + (closeM || 0);
+      if (closeMins === 0) closeMins = 24 * 60;
+      const startMins = sub.startTime
+        .split(":")
+        .map(Number)
+        .reduce((acc: number, n: number, i: number) =>
+          i === 0 ? n * 60 : acc + n,
+        );
+      const endMins = sub.endTime
+        .split(":")
+        .map(Number)
+        .reduce((acc: number, n: number, i: number) =>
+          i === 0 ? n * 60 : acc + n,
+        );
+      if (startMins < openMins || endMins > closeMins) {
+        reasons.push({
+          type: "CLOSED",
+          note: "Fuera del horario de atención del club",
+        });
+      }
+    }
+
+    // 2. Overlapping bookings
+    for (const b of blocking) {
+      const overlaps = b._start < occ.end && b._end > occ.start;
+      if (!overlaps) continue;
+      const customer =
+        guestByBooking.get(b.id) ||
+        (b.userId ? userById.get(b.userId) : null) ||
+        "Reserva sin titular";
+      reasons.push({
+        type: "BOOKING",
+        pitchName: pitchById.get(b.pitchId) || "Cancha",
+        customer,
+        range: `${fmtHHMM(b._start)} - ${fmtHHMM(b._end)}`,
+      });
+    }
+
+    // 3. School class overlap
+    for (const cat of schoolCategories) {
+      if (!cat.schedules) continue;
+      for (const sched of cat.schedules) {
+        if (
+          sched.day === dayOfWeek &&
+          sched.pitchId &&
+          relatedPitchIds.includes(sched.pitchId) &&
+          sub.startTime < sched.endTime &&
+          sub.endTime > sched.startTime
+        ) {
+          reasons.push({
+            type: "SCHOOL",
+            categoryName: cat.name || "Escuelita",
+            range: `${sched.startTime} - ${sched.endTime}`,
+          });
+        }
+      }
+    }
+
+    if (reasons.length === 0) {
+      reasons.push({ type: "UNKNOWN" });
+    }
+
+    details.push({ dateStr: occ.dateStr, reasons });
+  }
+
+  return details;
 });
 
 export const searchOwnersServer = server$(async function (
@@ -520,6 +749,29 @@ export default component$(() => {
   const isDeleteModalOpen = useSignal(false);
   const pendingDeleteSub = useSignal<any>(null);
 
+  // Conflict-detail modal state
+  const isConflictModalOpen = useSignal(false);
+  const inspectingSub = useSignal<any>(null);
+  const conflictDetails = useSignal<SubscriptionConflictDetail[] | null>(null);
+  const conflictLoading = useSignal(false);
+
+  useTask$(({ track }) => {
+    const open = track(() => isConflictModalOpen.value);
+    const sub = track(() => inspectingSub.value);
+    if (!open || !sub) return;
+    conflictLoading.value = true;
+    conflictDetails.value = null;
+    getSubscriptionConflicts(sub.id)
+      .then((res) => {
+        conflictDetails.value = res;
+        conflictLoading.value = false;
+      })
+      .catch(() => {
+        conflictDetails.value = [];
+        conflictLoading.value = false;
+      });
+  });
+
   // Create owner sub-modal state
   const isCreateOwnerModalOpen = useSignal(false);
   const newOwnerName = useSignal("");
@@ -832,9 +1084,30 @@ export default component$(() => {
                                 {stat.futureCount} turnos futuros
                               </div>
                               {stat.conflictCount > 0 && (
-                                <span class="mt-1 inline-block rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-700 uppercase">
+                                <button
+                                  type="button"
+                                  onClick$={() => {
+                                    inspectingSub.value = sub;
+                                    conflictDetails.value = null;
+                                    isConflictModalOpen.value = true;
+                                  }}
+                                  class="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-wider text-amber-700 uppercase transition-colors hover:bg-amber-200"
+                                >
                                   {stat.conflictCount} con conflicto
-                                </span>
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="10"
+                                    height="10"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="3"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                  >
+                                    <polyline points="9 18 15 12 9 6" />
+                                  </svg>
+                                </button>
                               )}
                             </div>
                           ) : (
@@ -1029,6 +1302,145 @@ export default component$(() => {
                 </Button>
               </div>
             </Form>
+          </div>
+        </Modal.Panel>
+      </Modal.Root>
+
+      {/* Modal de Conflictos del Abono */}
+      <Modal.Root bind:show={isConflictModalOpen}>
+        <Modal.Panel class="relative mx-auto w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div class="p-6">
+            <div class="mb-4 flex items-start justify-between">
+              <div>
+                <h3 class="text-xl font-black text-slate-800">
+                  Fechas con conflicto
+                </h3>
+                {inspectingSub.value && (
+                  <p class="mt-0.5 text-xs font-semibold text-slate-500">
+                    {inspectingSub.value.pitch?.name} ·{" "}
+                    {formatDayOfWeek(inspectingSub.value.dayOfWeek)}{" "}
+                    {inspectingSub.value.startTime}-
+                    {inspectingSub.value.endTime}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick$={() => (isConflictModalOpen.value = false)}
+                class="p-2 text-slate-400 transition-colors hover:text-slate-600"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {conflictLoading.value ? (
+              <div class="py-10 text-center text-sm font-semibold text-slate-400">
+                Buscando conflictos…
+              </div>
+            ) : (conflictDetails.value?.length ?? 0) === 0 ? (
+              <div class="py-10 text-center text-sm font-semibold text-slate-400">
+                No se encontraron conflictos pendientes.
+              </div>
+            ) : (
+              <ul class="max-h-[60vh] space-y-3 overflow-y-auto">
+                {conflictDetails.value!.map((d) => {
+                  const dateLabel = new Date(
+                    `${d.dateStr}T12:00:00-03:00`,
+                  ).toLocaleDateString("es-ES", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  });
+                  return (
+                    <li
+                      key={d.dateStr}
+                      class="rounded-xl border border-amber-100 bg-amber-50/40 p-4"
+                    >
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0 flex-1">
+                          <div class="text-sm font-black text-slate-800 capitalize">
+                            {dateLabel}
+                          </div>
+                          <ul class="mt-2 space-y-1.5 text-xs font-semibold text-slate-600">
+                            {d.reasons.map((r, idx) => (
+                              <li key={idx} class="flex items-start gap-2">
+                                {r.type === "BOOKING" && (
+                                  <>
+                                    <span class="mt-0.5 rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-blue-700 uppercase">
+                                      Reserva
+                                    </span>
+                                    <span>
+                                      {r.range} en{" "}
+                                      <strong>{r.pitchName}</strong> —{" "}
+                                      {r.customer}
+                                    </span>
+                                  </>
+                                )}
+                                {r.type === "SCHOOL" && (
+                                  <>
+                                    <span class="mt-0.5 rounded bg-orange-100 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-orange-700 uppercase">
+                                      Escuelita
+                                    </span>
+                                    <span>
+                                      {r.range} — {r.categoryName}
+                                    </span>
+                                  </>
+                                )}
+                                {r.type === "CLOSED" && (
+                                  <>
+                                    <span class="mt-0.5 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-slate-700 uppercase">
+                                      Cerrado
+                                    </span>
+                                    <span>{r.note}</span>
+                                  </>
+                                )}
+                                {r.type === "UNKNOWN" && (
+                                  <>
+                                    <span class="mt-0.5 rounded bg-slate-200 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-slate-700 uppercase">
+                                      ?
+                                    </span>
+                                    <span>
+                                      Motivo no identificado. Revisá la grilla.
+                                    </span>
+                                  </>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <a
+                          href={`/admin/calendar/?date=${d.dateStr}&view=day`}
+                          class="shrink-0 rounded-lg bg-slate-800 px-3 py-1.5 text-[10px] font-black tracking-wider text-white uppercase transition-colors hover:bg-slate-900"
+                        >
+                          Ver día →
+                        </a>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <p class="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs leading-relaxed font-semibold text-blue-700">
+              Resolvé el conflicto desde el calendario (cancelando o cambiando
+              la reserva bloqueante) y después hacé click en{" "}
+              <strong>"↻ Extender ahora"</strong> arriba para que el sistema
+              cree los turnos faltantes.
+            </p>
           </div>
         </Modal.Panel>
       </Modal.Root>
