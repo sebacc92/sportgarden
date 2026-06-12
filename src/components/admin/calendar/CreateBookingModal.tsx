@@ -1086,7 +1086,10 @@ export const CreateBookingModal = component$<CreateBookingModalProps>(
                               </div>
                               <div>
                                 <label class="mb-1 block text-[11px] font-black tracking-wider text-blue-700 uppercase">
-                                  Repetir hasta
+                                  Repetir hasta{" "}
+                                  <span class="font-bold text-blue-400 normal-case">
+                                    (opcional)
+                                  </span>
                                 </label>
                                 <input
                                   type="date"
@@ -1116,9 +1119,11 @@ export const CreateBookingModal = component$<CreateBookingModalProps>(
                                 <line x1="12" y1="16" x2="12" y2="12" />
                                 <line x1="12" y1="8" x2="12.01" y2="8" />
                               </svg>
-                              El sistema generará automáticamente todas las
-                              reservas en los días y canchas seleccionadas hasta
-                              la fecha límite.
+                              Si no indicás fecha límite, el abono se genera
+                              por 12 semanas y se extiende automáticamente cada
+                              semana hasta que lo des de baja desde Abonos
+                              Fijos. Las fechas con conflicto se saltean y se
+                              informan al crear.
                             </p>
                           </div>
                         )}

@@ -32,6 +32,7 @@ import {
   siteSettings,
 } from "~/db/schema";
 import { isPitchAvailable } from "~/utils/availability";
+import { HORIZON_WEEKS } from "~/lib/admin/subscriptions";
 import { BookingListView } from "~/components/admin/booking-list-view";
 import { BookingTimelineView } from "~/components/admin/booking-timeline-view";
 import { cn } from "@qwik-ui/utils";
@@ -213,24 +214,31 @@ export const useCreateAdminBookingAction = routeAction$(
     // Parse start date
     const startDate = new Date(`${data.date}T12:00:00-03:00`);
 
-    // Parse end date if recurring
+    // Parse end date if recurring. Without an explicit end date the
+    // subscription uses the rolling horizon and is later extended weekly
+    // by /api/cron/subscriptions.
     let endDate = startDate;
-    if (data.isSubscription && data.endDate) {
-      endDate = new Date(`${data.endDate}T12:00:00-03:00`);
+    if (data.isSubscription) {
+      if (data.endDate) {
+        endDate = new Date(`${data.endDate}T12:00:00-03:00`);
 
-      const maxDate = new Date(startDate);
-      maxDate.setFullYear(maxDate.getFullYear() + 1);
+        const maxDate = new Date(startDate);
+        maxDate.setFullYear(maxDate.getFullYear() + 1);
 
-      if (endDate > maxDate) {
-        endDate = maxDate; // Limit to 1 year max
-      }
+        if (endDate > maxDate) {
+          endDate = maxDate; // Limit to 1 year max
+        }
 
-      if (endDate < startDate) {
-        return {
-          success: false,
-          failed: true,
-          message: "La fecha de fin debe ser posterior a la de inicio",
-        };
+        if (endDate < startDate) {
+          return {
+            success: false,
+            failed: true,
+            message: "La fecha de fin debe ser posterior a la de inicio",
+          };
+        }
+      } else {
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + HORIZON_WEEKS * 7);
       }
     }
 

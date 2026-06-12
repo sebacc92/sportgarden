@@ -86,6 +86,16 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>(
                     </span>
                   );
                 })()}
+              {String(selectedBookingDetails?.booking?.notes || "").startsWith(
+                "subscription:",
+              ) && (
+                <a
+                  href="/admin/subscriptions/"
+                  class="text-xs font-bold text-emerald-600 hover:underline"
+                >
+                  Ver abono →
+                </a>
+              )}
             </div>
             <Modal.Close
               class="cursor-pointer rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-800"
