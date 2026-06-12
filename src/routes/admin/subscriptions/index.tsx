@@ -58,13 +58,20 @@ export const useSubscriptionsData = routeLoader$(async (requestEvent) => {
   if (subsErr) throw subsErr;
   const subscriptions = camelize<any[]>(subsData || []);
 
-  // Per-subscription stats: future bookings, last generated date, conflicts
+  // Per-subscription stats: future bookings, last generated date, conflicts.
+  // Compare against the START of today in BA: an occurrence scheduled for
+  // today is still "today" even if its hour has already passed, otherwise
+  // the badge would show a phantom conflict between the booking's hour and
+  // midnight.
   const now = new Date();
+  const startOfTodayBA = new Date(
+    `${getBAFormatDate(now)}T00:00:00-03:00`,
+  );
   const { data: futureData, error: futureErr } = await db
     .from(bookings)
     .select("notes, start_time, status")
     .like("notes", "subscription:%")
-    .gte("start_time", toBALocalISOString(now));
+    .gte("start_time", toBALocalISOString(startOfTodayBA));
 
   if (futureErr) throw futureErr;
   const futureRows = camelize<any[]>(futureData || []);
@@ -100,7 +107,7 @@ export const useSubscriptionsData = routeLoader$(async (requestEvent) => {
     // Expected occurrences between today and last generated date that have
     // no booking row at all → they were skipped due to a conflict.
     const lastDate = new Date(`${agg.lastDateStr}T12:00:00-03:00`);
-    const expected = generateOccurrences(sub, now, lastDate);
+    const expected = generateOccurrences(sub, startOfTodayBA, lastDate);
     const conflictCount = expected.filter(
       (o) => !agg.dates.has(o.dateStr),
     ).length;
@@ -195,10 +202,19 @@ export const getSubscriptionConflicts = server$(async function (
     ),
   );
 
-  // Build expected occurrences from now to the rolling horizon
+  // Build expected occurrences from the start of today (BA) to the rolling
+  // horizon. Using start-of-today keeps today's occurrence in scope even if
+  // its scheduled hour has already passed.
   const now = new Date();
+  const startOfTodayBA = new Date(
+    `${getBAFormatDate(now)}T00:00:00-03:00`,
+  );
   const horizonEnd = getHorizonEndDate(now);
-  const occurrences = generateOccurrences(sub, now, horizonEnd);
+  const occurrences = generateOccurrences(
+    sub,
+    startOfTodayBA,
+    horizonEnd,
+  );
   const missing = occurrences.filter((o) => !existingDates.has(o.dateStr));
   if (missing.length === 0) return [];
 
