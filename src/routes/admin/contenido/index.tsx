@@ -218,8 +218,10 @@ export default component$(() => {
     popup: false,
   });
 
-  const handleFileChange = $(async (event: Event, key: "slide0" | "slide1" | "slide2" | "popup") => {
-    const input = event.target as HTMLInputElement;
+  const handleFileChange = $(async (event: Event, element: HTMLInputElement) => {
+    const input = element;
+    const key = input.getAttribute("data-key") as "slide0" | "slide1" | "slide2" | "popup";
+    if (!key) return;
     if (input.files && input.files[0]) {
       const file = input.files[0];
       try {
@@ -398,20 +400,20 @@ export default component$(() => {
                               <img
                                 src={currentPreview}
                                 alt={`Slide ${index + 1}`}
-                                class="h-full w-full object-cover"
+                                class="h-full w-full object-cover pointer-events-none"
                               />
-                              <div class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div class="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                 <span class="text-white text-xs font-black uppercase tracking-widest">Cambiar Imagen</span>
                               </div>
                             </>
                           ) : (
-                            <div class="flex flex-col items-center text-slate-400 text-center p-4">
+                            <div class="flex flex-col items-center text-slate-400 text-center p-4 pointer-events-none">
                               <LuImage class="h-8 w-8 text-slate-400 mb-2" />
                               <span class="text-[10px] font-black tracking-widest text-slate-500 uppercase">Subir Foto</span>
                             </div>
                           )}
                           {isCompressing[key] && (
-                            <div class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+                            <div class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm pointer-events-none">
                               <div class="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-500"></div>
                               <span class="mt-2 text-[9px] font-bold tracking-widest text-slate-600 uppercase">Optimizando...</span>
                             </div>
@@ -420,8 +422,9 @@ export default component$(() => {
                             type="file"
                             name={`slideImage${index}`}
                             accept="image/*"
-                            onChange$={(e) => handleFileChange(e, key)}
-                            class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                            data-key={key}
+                            onChange$={handleFileChange}
+                            class="absolute inset-0 h-full w-full cursor-pointer opacity-0 z-10"
                             disabled={isCompressing[key]}
                           />
                         </div>
@@ -576,7 +579,7 @@ export default component$(() => {
                           <img
                             src={previews.popup}
                             alt="Promo Popup Preview"
-                            class="h-full w-full object-cover"
+                            class="h-full w-full object-cover pointer-events-none"
                           />
                           <button
                             type="button"
@@ -591,13 +594,13 @@ export default component$(() => {
                           </button>
                         </>
                       ) : (
-                        <div class="flex flex-col items-center text-slate-400 text-center p-4">
+                        <div class="flex flex-col items-center text-slate-400 text-center p-4 pointer-events-none">
                           <LuImage class="h-10 w-10 text-slate-400 mb-2" />
                           <span class="text-xs font-black tracking-widest text-slate-500 uppercase">Subir Foto Promocional</span>
                         </div>
                       )}
                       {isCompressing.popup && (
-                        <div class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+                        <div class="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm pointer-events-none">
                           <div class="h-6 w-6 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-500"></div>
                           <span class="mt-2 text-xs font-bold tracking-widest text-slate-600 uppercase">Optimizando...</span>
                         </div>
@@ -606,8 +609,9 @@ export default component$(() => {
                         type="file"
                         name="popupImage"
                         accept="image/*"
-                        onChange$={(e) => handleFileChange(e, "popup")}
-                        class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        data-key="popup"
+                        onChange$={handleFileChange}
+                        class="absolute inset-0 h-full w-full cursor-pointer opacity-0 z-10"
                         disabled={isCompressing.popup}
                       />
                     </div>
