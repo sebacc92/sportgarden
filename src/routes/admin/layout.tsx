@@ -334,6 +334,7 @@ export default component$(() => {
           <polyline points="21 15 16 10 5 21" />
         </svg>
       ),
+      roles: ["DEV", "OWNER", "MANAGER"],
     },
     {
       name: "Tienda / Stock",
