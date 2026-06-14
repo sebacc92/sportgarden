@@ -1,4 +1,4 @@
-import { component$ } from "@builder.io/qwik";
+import { component$, useSignal } from "@builder.io/qwik";
 import type { QRL } from "@builder.io/qwik";
 import type { Pitch } from "~/db/schema";
 import { Button } from "~/components/ui";
@@ -14,6 +14,13 @@ type PitchesGridProps = {
 export const PitchesGrid = component$<PitchesGridProps>(
   ({ pitches: pitchList, onReserve, theme = "dark" }) => {
     const isLight = theme === "light";
+    const filter = useSignal<"ALL" | "COVERED" | "UNCOVERED">("ALL");
+
+    const filteredPitches = pitchList.filter((pitch) => {
+      if (filter.value === "COVERED") return pitch.isCovered;
+      if (filter.value === "UNCOVERED") return !pitch.isCovered;
+      return true;
+    });
 
     return (
       <section
@@ -55,8 +62,58 @@ export const PitchesGrid = component$<PitchesGridProps>(
               </span>
             </p>
           </div>
+
+          {/* Filtros de Canchas */}
+          <div class="mb-12 flex justify-center gap-3 px-4 flex-wrap">
+            <button
+              onClick$={() => (filter.value = "ALL")}
+              class={[
+                "cursor-pointer rounded-full px-6 py-2.5 text-xs font-black tracking-widest uppercase transition-all duration-300 border",
+                filter.value === "ALL"
+                  ? isLight
+                    ? "bg-[#001407] border-[#001407] text-[#F5F2EB] shadow-lg shadow-[#001407]/10"
+                    : "bg-emerald-500 border-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20"
+                  : isLight
+                    ? "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                    : "bg-slate-900 border-white/10 text-slate-400 hover:border-white/20 hover:text-white"
+              ]}
+            >
+              Todas
+            </button>
+            <button
+              onClick$={() => (filter.value = "COVERED")}
+              class={[
+                "cursor-pointer rounded-full px-6 py-2.5 text-xs font-black tracking-widest uppercase transition-all duration-300 border",
+                filter.value === "COVERED"
+                  ? isLight
+                    ? "bg-[#001407] border-[#001407] text-[#F5F2EB] shadow-lg shadow-[#001407]/10"
+                    : "bg-emerald-500 border-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20"
+                  : isLight
+                    ? "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                    : "bg-slate-900 border-white/10 text-slate-400 hover:border-white/20 hover:text-white"
+              ]}
+            >
+              Techadas
+            </button>
+            <button
+              onClick$={() => (filter.value = "UNCOVERED")}
+              class={[
+                "cursor-pointer rounded-full px-6 py-2.5 text-xs font-black tracking-widest uppercase transition-all duration-300 border",
+                filter.value === "UNCOVERED"
+                  ? isLight
+                    ? "bg-[#001407] border-[#001407] text-[#F5F2EB] shadow-lg shadow-[#001407]/10"
+                    : "bg-emerald-500 border-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/20"
+                  : isLight
+                    ? "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                    : "bg-slate-900 border-white/10 text-slate-400 hover:border-white/20 hover:text-white"
+              ]}
+            >
+              Descubiertas
+            </button>
+          </div>
+
           <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {pitchList.length === 0 ? (
+            {filteredPitches.length === 0 ? (
               <div
                 class={[
                   "col-span-full rounded-3xl border py-20 text-center backdrop-blur-sm",
@@ -80,11 +137,13 @@ export const PitchesGrid = component$<PitchesGridProps>(
                   />
                 </svg>
                 <p class="text-xl font-medium">
-                  No hay canchas disponibles en este momento.
+                  {pitchList.length === 0
+                    ? "No hay canchas disponibles en este momento."
+                    : "No hay canchas que coincidan con el filtro seleccionado."}
                 </p>
               </div>
             ) : (
-              pitchList.map((pitch) => (
+              filteredPitches.map((pitch) => (
                 <div
                   key={pitch.id}
                   class={[
