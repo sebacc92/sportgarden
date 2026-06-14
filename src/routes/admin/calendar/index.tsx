@@ -855,6 +855,7 @@ export const useCalendarData = routeLoader$(async (requestEvent) => {
     .from(pitches)
     .select("*")
     .eq("is_active", true)
+    .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
 
   if (pitchesErr) throw pitchesErr;

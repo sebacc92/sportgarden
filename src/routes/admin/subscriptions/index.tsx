@@ -41,7 +41,9 @@ export const useSubscriptionsData = routeLoader$(async (requestEvent) => {
   const { data: allPitches, error: pitchesErr } = await db
     .from(pitches)
     .select("*")
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
 
   if (pitchesErr) throw pitchesErr;
 

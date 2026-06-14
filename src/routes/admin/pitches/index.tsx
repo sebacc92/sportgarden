@@ -26,6 +26,7 @@ export const usePitchesData = routeLoader$(async (requestEvent) => {
       *,
       pricingRules:pitch_pricing_rules(*)
     `)
+    .order("sort_order", { ascending: true })
     .order("name", { ascending: true });
 
   if (error) {

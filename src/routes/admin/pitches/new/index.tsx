@@ -67,6 +67,7 @@ export const useCreatePitchAction = routeAction$(
       image_url: uploadedImageUrl,
       sport: data.sport || "Fútbol",
       surface: data.surface || "Sintético",
+      sort_order: Number(data.sortOrder) || 0,
     });
 
     if (insertErr) throw insertErr;
@@ -99,6 +100,7 @@ export const useCreatePitchAction = routeAction$(
     sport: z.string().optional().default("Fútbol"),
     surface: z.string().optional().default("Sintético"),
     overlaps: z.string().optional(),
+    sortOrder: z.coerce.number().optional().default(0),
   }),
 );
 
@@ -122,6 +124,7 @@ export default component$(() => {
     imageUrl: null as string | null,
     previewUrl: null as string | null,
     overlaps: [] as string[],
+    sortOrder: 0,
   });
 
   const handleFileChange = $(async (event: Event) => {
@@ -266,6 +269,27 @@ export default component$(() => {
                   }
                   required
                   placeholder="Ej: Cancha 1 (Sintético)"
+                  class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 font-bold text-slate-800 transition-all placeholder:text-slate-400 focus:border-transparent focus:ring-2 focus:ring-slate-800 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label class="mb-2 block text-xs font-black tracking-widest text-slate-400 uppercase">
+                  Orden de Visualización
+                </label>
+                <input
+                  type="number"
+                  name="sortOrder"
+                  value={formState.value.sortOrder}
+                  onChange$={(e) =>
+                    (formState.value = {
+                      ...formState.value,
+                      sortOrder: Number((e.target as HTMLInputElement).value) || 0,
+                    })
+                  }
+                  required
+                  min="0"
+                  step="1"
+                  placeholder="Ej: 1"
                   class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 font-bold text-slate-800 transition-all placeholder:text-slate-400 focus:border-transparent focus:ring-2 focus:ring-slate-800 focus:outline-none"
                 />
               </div>

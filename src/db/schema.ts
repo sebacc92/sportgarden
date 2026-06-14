@@ -101,6 +101,7 @@ export interface Pitch {
   imageUrl: string | null;
   sport: string;
   surface: string;
+  sortOrder: number;
 }
 
 export interface PitchOverlap {

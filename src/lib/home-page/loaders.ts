@@ -11,7 +11,9 @@ export const usePitchesLoader = routeLoader$(async (requestEvent) => {
       *,
       pricingRules:pitch_pricing_rules(*)
     `)
-    .eq("is_active", true);
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
 
   if (pitchesErr) {
     throw new Error(pitchesErr.message);
