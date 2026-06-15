@@ -342,7 +342,7 @@ export const PitchesGrid = component$<PitchesGridProps>(
               filter={filter.value}
               onSlotClick$={
                 onReserveWithTime$ ??
-                $((pitchId: string, _dateStr: string, _time: string) => onReserve(pitchId))
+                $((pitchId: string) => onReserve(pitchId))
               }
             />
           </div>
