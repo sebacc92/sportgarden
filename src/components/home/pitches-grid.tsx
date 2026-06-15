@@ -9,7 +9,7 @@ export type PitchRow = Pitch;
 type PitchesGridProps = {
   pitches: PitchRow[];
   onReserve: QRL<(pitchId: string) => void>;
-  onReserveWithTime$?: QRL<(pitchId: string, dateStr: string, time: string) => void>;
+  onReserveWithTime$?: QRL<(pitchId: string, dateStr: string, time: string, durationMins?: number) => void>;
   theme?: "light" | "dark";
   operatingHours?: any[];
   holidays?: any[];

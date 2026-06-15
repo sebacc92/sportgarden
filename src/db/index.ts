@@ -53,7 +53,7 @@ export function camelize<T = any>(obj: any): T {
     const n: any = {};
     for (const k of Object.keys(obj)) {
       const camelKey = k.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
-      n[camelKey] = obj[k];
+      n[camelKey] = camelize(obj[k]);
     }
     return n as T;
   }

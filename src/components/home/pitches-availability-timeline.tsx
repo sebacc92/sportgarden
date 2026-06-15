@@ -8,10 +8,18 @@ import {
 } from "@builder.io/qwik";
 import type { QRL } from "@builder.io/qwik";
 import { getAllPitchesBookings } from "~/lib/home-page/loaders";
+import { calculateProportionalPrice } from "~/utils/pricing";
 
 const SLOT_MIN = 30;
 const SLOT_PX = 72;
 const PITCH_COL_W = 144;
+
+type PricingRule = {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  price: number;
+};
 
 type Pitch = {
   id: string;
@@ -19,6 +27,7 @@ type Pitch = {
   type: string;
   isCovered: boolean;
   pricePerHour?: number;
+  pricingRules?: PricingRule[];
 };
 
 type OperatingHour = {
@@ -35,7 +44,7 @@ type Props = {
   holidays?: { date: string; name: string }[];
   theme?: "light" | "dark";
   filter: "ALL" | "COVERED" | "UNCOVERED";
-  onSlotClick$: QRL<(pitchId: string, dateStr: string, time: string) => void>;
+  onSlotClick$: QRL<(pitchId: string, dateStr: string, time: string, durationMins?: number) => void>;
 };
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -71,6 +80,29 @@ function dateLabel(dateStr: string): string {
   if (dateStr === today) return `Hoy · ${short}`;
   if (dateStr === tomorrow) return `Mañana · ${short}`;
   return short;
+}
+
+function durationLabel(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+function minHourlyPriceForDay(
+  dateStr: string,
+  basePrice: number,
+  rules: PricingRule[] | undefined,
+  holidayDates: string[],
+): number {
+  if (!rules || rules.length === 0) return basePrice;
+  const [yyyy, mm, dd] = dateStr.split("-").map(Number);
+  const d = new Date(yyyy, mm - 1, dd);
+  const dayOfWeek = holidayDates.includes(dateStr) ? 7 : d.getDay();
+  const dayRules = rules.filter((r) => r.dayOfWeek === dayOfWeek);
+  if (dayRules.length === 0) return basePrice;
+  return Math.min(basePrice, ...dayRules.map((r) => r.price));
 }
 
 const DAY_ABBR = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -117,8 +149,20 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
   const isLoading = useSignal(true);
   const nowMinutes = useSignal(0);
   const selectedMobilePitch = useSignal(props.pitches[0]?.id || "");
+  const scrollContainerRef = useSignal<Element>();
+
+  // Drag state for the desktop gantt
+  const dragState = useSignal<{
+    pitchId: string;
+    startIdx: number;
+    endIdx: number;
+  } | null>(null);
 
   const isLight = props.theme !== "dark";
+
+  const holidayDates = useComputed$(() =>
+    (props.holidays || []).map((h) => h.date)
+  );
 
   const schedule = useComputed$(() => {
     const dateStr = selectedDate.value;
@@ -163,7 +207,7 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
   });
 
   // eslint-disable-next-line qwik/no-use-visible-task
-  useVisibleTask$(({ track }) => {
+  useVisibleTask$(({ track, cleanup }) => {
     const date = track(() => selectedDate.value);
     isLoading.value = true;
     getAllPitchesBookings(date).then((data) => {
@@ -177,7 +221,58 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
     };
     update();
     const interval = setInterval(update, 60_000);
-    return () => clearInterval(interval);
+    cleanup(() => clearInterval(interval));
+  });
+
+  // Auto-scroll to current time on today, or to start for future dates
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ track }) => {
+    track(() => isLoading.value);
+    track(() => selectedDate.value);
+    if (isLoading.value) return;
+
+    const container = scrollContainerRef.value as HTMLElement | undefined;
+    if (!container) return;
+
+    if (selectedDate.value !== todayStr()) {
+      container.scrollLeft = 0;
+      return;
+    }
+
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const openMin = timeToMin(
+      (props.operatingHours || []).find((h) => {
+        const isHoliday = (props.holidays || []).some((hol) => hol.date === selectedDate.value);
+        const [yr, mo, dy] = selectedDate.value.split("-").map(Number);
+        const dow = isHoliday ? 7 : new Date(yr, mo - 1, dy).getDay();
+        return h.day === dow;
+      })?.openTime || "08:00",
+    );
+
+    // Scroll so that ~1 hour before now is at the left edge
+    const nowOffsetPx = ((nowMin - openMin) / SLOT_MIN) * SLOT_PX;
+    container.scrollLeft = Math.max(0, nowOffsetPx - SLOT_PX * 2);
+  });
+
+  // Global mouseup → finalize drag and open booking modal
+  // eslint-disable-next-line qwik/no-use-visible-task
+  useVisibleTask$(({ cleanup }) => {
+    const handleMouseUp = () => {
+      const drag = dragState.value;
+      if (!drag) return;
+      const minIdx = Math.min(drag.startIdx, drag.endIdx);
+      const maxIdx = Math.max(drag.startIdx, drag.endIdx);
+      // Single click = 1 slot = default 60 min; drag = exact duration
+      const durationMins = minIdx === maxIdx ? 60 : (maxIdx - minIdx + 1) * SLOT_MIN;
+      const startSlot = schedule.value.slots[minIdx];
+      if (startSlot) {
+        props.onSlotClick$(drag.pitchId, selectedDate.value, startSlot.time, durationMins);
+      }
+      dragState.value = null;
+    };
+    window.addEventListener("mouseup", handleMouseUp);
+    cleanup(() => window.removeEventListener("mouseup", handleMouseUp));
   });
 
   const navigateDate = $((dir: 1 | -1) => {
@@ -194,25 +289,19 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
   });
 
   const isToday = useComputed$(() => selectedDate.value === todayStr());
+  const timelineWidth = useComputed$(() => schedule.value.slots.length * SLOT_PX);
 
-  const timelineWidth = useComputed$(
-    () => schedule.value.slots.length * SLOT_PX,
-  );
-
-  // Mobile: only hourly slots (every 60 min) for a cleaner grid
+  // Mobile: hourly slots only
   const mobileSlots = useComputed$(() =>
     schedule.value.slots.filter((s) => s.minutes % 60 === 0),
   );
-
   const mobilePitchBookings = useComputed$(
     () => bookingsMap.value[selectedMobilePitch.value] || [],
   );
-
   const mobilePitch = useComputed$(() =>
     filteredPitches.value.find((p) => p.id === selectedMobilePitch.value),
   );
 
-  // Precomputed 7-day strip
   const dateStrip = Array.from({ length: 7 }, (_, i) => {
     const s = todayStr(i);
     const [y, mo, d] = s.split("-").map(Number);
@@ -228,7 +317,7 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
           ═══════════════════════════════════════════════════════════ */}
       <div class="block md:hidden">
 
-        {/* Date strip — horizontal scroll */}
+        {/* Date strip */}
         <div class="overflow-x-auto border-b border-slate-100">
           <div class="flex gap-2 px-4 py-3" style="min-width: max-content">
             {dateStrip.map(({ dateStr, dayAbbr, day, monthAbbr }) => {
@@ -280,7 +369,6 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
           </div>
         )}
 
-        {/* Closed */}
         {schedule.value.isClosed && (
           <div class="flex flex-col items-center justify-center gap-2 py-14 text-slate-400">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -290,7 +378,6 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
           </div>
         )}
 
-        {/* Loading */}
         {!schedule.value.isClosed && isLoading.value && (
           <div class="flex items-center justify-center gap-2 py-14 text-slate-400">
             <svg class="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -300,16 +387,12 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
           </div>
         )}
 
-        {/* Time slots grid */}
         {!schedule.value.isClosed && !isLoading.value && filteredPitches.value.length === 0 && (
-          <div class="py-12 text-center text-sm text-slate-400">
-            No hay canchas con ese filtro.
-          </div>
+          <div class="py-12 text-center text-sm text-slate-400">No hay canchas con ese filtro.</div>
         )}
 
         {!schedule.value.isClosed && !isLoading.value && filteredPitches.value.length > 0 && (
           <div class="p-4">
-            {/* Pitch info bar */}
             {mobilePitch.value && (
               <div class="mb-4 flex items-center justify-between">
                 <div>
@@ -323,7 +406,12 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
                   <div class="text-right">
                     <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Desde</p>
                     <p class="text-lg font-black text-slate-900">
-                      ${mobilePitch.value.pricePerHour.toLocaleString("es-AR")}
+                      ${minHourlyPriceForDay(
+                        selectedDate.value,
+                        mobilePitch.value.pricePerHour,
+                        mobilePitch.value.pricingRules,
+                        holidayDates.value,
+                      ).toLocaleString("es-AR")}
                       <span class="text-xs font-semibold text-slate-400">/h</span>
                     </p>
                   </div>
@@ -331,7 +419,6 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
               </div>
             )}
 
-            {/* Slot buttons */}
             <div class="grid grid-cols-3 gap-2">
               {mobileSlots.value.map((slot) => {
                 const booked = slotBookedForDuration(mobilePitchBookings.value, selectedDate.value, slot.time, 60);
@@ -343,13 +430,7 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
                     disabled={!available}
                     onClick$={
                       available
-                        ? $(() =>
-                            props.onSlotClick$(
-                              selectedMobilePitch.value,
-                              selectedDate.value,
-                              slot.time,
-                            ),
-                          )
+                        ? $(() => props.onSlotClick$(selectedMobilePitch.value, selectedDate.value, slot.time, 60))
                         : undefined
                     }
                     class={[
@@ -367,7 +448,6 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
               })}
             </div>
 
-            {/* Legend */}
             <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-3">
               <span class="flex items-center gap-1.5 text-xs text-slate-400">
                 <span class="inline-block h-3 w-5 rounded-sm bg-slate-100" />
@@ -383,7 +463,7 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
       </div>
 
       {/* ═══════════════════════════════════════════════════════════
-          DESKTOP GANTT  (≥ md)
+          DESKTOP GANTT  (≥ md) — con drag para seleccionar duración
           ═══════════════════════════════════════════════════════════ */}
       <div class="hidden md:block">
 
@@ -410,14 +490,24 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
           </button>
 
-          <span
-            class={[
-              "text-sm font-bold tracking-wide",
-              isLight ? "text-slate-800" : "text-white",
-            ]}
-          >
-            {dateLabel(selectedDate.value)}
-          </span>
+          <div class="flex flex-col items-center gap-0.5">
+            <span class={["text-sm font-bold tracking-wide", isLight ? "text-slate-800" : "text-white"]}>
+              {dateLabel(selectedDate.value)}
+            </span>
+            {!dragState.value && (
+              <span class="text-[11px] text-slate-400">Click para reservar · Arrastrá para elegir duración</span>
+            )}
+            {dragState.value && (() => {
+              const minI = Math.min(dragState.value.startIdx, dragState.value.endIdx);
+              const maxI = Math.max(dragState.value.startIdx, dragState.value.endIdx);
+              const dur = minI === maxI ? 60 : (maxI - minI + 1) * SLOT_MIN;
+              return (
+                <span class="text-[11px] font-bold text-emerald-600">
+                  Seleccionando {durationLabel(dur)} — soltá para reservar
+                </span>
+              );
+            })()}
+          </div>
 
           <button
             onClick$={() => navigateDate(1)}
@@ -454,7 +544,10 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
 
         {/* Timeline */}
         {!schedule.value.isClosed && !isLoading.value && (
-          <div class="overflow-x-auto">
+          <div
+            ref={scrollContainerRef}
+            class={dragState.value ? "overflow-x-auto select-none" : "overflow-x-auto"}
+          >
             <div style={`min-width: ${PITCH_COL_W + timelineWidth.value + 1}px`}>
               {/* Hour labels header */}
               <div class="flex border-b border-slate-100">
@@ -478,12 +571,17 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
 
               {/* Pitch rows */}
               {filteredPitches.value.length === 0 ? (
-                <div class="py-12 text-center text-sm text-slate-400">
-                  No hay canchas con ese filtro.
-                </div>
+                <div class="py-12 text-center text-sm text-slate-400">No hay canchas con ese filtro.</div>
               ) : (
                 filteredPitches.value.map((pitch, rowIdx) => {
                   const bookedSlots = bookingsMap.value[pitch.id] || [];
+
+                  // Compute drag bounds for this pitch row
+                  const drag = dragState.value;
+                  const dragMinI = drag && drag.pitchId === pitch.id ? Math.min(drag.startIdx, drag.endIdx) : -1;
+                  const dragMaxI = drag && drag.pitchId === pitch.id ? Math.max(drag.startIdx, drag.endIdx) : -1;
+                  const isDraggingThisRow = dragMinI >= 0;
+
                   return (
                     <div
                       key={pitch.id}
@@ -497,23 +595,15 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
                       <div
                         class={[
                           "sticky left-0 z-10 flex shrink-0 flex-col justify-center border-r px-4 py-3",
-                          isLight
-                            ? "border-slate-100 bg-inherit"
-                            : "border-white/5 bg-slate-950",
+                          isLight ? "border-slate-100 bg-inherit" : "border-white/5 bg-slate-950",
                         ]}
                         style={`width: ${PITCH_COL_W}px`}
                       >
-                        <span
-                          class={[
-                            "text-sm font-black leading-tight",
-                            isLight ? "text-slate-800" : "text-white",
-                          ]}
-                        >
+                        <span class={["text-sm font-black leading-tight", isLight ? "text-slate-800" : "text-white"]}>
                           {pitch.name}
                         </span>
                         <span class="text-[11px] font-semibold text-slate-400">
-                          {pitch.type}
-                          {pitch.isCovered ? " · Techada" : ""}
+                          {pitch.type}{pitch.isCovered ? " · Techada" : ""}
                         </span>
                       </div>
 
@@ -522,7 +612,9 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
                         {schedule.value.slots.map((slot, si) => {
                           const booked = slotBooked(bookedSlots, selectedDate.value, slot.time);
                           const past = slotPast(selectedDate.value, slot.time);
+                          const available = !booked && !past;
                           const isHourBoundary = si % 2 === 0;
+                          const inDragRange = isDraggingThisRow && si >= dragMinI && si <= dragMaxI;
 
                           return (
                             <div
@@ -530,51 +622,81 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
                               class={[
                                 "group relative shrink-0 transition-colors",
                                 isHourBoundary
-                                  ? isLight
-                                    ? "border-l border-slate-200"
-                                    : "border-l border-white/10"
-                                  : isLight
-                                    ? "border-l border-slate-100"
-                                    : "border-l border-white/5",
-                                booked
-                                  ? "cursor-default bg-slate-200"
-                                  : past
-                                    ? "cursor-not-allowed bg-slate-100"
-                                    : "cursor-pointer hover:bg-emerald-50 active:bg-emerald-100",
+                                  ? isLight ? "border-l border-slate-200" : "border-l border-white/10"
+                                  : isLight ? "border-l border-slate-100" : "border-l border-white/5",
+                                inDragRange
+                                  ? "cursor-crosshair bg-emerald-200"
+                                  : booked
+                                    ? "cursor-default bg-slate-200"
+                                    : past
+                                      ? "cursor-not-allowed bg-slate-100"
+                                      : available
+                                        ? "cursor-crosshair hover:bg-emerald-50 active:bg-emerald-100"
+                                        : "",
                               ]}
                               style={`width: ${SLOT_PX}px; height: 52px`}
                               title={
-                                booked
-                                  ? "Ocupado"
-                                  : past
-                                    ? "Horario pasado"
-                                    : `Reservar ${pitch.name} a las ${slot.time}`
+                                inDragRange
+                                  ? undefined
+                                  : booked
+                                    ? "Ocupado"
+                                    : past
+                                      ? "Horario pasado"
+                                      : `Reservar ${pitch.name} a las ${slot.time} — arrastrá para elegir duración`
                               }
-                              onClick$={
-                                !booked && !past
-                                  ? $(() =>
-                                      props.onSlotClick$(
-                                        pitch.id,
-                                        selectedDate.value,
-                                        slot.time,
-                                      ),
-                                    )
+                              onMouseDown$={
+                                available
+                                  ? $(() => {
+                                      dragState.value = { pitchId: pitch.id, startIdx: si, endIdx: si };
+                                    })
                                   : undefined
                               }
+                              onMouseEnter$={$(() => {
+                                if (dragState.value && dragState.value.pitchId === pitch.id) {
+                                  dragState.value = { ...dragState.value, endIdx: si };
+                                }
+                              })}
                             >
+                              {/* "Ocupado" label */}
                               {booked && si % 2 === 0 && (
                                 <span class="pointer-events-none absolute inset-0 hidden items-center justify-center text-[10px] font-bold text-slate-400 sm:flex">
                                   Ocupado
                                 </span>
                               )}
-                              {!booked && !past && pitch.pricePerHour && (
+                              {/* Price hint on hover */}
+                              {!booked && !past && !inDragRange && pitch.pricePerHour && (
                                 <span class="pointer-events-none absolute inset-0 hidden items-center justify-center text-[10px] font-black text-emerald-600 opacity-0 transition-opacity group-hover:opacity-100 sm:flex">
-                                  ${Math.round(pitch.pricePerHour / 2).toLocaleString("es-AR")}
+                                  ${calculateProportionalPrice(
+                                    selectedDate.value,
+                                    slot.time,
+                                    SLOT_MIN,
+                                    pitch.pricePerHour,
+                                    pitch.pricingRules || [],
+                                    holidayDates.value,
+                                  ).toLocaleString("es-AR")}
                                 </span>
                               )}
                             </div>
                           );
                         })}
+
+                        {/* Drag duration badge */}
+                        {isDraggingThisRow && (() => {
+                          const rawDur = (dragMaxI - dragMinI + 1) * SLOT_MIN;
+                          const dur = dragMinI === dragMaxI ? 60 : rawDur;
+                          const leftPx = dragMinI * SLOT_PX;
+                          const widthPx = (dragMaxI - dragMinI + 1) * SLOT_PX;
+                          return (
+                            <div
+                              class="pointer-events-none absolute inset-y-0 z-30 flex items-center justify-center"
+                              style={`left: ${leftPx}px; width: ${widthPx}px`}
+                            >
+                              <span class="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[12px] font-black text-white shadow-lg ring-2 ring-white">
+                                {durationLabel(dur)}
+                              </span>
+                            </div>
+                          );
+                        })()}
 
                         {/* Current time indicator */}
                         {isToday.value && (() => {
@@ -608,7 +730,11 @@ export const PitchesAvailabilityTimeline = component$<Props>((props) => {
             </span>
             <span class="flex items-center gap-1.5 text-xs text-slate-500">
               <span class="inline-block h-3 w-5 rounded-sm border border-emerald-200 bg-emerald-50" />
-              Disponible · Hacé click para reservar
+              Disponible — click o arrastrá para elegir duración
+            </span>
+            <span class="flex items-center gap-1.5 text-xs text-slate-500">
+              <span class="inline-block h-3 w-5 rounded-sm bg-emerald-200" />
+              Seleccionado
             </span>
             {isToday.value && (
               <span class="flex items-center gap-1.5 text-xs text-slate-500">

@@ -1,4 +1,4 @@
-import { component$, useSignal, useTask$ } from "@builder.io/qwik";
+import { component$, useSignal, useTask$, useVisibleTask$ } from "@builder.io/qwik";
 import {
   routeLoader$,
   routeAction$,
@@ -803,6 +803,18 @@ export default component$(() => {
   // Confirmation modal state (dar de baja / reactivar)
   const isConfirmModalOpen = useSignal(false);
   const pendingToggleSub = useSignal<any>(null);
+  const confirmActionType = useSignal<"deactivate" | "reactivate">("deactivate");
+  // Monotonic token: incremented on click after data is set. A visible task
+  // (runs AFTER the content render) flips the modal open, so the dialog never
+  // opens before its content is in the DOM (avoids the first-open QRL race flash).
+  const confirmOpenToken = useSignal(0);
+
+  useVisibleTask$(({ track }) => {
+    track(() => confirmOpenToken.value);
+    if (confirmOpenToken.value > 0) {
+      isConfirmModalOpen.value = true;
+    }
+  });
 
   // Delete modal state
   const isDeleteModalOpen = useSignal(false);
@@ -867,7 +879,6 @@ export default component$(() => {
     const success = track(() => toggleSubAction.value?.success);
     if (success) {
       isConfirmModalOpen.value = false;
-      pendingToggleSub.value = null;
     }
   });
 
@@ -1211,8 +1222,9 @@ export default component$(() => {
                                   look="secondary"
                                   type="button"
                                   onClick$={() => {
+                                    confirmActionType.value = "deactivate";
                                     pendingToggleSub.value = sub;
-                                    isConfirmModalOpen.value = true;
+                                    confirmOpenToken.value++;
                                   }}
                                   class="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold tracking-wide text-red-600 hover:bg-red-100"
                                 >
@@ -1225,8 +1237,9 @@ export default component$(() => {
                                   look="primary"
                                   type="button"
                                   onClick$={() => {
+                                    confirmActionType.value = "reactivate";
                                     pendingToggleSub.value = sub;
-                                    isConfirmModalOpen.value = true;
+                                    confirmOpenToken.value++;
                                   }}
                                   class="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold tracking-wide text-white hover:bg-emerald-600"
                                 >
@@ -1263,9 +1276,9 @@ export default component$(() => {
           <div class="p-6">
             <div class="mb-5 flex items-start gap-4">
               <div
-                class={`flex-shrink-0 rounded-xl p-3 ${pendingToggleSub.value?.isActive ? "bg-red-100" : "bg-emerald-100"}`}
+                class={`flex-shrink-0 rounded-xl p-3 ${confirmActionType.value === "deactivate" ? "bg-red-100" : "bg-emerald-100"}`}
               >
-                {pendingToggleSub.value?.isActive ? (
+                {confirmActionType.value === "deactivate" ? (
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
                     width="22"
@@ -1301,12 +1314,12 @@ export default component$(() => {
               </div>
               <div>
                 <h3 class="text-lg font-black text-slate-800">
-                  {pendingToggleSub.value?.isActive
+                  {confirmActionType.value === "deactivate"
                     ? "¿Dar de baja el abono?"
                     : "¿Reactivar el abono?"}
                 </h3>
                 <p class="mt-1 text-sm text-slate-500">
-                  {pendingToggleSub.value?.isActive
+                  {confirmActionType.value === "deactivate"
                     ? `Se cancelarán las reservas futuras pendientes de pago de este abono${
                         data.value.stats[pendingToggleSub.value?.id]
                           ?.futureCount != null
@@ -1347,7 +1360,6 @@ export default component$(() => {
                   look="ghost"
                   onClick$={() => {
                     isConfirmModalOpen.value = false;
-                    pendingToggleSub.value = null;
                   }}
                   class="flex-1 rounded-xl border border-slate-200 py-2.5 font-bold text-slate-600 hover:bg-slate-50"
                 >
@@ -1356,11 +1368,11 @@ export default component$(() => {
                 <Button
                   type="submit"
                   disabled={toggleSubAction.isRunning}
-                  class={`flex-1 rounded-xl py-2.5 font-bold text-white ${pendingToggleSub.value?.isActive ? "bg-red-500 hover:bg-red-600" : "bg-emerald-500 hover:bg-emerald-600"}`}
+                  class={`flex-1 rounded-xl py-2.5 font-bold text-white ${confirmActionType.value === "deactivate" ? "bg-red-500 hover:bg-red-600" : "bg-emerald-500 hover:bg-emerald-600"}`}
                 >
                   {toggleSubAction.isRunning
                     ? "Procesando..."
-                    : pendingToggleSub.value?.isActive
+                    : confirmActionType.value === "deactivate"
                       ? "Sí, dar de baja"
                       : "Sí, reactivar"}
                 </Button>

@@ -40,6 +40,7 @@ export type HomeBookingModalProps = {
   confirmarPagoPaywayAction: any;
   initialDate?: Signal<string>;
   initialTime?: Signal<string>;
+  initialDuration?: Signal<string>;
 };
 
 export const isWithinOperatingHoursHelper = (
@@ -157,6 +158,14 @@ export const isSlotDisabledHelper = (
   });
 };
 
+function normalizeArgPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("549") && digits.length >= 12) return digits;
+  if (digits.startsWith("54")) return "549" + digits.slice(2);
+  if (digits.startsWith("0")) return "549" + digits.slice(1);
+  return digits ? "549" + digits : digits;
+}
+
 export const isTransfer = (method: string | undefined | null) => {
   if (!method) return false;
   const m = method.toUpperCase();
@@ -189,6 +198,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     confirmarPagoPaywayAction,
     initialDate,
     initialTime,
+    initialDuration,
   }) => {
     const getLocalDateString = (offset = 0) => {
       const d = new Date();
@@ -271,10 +281,14 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     });
 
     const nextStep = $(() => {
-      if (currentStep.value < 3) currentStep.value++;
+      if (currentStep.value >= 3) return;
+      // Logged users don't need the contact step
+      currentStep.value = user && currentStep.value === 1 ? 3 : currentStep.value + 1;
     });
     const prevStep = $(() => {
-      if (currentStep.value > 1) currentStep.value--;
+      if (currentStep.value <= 1) return;
+      // Logged users skip Step 2 when going back from Step 3
+      currentStep.value = user && currentStep.value === 3 ? 1 : currentStep.value - 1;
     });
 
     const selectedPitch = useComputed$(() =>
@@ -306,7 +320,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       ctx.track(() => selectedPitchId.value);
       dateStr.value = initialDate?.value || "";
       timeStr.value = initialTime?.value || "";
-      durationStr.value = "60";
+      durationStr.value = initialDuration?.value || "60";
       occupiedSlots.value = [];
       selectedExtras.value = [];
       showPaywayModal.value = false;
@@ -314,6 +328,13 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
       paywayAmount.value = 0;
       paywayPaymentSuccess.value = false;
       timeLeft.value = 15 * 60;
+      // Skip Step 1 when date+time come pre-filled from the availability grid.
+      // Logged users also skip Step 2 (no contact data to fill).
+      if (initialDate?.value && initialTime?.value) {
+        currentStep.value = user ? 3 : 2;
+      } else {
+        currentStep.value = 1;
+      }
     });
 
     useTask$((ctx) => {
@@ -727,8 +748,8 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                       <div class="grid grid-cols-2 gap-3">
                         {settings?.whatsappNumber && (
                           <a
-                            href={`https://wa.me/${(settings.whatsappNumber || "").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                              `Hola! Envíe una solicitud de reserva por Transferencia:\n- ID Reserva: ${guestAction.value?.bookingId || ""}\n- Nombre: ${guestName.value}\n- Cancha: ${selectedPitch.value?.name || ""}\n- Fecha: ${dateStr.value.split("-").reverse().join("/")}\n- Horario: ${timeStr.value} (${durationStr.value} min)\n- Total: $${dynamicPrice.value}\n\nAdjunto el comprobante de transferencia.`
+                            href={`https://wa.me/${normalizeArgPhone(settings.whatsappNumber || "")}?text=${encodeURIComponent(
+                              `Hola! Envíe una solicitud de reserva por Transferencia:\n- ID Reserva: ${guestAction.value?.bookingId || ""}\n- Nombre: ${guestName.value}\n- Cancha: ${selectedPitch.value?.name || ""}\n- Fecha: ${dateStr.value.split("-").reverse().join("/")}\n- Horario: ${timeStr.value} hs\n- Total: $${dynamicPrice.value}\n\nAdjunto el comprobante de transferencia.`
                             )}`}
                             target="_blank"
                             class="flex items-center justify-center gap-2 rounded-xl border border-[#25D366]/20 bg-[#25D366]/10 py-3 text-xs font-black tracking-wider text-[#4ADE80] uppercase transition-all hover:bg-[#25D366]/20"
@@ -768,7 +789,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                           ¡Solicitud Enviada!
                         </h3>
                         <p class="mt-1 text-xs font-medium text-slate-400">
-                          Te contactaremos pronto para confirmar tu turno.
+                          Tu solicitud fue registrada. Te contactaremos a la brevedad.
                         </p>
                       </div>
 
@@ -779,8 +800,8 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                           </p>
                         </div>
                         <div class="space-y-3 p-4">
-                          <div class="flex items-center gap-3">
-                            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-[10px] font-black text-amber-400">
+                          <div class="flex items-start gap-3">
+                            <div class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-[10px] font-black text-amber-400">
                               1
                             </div>
                             <p class="text-xs font-medium text-slate-300">
@@ -791,65 +812,52 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                               en nuestro sistema.
                             </p>
                           </div>
-                          <div class="flex items-center gap-3">
-                            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#25D366]/10">
-                              <svg
-                                class="h-3 w-3 fill-[#25D366]"
-                                viewBox="0 0 24 24"
-                              >
+                          <div class="flex items-start gap-3">
+                            <div class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#25D366]/10">
+                              <svg class="h-3 w-3 fill-[#25D366]" viewBox="0 0 24 24">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                               </svg>
                             </div>
                             <p class="text-xs font-medium text-slate-300">
-                              Te escribimos por{" "}
-                              <span class="font-bold text-[#4ADE80]">
-                                WhatsApp
-                              </span>{" "}
-                              para coordinar el pago y confirmar.
+                              Nos comunicaremos con vos por{" "}
+                              <span class="font-bold text-[#4ADE80]">WhatsApp</span>{" "}
+                              para coordinar el pago y confirmar tu turno.
                             </p>
                           </div>
-                          <div class="flex items-center gap-3">
-                            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-black text-emerald-400">
+                          <div class="flex items-start gap-3">
+                            <div class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-[10px] font-black text-emerald-400">
                               ✓
                             </div>
                             <p class="text-xs font-medium text-slate-300">
                               ¡Listo! El turno queda{" "}
-                              <span class="font-bold text-emerald-400">
-                                Confirmado
-                              </span>
-                              .
+                              <span class="font-bold text-emerald-400">Confirmado</span>.
                             </p>
                           </div>
                         </div>
+                        {/* Phone confirmation */}
+                        <div class="border-t border-white/5 px-4 py-3">
+                          <p class="text-[10px] font-medium text-slate-500">
+                            Te contactaremos al número que ingresaste:{" "}
+                            <span class="font-black text-slate-300">{guestPhone.value || "—"}</span>
+                            {" "}— si está mal, volvé a solicitar la reserva.
+                          </p>
+                        </div>
                       </div>
 
-                      <div class="grid grid-cols-2 gap-3">
-                        {settings?.whatsappNumber && (
-                          <a
-                            href={`https://wa.me/${settings.whatsappNumber.replace(/[^0-9]/g, "")}?text=${encodeURIComponent("Hola! Acabo de enviar una solicitud de reserva desde la web.")}`}
-                            target="_blank"
-                            class="flex items-center justify-center gap-2 rounded-xl border border-[#25D366]/20 bg-[#25D366]/10 py-3 text-xs font-black tracking-wider text-[#4ADE80] uppercase transition-all hover:bg-[#25D366]/20"
-                          >
-                            <svg
-                              class="h-4 w-4 fill-[#25D366]"
-                              viewBox="0 0 24 24"
-                            >
-                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
-                            </svg>
-                            WhatsApp
-                          </a>
-                        )}
-                        <Button
-                          onClick$={onClose}
-                          look="secondary"
-                          class={[
-                            "rounded-xl border border-white/5 bg-slate-800 py-3 text-xs font-bold tracking-wider text-white uppercase transition-all hover:bg-slate-700",
-                            !settings?.whatsappNumber && "col-span-2",
-                          ]}
+                      {settings?.whatsappNumber && (
+                        <a
+                          href={`https://wa.me/${normalizeArgPhone(settings.whatsappNumber)}?text=${encodeURIComponent(
+                            `Hola! Acabo de enviar una solicitud de reserva:\n- Nombre: ${guestName.value}\n- Cancha: ${selectedPitch.value?.name || ""}\n- Fecha: ${dateStr.value.split("-").reverse().join("/")}\n- Horario: ${timeStr.value} hs\n- Duración: ${Number(durationStr.value) >= 60 ? `${Math.floor(Number(durationStr.value) / 60)}h${Number(durationStr.value) % 60 > 0 ? ` ${Number(durationStr.value) % 60}min` : ""}` : `${durationStr.value}min`}`
+                          )}`}
+                          target="_blank"
+                          class="flex w-full items-center justify-center gap-2 rounded-xl border border-[#25D366]/20 bg-[#25D366]/10 py-3.5 text-xs font-black tracking-wider text-[#4ADE80] uppercase transition-all hover:bg-[#25D366]/20 active:scale-[0.98]"
                         >
-                          Entendido
-                        </Button>
-                      </div>
+                          <svg class="h-4 w-4 fill-[#25D366]" viewBox="0 0 24 24">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.884-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                          </svg>
+                          Escribirnos por WhatsApp
+                        </a>
+                      )}
                     </div>
                   )
                 ) : (
@@ -941,8 +949,8 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                       <div class="grid grid-cols-2 gap-3">
                         {settings?.whatsappNumber && (
                           <a
-                            href={`https://wa.me/${(settings.whatsappNumber || "").replace(/[^0-9]/g, "")}?text=${encodeURIComponent(
-                              `Hola! Realicé la transferencia para mi reserva:\n- ID Reserva: ${userAction.value?.bookingId || ""}\n- Nombre: ${user?.name || ""}\n- Cancha: ${selectedPitch.value?.name || ""}\n- Fecha: ${dateStr.value.split("-").reverse().join("/")}\n- Horario: ${timeStr.value} (${durationStr.value} min)\n- Opción: ${paymentOption.value === "SENA" ? `Seña ($${senaAmount.value})` : `Total ($${dynamicPrice.value})`}\n\nAdjunto el comprobante de transferencia.`
+                            href={`https://wa.me/${normalizeArgPhone(settings.whatsappNumber || "")}?text=${encodeURIComponent(
+                              `Hola! Realicé la transferencia para mi reserva:\n- ID Reserva: ${userAction.value?.bookingId || ""}\n- Nombre: ${user?.name || ""}\n- Cancha: ${selectedPitch.value?.name || ""}\n- Fecha: ${dateStr.value.split("-").reverse().join("/")}\n- Horario: ${timeStr.value} hs\n- Opción: ${paymentOption.value === "SENA" ? `Seña ($${senaAmount.value})` : `Total ($${dynamicPrice.value})`}\n\nAdjunto el comprobante de transferencia.`
                             )}`}
                             target="_blank"
                             class="flex items-center justify-center gap-2 rounded-xl border border-[#25D366]/20 bg-[#25D366]/10 py-3.5 text-xs font-black tracking-wider text-[#4ADE80] uppercase transition-all hover:bg-[#25D366]/20"
@@ -1199,6 +1207,28 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                         currentStep.value !== 1 && "hidden",
                       ]}
                     >
+                      {/* Compact pre-fill banner — shown when data comes from the timeline */}
+                      {dateStr.value && timeStr.value && (
+                        <div class="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-3">
+                          <svg class="h-4 w-4 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <div class="flex-1 min-w-0">
+                            <p class="text-xs font-black text-emerald-300">Horario pre-seleccionado</p>
+                            <p class="text-[11px] font-medium text-slate-400">
+                              {new Date(dateStr.value + "T12:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" })}
+                              {" · "}{timeStr.value} hs · {durationStr.value} min
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick$={() => { dateStr.value = ""; timeStr.value = ""; }}
+                            class="shrink-0 text-[10px] font-bold text-slate-500 underline underline-offset-2 hover:text-slate-300"
+                          >
+                            Editar
+                          </button>
+                        </div>
+                      )}
                       <div class="space-y-4">
                         {/* Date input row */}
                         <div>
@@ -1529,9 +1559,9 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                           type="button"
                           onClick$={nextStep}
                           disabled={!isStep3Enabled.value}
-                          class="hidden lg:flex flex-[2] items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3.5 text-sm font-black tracking-wider text-white uppercase shadow-lg shadow-emerald-500/25 transition-all hover:bg-emerald-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+                          class="hidden lg:flex flex-[2] items-center justify-center gap-2 rounded-xl bg-[#F5F2EB] py-3.5 text-sm font-black tracking-wider text-slate-900 uppercase shadow-lg shadow-[#F5F2EB]/10 transition-all hover:bg-[#EDE9E1] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          Continuar a Pago
+                          {!isStep3Enabled.value && !user ? "Completá tus datos" : "Continuar a Pago"}
                           <svg
                             class="h-4 w-4"
                             fill="none"
@@ -2323,7 +2353,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                       disabled={!timeStr.value || isSubmitDisabled.value}
                       class="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F5F2EB] py-4 text-sm font-black tracking-wider text-slate-900 uppercase shadow-lg shadow-[#F5F2EB]/10 transition-all hover:bg-[#EDE9E1] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      Continuar a Datos
+                      {user ? "Continuar a Pago" : "Continuar a Datos"}
                       <svg
                         class="h-4 w-4"
                         fill="none"
@@ -2390,7 +2420,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                   </span>
                 ) : (
                   <span class="text-[10px] font-bold text-slate-500 uppercase leading-none mb-1">
-                    Paso {currentStep.value} de 3
+                    {currentStep.value === 1 ? "Elegí el horario" : currentStep.value === 2 ? "Tus datos" : "Método de pago"}
                   </span>
                 )}
                 <div class="flex items-baseline gap-1">
@@ -2408,7 +2438,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                     disabled={!timeStr.value || isSubmitDisabled.value}
                     class="w-full h-11 flex items-center justify-center gap-1.5 rounded-xl bg-[#F5F2EB] text-slate-900 text-xs font-black tracking-widest uppercase transition-all shadow-md shadow-[#F5F2EB]/10 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Continuar
+                    {user ? "Ir a Pago" : "Continuar"}
                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
                     </svg>
@@ -2420,9 +2450,9 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
                     type="button"
                     onClick$={nextStep}
                     disabled={!isStep3Enabled.value}
-                    class="w-full h-11 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-500 text-white text-xs font-black tracking-widest uppercase transition-all shadow-md shadow-emerald-500/20 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                    class="w-full h-11 flex items-center justify-center gap-1.5 rounded-xl bg-[#F5F2EB] text-slate-900 text-xs font-black tracking-widest uppercase transition-all shadow-md shadow-[#F5F2EB]/10 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#EDE9E1]"
                   >
-                    Continuar a Pago
+                    {!isStep3Enabled.value && !user ? "Completá nombre y WhatsApp" : "Continuar a Pago"}
                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
                     </svg>

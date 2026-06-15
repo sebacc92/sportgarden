@@ -1,5 +1,5 @@
-import { component$, type Signal, type PropFunction } from "@builder.io/qwik";
-import { Link } from "@builder.io/qwik-city";
+import { component$, useSignal, type Signal, type PropFunction } from "@builder.io/qwik";
+import { Link, useNavigate } from "@builder.io/qwik-city";
 import { cn } from "@qwik-ui/utils";
 import { getWeekName, getMonthName, playNotificationBeep } from "~/routes/admin/calendar/utils";
 
@@ -22,6 +22,9 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
     onViewChange$,
     onNewBooking$,
   } = props;
+
+  const nav = useNavigate();
+  const showDatePicker = useSignal(false);
 
   return (
     <div class="z-10 flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3 shadow-sm">
@@ -59,27 +62,70 @@ export const CalendarToolbar = component$<CalendarToolbarProps>((props) => {
           </svg>
         </Link>
 
-        <div class="min-w-[280px] text-center">
-          {calendarData.view === "day" && (
-            <div class="text-2xl leading-tight font-black text-slate-800 capitalize">
-              {new Date(
-                calendarData.selectedDateStr + "T00:00:00",
-              ).toLocaleDateString("es-ES", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
-            </div>
-          )}
-          {calendarData.view === "week" && (
-            <div class="text-xl leading-tight font-black text-slate-800">
-              {getWeekName(calendarData.startDateStr, calendarData.endDateStr)}
-            </div>
-          )}
-          {calendarData.view === "month" && (
-            <div class="text-xl leading-tight font-black text-slate-800 capitalize">
-              {getMonthName(calendarData.selectedDateStr)}
-            </div>
+        <div class="relative flex min-w-[280px] items-center justify-center gap-2">
+          {showDatePicker.value ? (
+            <input
+              type="date"
+              value={calendarData.selectedDateStr}
+              autoFocus
+              class="rounded-xl border border-emerald-300 bg-white px-3 py-1.5 text-base font-bold text-slate-800 shadow-sm outline-none ring-2 ring-emerald-200 focus:border-emerald-400"
+              onChange$={(e) => {
+                const val = (e.target as HTMLInputElement).value;
+                if (val) {
+                  showDatePicker.value = false;
+                  nav(`?date=${val}&view=${calendarData.view}`);
+                }
+              }}
+              onBlur$={() => { showDatePicker.value = false; }}
+            />
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick$={() => { showDatePicker.value = true; }}
+                class="group flex items-center gap-2 rounded-xl px-2 py-1 transition-colors hover:bg-slate-100"
+                title="Ir a una fecha específica"
+              >
+                {calendarData.view === "day" && (
+                  <span class="text-2xl leading-tight font-black text-slate-800 capitalize">
+                    {new Date(
+                      calendarData.selectedDateStr + "T00:00:00",
+                    ).toLocaleDateString("es-ES", {
+                      weekday: "long",
+                      day: "numeric",
+                      month: "long",
+                    })}
+                  </span>
+                )}
+                {calendarData.view === "week" && (
+                  <span class="text-xl leading-tight font-black text-slate-800">
+                    {getWeekName(calendarData.startDateStr, calendarData.endDateStr)}
+                  </span>
+                )}
+                {calendarData.view === "month" && (
+                  <span class="text-xl leading-tight font-black text-slate-800 capitalize">
+                    {getMonthName(calendarData.selectedDateStr)}
+                  </span>
+                )}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="shrink-0 text-slate-400 transition-colors group-hover:text-slate-600"
+                >
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+              </button>
+            </>
           )}
         </div>
 

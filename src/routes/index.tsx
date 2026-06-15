@@ -138,17 +138,20 @@ export default component$(() => {
   const selectedPitchId = useSignal("");
   const prefilledDate = useSignal("");
   const prefilledTime = useSignal("");
+  const prefilledDuration = useSignal("60");
 
   const openBookingModal = $((pitchId: string) => {
     prefilledDate.value = "";
     prefilledTime.value = "";
+    prefilledDuration.value = "60";
     selectedPitchId.value = pitchId;
     isModalOpen.value = true;
   });
 
-  const openBookingModalWithTime = $((pitchId: string, dateStr: string, time: string) => {
+  const openBookingModalWithTime = $((pitchId: string, dateStr: string, time: string, durationMins?: number) => {
     prefilledDate.value = dateStr;
     prefilledTime.value = time;
+    prefilledDuration.value = String(durationMins || 60);
     selectedPitchId.value = pitchId;
     isModalOpen.value = true;
   });
@@ -237,6 +240,7 @@ export default component$(() => {
         confirmarPagoPaywayAction={confirmarPagoPaywayAction}
         initialDate={prefilledDate}
         initialTime={prefilledTime}
+        initialDuration={prefilledDuration}
       />
 
       <HomeFooter settings={aiSettings.value ?? {}} />

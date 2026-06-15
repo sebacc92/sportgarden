@@ -133,29 +133,43 @@ const STATUS_ACTIVE_STYLE: Record<
 };
 
 const TYPE_CARD: Record<string, string> = {
-  EVENTUAL:
-    "bg-blue-50 border-l-blue-500 border-y-blue-200 border-r-blue-200 text-blue-900 shadow-blue-900/5",
-  FIXED:
-    "bg-emerald-50 border-l-emerald-500 border-y-emerald-200 border-r-emerald-200 text-emerald-900 shadow-emerald-900/5",
-  BIRTHDAY:
-    "bg-violet-50 border-l-violet-500 border-y-violet-200 border-r-violet-200 text-violet-900 shadow-violet-900/5",
-  TOURNAMENT:
-    "bg-pink-50 border-l-pink-500 border-y-pink-200 border-r-pink-200 text-pink-900 shadow-pink-900/5",
-  SCHOOL:
-    "bg-orange-50 border-l-orange-500 border-y-orange-200 border-r-orange-200 text-orange-900 shadow-orange-900/5",
+  EVENTUAL:   "bg-white border-l-blue-500   border-y-blue-100   border-r-blue-100",
+  FIXED:      "bg-white border-l-emerald-500 border-y-emerald-100 border-r-emerald-100",
+  BIRTHDAY:   "bg-white border-l-violet-500  border-y-violet-100  border-r-violet-100",
+  TOURNAMENT: "bg-white border-l-rose-500    border-y-rose-100    border-r-rose-100",
+  SCHOOL:     "bg-white border-l-orange-500  border-y-orange-100  border-r-orange-100",
 };
 
 const STATUS_CARD: Record<string, string> = {
-  PENDING_APPROVAL:
-    "bg-amber-50 border-l-amber-500 border-y-amber-200 border-r-amber-200 text-amber-900",
-  PENDING_PAYMENT:
-    "bg-orange-50 border-l-orange-500 border-y-orange-200 border-r-orange-200 text-orange-900",
-  CONFIRMED:
-    "bg-emerald-50 border-l-emerald-500 border-y-emerald-200 border-r-emerald-200 text-emerald-900",
-  CANCELLED:
-    "bg-red-50 border-l-red-500 border-y-red-200 border-r-red-200 text-red-900",
-  COMPLETED:
-    "bg-slate-50 border-l-slate-500 border-y-slate-200 border-r-slate-200 text-slate-700",
+  PENDING_APPROVAL: "bg-amber-50  border-l-amber-500  border-y-amber-100  border-r-amber-100",
+  PENDING_PAYMENT:  "bg-orange-50 border-l-orange-500 border-y-orange-100 border-r-orange-100",
+  CONFIRMED:        "bg-white     border-l-emerald-500 border-y-emerald-100 border-r-emerald-100",
+  CANCELLED:        "bg-red-50   border-l-red-400     border-y-red-100     border-r-red-100",
+  COMPLETED:        "bg-slate-50  border-l-slate-400   border-y-slate-100  border-r-slate-100",
+};
+
+const TYPE_META: Record<string, { abbr: string; nameColor: string; pillBg: string; pillText: string }> = {
+  EVENTUAL:   { abbr: "EVT",  nameColor: "text-blue-900",    pillBg: "bg-blue-100",    pillText: "text-blue-700" },
+  FIXED:      { abbr: "FIJO", nameColor: "text-emerald-900", pillBg: "bg-emerald-100", pillText: "text-emerald-700" },
+  BIRTHDAY:   { abbr: "CUMP", nameColor: "text-violet-900",  pillBg: "bg-violet-100",  pillText: "text-violet-700" },
+  TOURNAMENT: { abbr: "TORN", nameColor: "text-rose-900",    pillBg: "bg-rose-100",    pillText: "text-rose-700" },
+  SCHOOL:     { abbr: "ESC",  nameColor: "text-orange-900",  pillBg: "bg-orange-100",  pillText: "text-orange-700" },
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  PENDING_APPROVAL: "bg-amber-400 text-white",
+  PENDING_PAYMENT:  "bg-orange-500 text-white",
+  CONFIRMED:        "bg-emerald-100 text-emerald-700",
+  CANCELLED:        "bg-red-100 text-red-700",
+  COMPLETED:        "bg-slate-200 text-slate-600",
+};
+
+const STATUS_LABEL_SHORT: Record<string, string> = {
+  PENDING_APPROVAL: "Pendiente",
+  PENDING_PAYMENT:  "Pend. Pago",
+  CONFIRMED:        "Confirmado",
+  CANCELLED:        "Cancelado",
+  COMPLETED:        "Completado",
 };
 
 const SLOT_MIN_WIDTH_PX = 110;
@@ -633,23 +647,22 @@ export const BookingTimelineView = component$<Props>(
                             const bEnd = eBA.hour * 60 + eBA.minute;
 
                             const timelineStart = startHour * 60;
-                            const left =
-                              ((bStart - timelineStart) / slotMinutes) *
-                              SLOT_MIN_WIDTH_PX;
-                            const width =
-                              ((bEnd - bStart) / slotMinutes) *
-                              SLOT_MIN_WIDTH_PX;
+                            const left = ((bStart - timelineStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
+                            const width = ((bEnd - bStart) / slotMinutes) * SLOT_MIN_WIDTH_PX;
 
                             const name = guest?.name || user?.name || "—";
-
                             const isSubscription = booking.isSubscription;
+                            const typeKey = booking.bookingType || (isSubscription ? "FIXED" : null);
+                            const meta = typeKey ? TYPE_META[typeKey] : null;
+                            const balance = booking.totalPrice - booking.paidAmount;
+                            const cardClass = typeKey
+                              ? TYPE_CARD[typeKey]
+                              : STATUS_CARD[booking.status] || "border-slate-200 bg-white";
 
                             return (
                               <div
                                 key={booking.id}
-                                onClick$={() =>
-                                  onBookingClick$ && onBookingClick$(booking.id)
-                                }
+                                onClick$={() => onBookingClick$ && onBookingClick$(booking.id)}
                                 style={{
                                   left: `${left}px`,
                                   width: `${width}px`,
@@ -657,87 +670,59 @@ export const BookingTimelineView = component$<Props>(
                                   height: "calc(100% - 16px)",
                                 }}
                                 class={[
-                                  "group absolute z-20 flex cursor-pointer flex-col justify-between overflow-hidden rounded-xl border-y border-r border-l-4 px-3 py-2 shadow-sm transition-all hover:z-30 hover:scale-[1.02] hover:shadow-xl",
-                                  booking.bookingType
-                                    ? TYPE_CARD[booking.bookingType]
-                                    : isSubscription
-                                      ? TYPE_CARD["FIXED"]
-                                      : STATUS_CARD[booking.status] ||
-                                        "border-slate-200 bg-white",
+                                  "group absolute z-20 flex cursor-pointer flex-col justify-between overflow-hidden rounded-xl border-y border-r border-l-4 px-2.5 py-2 shadow-sm transition-all hover:z-30 hover:scale-[1.02] hover:shadow-lg",
+                                  cardClass,
                                 ]}
                               >
-                                <div class="flex flex-col gap-0.5">
-                                  <div class="flex items-start justify-between gap-2">
-                                    <span class="truncate text-[13px] leading-tight font-black text-slate-800">
+                                {/* Top: type pill + name + subscription icon */}
+                                <div class="flex items-start justify-between gap-1 min-w-0">
+                                  <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                                    {meta && (
+                                      <span class={["w-max rounded px-1 py-0 text-[8px] font-black tracking-widest uppercase", meta.pillBg, meta.pillText]}>
+                                        {meta.abbr}
+                                      </span>
+                                    )}
+                                    <span class={["truncate text-[12px] leading-tight font-black", meta ? meta.nameColor : "text-slate-800"]}>
                                       {name}
                                     </span>
-                                    {isSubscription && (
-                                      <div
-                                        class="shrink-0 text-slate-500"
-                                        title="Turno Fijo"
-                                      >
-                                        <svg
-                                          xmlns="http://www.w3.org/2000/svg"
-                                          width="12"
-                                          height="12"
-                                          viewBox="0 0 24 24"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          stroke-width="2.5"
-                                          stroke-linecap="round"
-                                          stroke-linejoin="round"
-                                        >
-                                          <path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3M15.5 7.5 14 6" />
-                                          <path d="M21 7V2h-5" />
-                                        </svg>
-                                      </div>
-                                    )}
                                   </div>
-                                  <div class="flex items-center gap-1 text-[10px] font-black tracking-widest text-slate-500 uppercase">
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      width="10"
-                                      height="10"
-                                      viewBox="0 0 24 24"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      stroke-width="3"
-                                      stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                    >
-                                      <circle cx="12" cy="12" r="10" />
-                                      <polyline points="12 6 12 12 16 14" />
-                                    </svg>
-                                    {fmt(booking.startTime)} —{" "}
-                                    {fmt(booking.endTime)}
-                                  </div>
+                                  {isSubscription && (
+                                    <div class="mt-0.5 shrink-0 text-slate-400" title="Turno Fijo">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3M15.5 7.5 14 6" />
+                                        <path d="M21 7V2h-5" />
+                                      </svg>
+                                    </div>
+                                  )}
                                 </div>
 
-                                <div class="mt-auto flex items-end justify-between gap-2 pt-1">
-                                  {(() => {
-                                    const st = ALL_STATUSES.find(
-                                      (s) => s.key === booking.status,
-                                    );
-                                    return st ? (
-                                      <div
-                                        class={[
-                                          "flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-black tracking-widest uppercase",
-                                          st.chip,
-                                        ]}
-                                      >
-                                        <span
-                                          class={[
-                                            "h-1.5 w-1.5 shrink-0 rounded-full",
-                                            st.dot,
-                                          ]}
-                                        />
-                                        {st.label}
-                                      </div>
-                                    ) : null;
-                                  })()}
-                                  <div class="shrink-0 text-right text-xs font-black text-slate-800">
-                                    $
-                                    {booking.totalPrice.toLocaleString("es-AR")}
+                                {/* Time */}
+                                <div class="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                  </svg>
+                                  {fmt(booking.startTime)} — {fmt(booking.endTime)}
+                                </div>
+
+                                {/* Bottom: status badge + price */}
+                                <div class="flex items-center justify-between gap-1">
+                                  <span class={["rounded px-1.5 py-0.5 text-[8px] font-black tracking-wide uppercase whitespace-nowrap", STATUS_BADGE[booking.status] || "bg-slate-100 text-slate-600"]}>
+                                    {STATUS_LABEL_SHORT[booking.status] || booking.status}
+                                  </span>
+                                  <div class="shrink-0 text-right">
+                                    {balance > 0 ? (
+                                      <span class="text-[11px] font-black text-amber-600">
+                                        ${balance.toLocaleString("es-AR")}
+                                        <span class="ml-0.5 text-[8px] font-bold text-slate-400 line-through">
+                                          /{booking.totalPrice.toLocaleString("es-AR")}
+                                        </span>
+                                      </span>
+                                    ) : (
+                                      <span class={["text-[11px] font-black", booking.totalPrice === 0 ? "text-slate-400" : "text-emerald-600"]}>
+                                        ${booking.totalPrice.toLocaleString("es-AR")}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>

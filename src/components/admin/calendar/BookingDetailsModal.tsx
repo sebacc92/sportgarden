@@ -3,6 +3,39 @@ import { Form } from "@builder.io/qwik-city";
 import { Modal, Button } from "~/components/ui";
 import { cn } from "@qwik-ui/utils";
 
+function buildWhatsAppUrl(phone: string, message?: string): string {
+  let digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("549") && digits.length >= 12) {
+    // already correct international format
+  } else if (digits.startsWith("54")) {
+    digits = "549" + digits.slice(2);
+  } else if (digits.startsWith("0")) {
+    digits = "549" + digits.slice(1);
+  } else {
+    digits = "549" + digits;
+  }
+  const base = `https://wa.me/${digits}`;
+  return message ? `${base}?text=${encodeURIComponent(message)}` : base;
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("es-AR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
+
+function fmtTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Argentina/Buenos_Aires",
+  });
+}
+
 interface BookingDetailsModalProps {
   isModalOpen: Signal<boolean>;
   selectedBookingDetails: any;
@@ -151,11 +184,24 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>(
                         "Sin teléfono"}
                     </div>
                   </div>
+                  {(() => {
+                    const phone = selectedBookingDetails.guest?.phone || selectedBookingDetails.user?.phone || "";
+                    const name = selectedBookingDetails.guest?.name || selectedBookingDetails.user?.name || "";
+                    const pitchName = calendarData.pitches.find((p: any) => p.id === selectedBookingDetails.booking.pitchId)?.name || "la cancha";
+                    const startIso = selectedBookingDetails.booking.startTime;
+                    const msg = phone
+                      ? `Hola ${name}! Te escribimos desde Garden Club en relación a tu reserva del ${fmtDate(startIso)} a las ${fmtTime(startIso)} en ${pitchName}.`
+                      : "";
+                    const href = phone ? buildWhatsAppUrl(phone, msg) : "#";
+                    return (
                   <a
-                    href={`https://wa.me/${(selectedBookingDetails.guest?.phone || selectedBookingDetails.user?.phone || "").replace(/\D/g, "")}`}
+                    href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="flex w-full items-center justify-center gap-2 rounded-xl border border-[#25D366]/40 bg-[#25D366]/5 py-2 text-xs font-bold tracking-wider text-[#128C7E] uppercase transition-all hover:bg-[#25D366]/10 active:scale-[0.98]"
+                    class={cn(
+                      "flex w-full items-center justify-center gap-2 rounded-xl border border-[#25D366]/40 bg-[#25D366]/5 py-2 text-xs font-bold tracking-wider text-[#128C7E] uppercase transition-all hover:bg-[#25D366]/10 active:scale-[0.98]",
+                      !phone && "pointer-events-none opacity-40",
+                    )}
                     style="cursor: pointer !important;"
                   >
                     <svg
@@ -167,6 +213,8 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>(
                     </svg>
                     Contactar por WhatsApp
                   </a>
+                    );
+                  })()}
                 </div>
 
                 {/* Cancha & Horario Details */}
@@ -198,23 +246,32 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>(
                     </span>
                     <div>
                       <h4 class="text-base font-black text-slate-800">
-                        {new Date(
-                          selectedBookingDetails.booking.startTime,
-                        ).toLocaleDateString("es-AR", {
+                        {new Date(selectedBookingDetails.booking.startTime).toLocaleDateString("es-AR", {
                           day: "numeric",
                           month: "short",
+                          timeZone: "America/Argentina/Buenos_Aires",
                         })}
                       </h4>
-                      <span class="mt-1 inline-flex items-center text-[10px] font-black tracking-wider text-emerald-600 uppercase">
-                        {new Date(
-                          selectedBookingDetails.booking.startTime,
-                        ).toLocaleTimeString("es-AR", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: false,
-                        })}{" "}
-                        hs
+                      <span class="mt-1 inline-flex items-center gap-1 text-[10px] font-black tracking-wider text-emerald-600 uppercase">
+                        {fmtTime(selectedBookingDetails.booking.startTime)}
+                        {selectedBookingDetails.booking.endTime && (
+                          <> → {fmtTime(selectedBookingDetails.booking.endTime)}</>
+                        )}
+                        {" hs"}
                       </span>
+                      {selectedBookingDetails.booking.endTime && (() => {
+                        const mins = Math.round(
+                          (new Date(selectedBookingDetails.booking.endTime).getTime() -
+                            new Date(selectedBookingDetails.booking.startTime).getTime()) / 60000
+                        );
+                        const h = Math.floor(mins / 60);
+                        const m = mins % 60;
+                        return (
+                          <span class="mt-0.5 block text-[9px] font-bold text-slate-400">
+                            {h > 0 ? `${h}h` : ""}{m > 0 ? ` ${m}min` : ""}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

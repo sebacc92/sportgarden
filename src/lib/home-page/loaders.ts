@@ -114,16 +114,20 @@ export const getAllPitchesBookings = server$(async function (
   const startOfDay = new Date(`${dateStr}T00:00:00`);
   const endOfDay = new Date(`${dateStr}T23:59:59`);
 
-  const [{ data: bookingsData, error: bookingsErr }, { data: overlapsData, error: overlapsErr }] =
-    await Promise.all([
-      db
-        .from(bookings)
-        .select("pitch_id, start_time, end_time")
-        .gte("start_time", startOfDay.toISOString())
-        .lt("start_time", endOfDay.toISOString())
-        .in("status", ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]),
-      db.from(pitchOverlaps).select("pitch_id, overlap_pitch_id"),
-    ]);
+  const [
+    { data: bookingsData, error: bookingsErr },
+    { data: overlapsData, error: overlapsErr },
+    { data: settingsData },
+  ] = await Promise.all([
+    db
+      .from(bookings)
+      .select("pitch_id, start_time, end_time")
+      .gte("start_time", startOfDay.toISOString())
+      .lt("start_time", endOfDay.toISOString())
+      .in("status", ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]),
+    db.from(pitchOverlaps).select("pitch_id, overlap_pitch_id"),
+    db.from(siteSettings).select("school_categories").eq("id", 1).maybeSingle(),
+  ]);
 
   if (bookingsErr) throw new Error(bookingsErr.message);
   if (overlapsErr) throw new Error(overlapsErr.message);
@@ -148,6 +152,28 @@ export const getAllPitchesBookings = server$(async function (
     for (const o of overlaps) {
       if (o.pitchId === booking.pitchId) addSlot(o.overlapPitchId, slot);
       if (o.overlapPitchId === booking.pitchId) addSlot(o.pitchId, slot);
+    }
+  }
+
+  // Inject school schedule slots (stored in site_settings, not in bookings table)
+  const schoolCategories: any[] = settingsData?.school_categories || [];
+  if (schoolCategories.length > 0) {
+    const [yyyy, mm, dd] = dateStr.split("-").map(Number);
+    const dayOfWeek = new Date(Date.UTC(yyyy, mm - 1, dd)).getUTCDay();
+
+    for (const cat of schoolCategories) {
+      for (const sched of cat.schedules || []) {
+        if (sched.day === dayOfWeek && sched.pitchId && sched.startTime && sched.endTime) {
+          const startTime = new Date(`${dateStr}T${String(sched.startTime).padStart(5, "0")}:00-03:00`).toISOString();
+          const endTime = new Date(`${dateStr}T${String(sched.endTime).padStart(5, "0")}:00-03:00`).toISOString();
+          const slot = { startTime, endTime };
+          addSlot(sched.pitchId, slot);
+          for (const o of overlaps) {
+            if (o.pitchId === sched.pitchId) addSlot(o.overlapPitchId, slot);
+            if (o.overlapPitchId === sched.pitchId) addSlot(o.pitchId, slot);
+          }
+        }
+      }
     }
   }
 
