@@ -1,14 +1,29 @@
-import { component$, $, useSignal } from "@builder.io/qwik";
+import { component$, $, useSignal, useTask$ } from "@builder.io/qwik";
 import {
   routeAction$,
   routeLoader$,
   zod$,
   z,
   useNavigate,
+  server$,
 } from "@builder.io/qwik-city";
 import { getDB, camelize } from "~/db";
 import { pitches, siteSettings } from "~/db/schema";
 import { Button } from "~/components/ui";
+
+export const updatePitchesOrder = server$(async function (orderedIds: string[]) {
+  const db = getDB(this);
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await db
+      .from("pitches")
+      .update({ sort_order: i })
+      .eq("id", orderedIds[i]);
+    if (error) {
+      console.error(`Error updating pitch order for ${orderedIds[i]}:`, error.message);
+    }
+  }
+  return { success: true };
+});
 
 // Import modular components
 import { GlobalExtraServicesModal } from "~/components/admin/pitches/GlobalExtraServicesModal";
@@ -32,6 +47,19 @@ export const usePitchesData = routeLoader$(async (requestEvent) => {
   if (error) {
     throw new Error(error.message);
   }
+
+  // Auto-complete sort_order if any is null
+  const needsInitialization = pitchesData.some((p: any) => p.sort_order === null);
+  if (needsInitialization && pitchesData.length > 0) {
+    for (let i = 0; i < pitchesData.length; i++) {
+      await db
+        .from("pitches")
+        .update({ sort_order: i })
+        .eq("id", pitchesData[i].id);
+      pitchesData[i].sort_order = i;
+    }
+  }
+
   return camelize<any[]>(pitchesData);
 });
 
@@ -137,6 +165,50 @@ export default component$(() => {
   const isExtrasModalOpen = useSignal(false);
   const viewMode = useSignal<"grid" | "list">("grid");
 
+  const listPitches = useSignal<any[]>([]);
+  const draggedIndex = useSignal<number | null>(null);
+  const isUpdatingOrder = useSignal(false);
+
+  useTask$(({ track }) => {
+    track(() => pitchesData.value);
+    listPitches.value = [...pitchesData.value];
+  });
+
+  const handleDragStart = $((index: number) => {
+    draggedIndex.value = index;
+  });
+
+  const handleDragOver = $((event: DragEvent) => {
+    event.preventDefault();
+  });
+
+  const handleDrop = $(async (targetIndex: number) => {
+    if (draggedIndex.value === null || draggedIndex.value === targetIndex) return;
+
+    const items = [...listPitches.value];
+    const draggedItem = items[draggedIndex.value];
+    
+    // Remove the dragged item
+    items.splice(draggedIndex.value, 1);
+    // Insert it at the target position
+    items.splice(targetIndex, 0, draggedItem);
+    
+    // Update local list
+    listPitches.value = items;
+    draggedIndex.value = null;
+
+    // Persist to database
+    isUpdatingOrder.value = true;
+    try {
+      const orderedIds = items.map((p) => p.id);
+      await updatePitchesOrder(orderedIds);
+    } catch (err) {
+      console.error("Failed to update pitches order:", err);
+    } finally {
+      isUpdatingOrder.value = false;
+    }
+  });
+
   const openEditPage = $((pitch: any) => {
     nav(`/admin/pitches/${pitch.id}`);
   });
@@ -191,6 +263,15 @@ export default component$(() => {
           <h2 class="flex items-center gap-2 text-xl font-bold text-slate-800">
             <span class="h-6 w-1 rounded-full bg-slate-800"></span>
             Listado de Canchas
+            {isUpdatingOrder.value && (
+              <span class="flex items-center gap-1.5 ml-3 text-xs font-semibold text-emerald-600 animate-pulse bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                <svg class="animate-spin h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Guardando orden...
+              </span>
+            )}
           </h2>
 
           <div class="flex shrink-0 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
@@ -255,25 +336,40 @@ export default component$(() => {
 
         {viewMode.value === "grid" ? (
           <div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {pitchesData.value.map((pitch, index) => (
-              <PitchCard
+            {listPitches.value.map((pitch, index) => (
+              <div
                 key={pitch.id}
-                pitch={pitch}
-                index={index}
-                onEdit$={openEditPage}
-                toggleStatusAction={toggleStatusAction}
-              />
+                draggable
+                onDragStart$={() => handleDragStart(index)}
+                onDragOver$={(e) => handleDragOver(e)}
+                onDrop$={() => handleDrop(index)}
+                class={[
+                  "cursor-move transition-all duration-300",
+                  draggedIndex.value === index && "opacity-40 scale-95 border-2 border-dashed border-emerald-500 rounded-[2rem] bg-slate-100/50"
+                ]}
+              >
+                <PitchCard
+                  pitch={pitch}
+                  index={index}
+                  onEdit$={openEditPage}
+                  toggleStatusAction={toggleStatusAction}
+                />
+              </div>
             ))}
           </div>
         ) : (
           <PitchTableView
-            pitches={pitchesData.value}
+            pitches={listPitches.value}
             onEdit$={openEditPage}
             toggleStatusAction={toggleStatusAction}
+            draggedIndex={draggedIndex.value}
+            onDragStart$={handleDragStart}
+            onDragOver$={handleDragOver}
+            onDrop$={handleDrop}
           />
         )}
 
-        {pitchesData.value.length === 0 && (
+        {listPitches.value.length === 0 && (
           <div class="col-span-full rounded-[2rem] border-2 border-dashed border-slate-200 bg-white p-16 text-center">
             <div class="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-slate-50 text-slate-300">
               <svg

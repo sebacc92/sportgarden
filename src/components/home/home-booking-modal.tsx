@@ -38,6 +38,8 @@ export type HomeBookingModalProps = {
   guestAction: any;
   userAction: any;
   confirmarPagoPaywayAction: any;
+  initialDate?: Signal<string>;
+  initialTime?: Signal<string>;
 };
 
 export const isWithinOperatingHoursHelper = (
@@ -185,6 +187,8 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
     guestAction,
     userAction,
     confirmarPagoPaywayAction,
+    initialDate,
+    initialTime,
   }) => {
     const getLocalDateString = (offset = 0) => {
       const d = new Date();
@@ -197,6 +201,7 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
 
     const dateStr = useSignal("");
     const timeStr = useSignal("");
+
     const occupiedSlots = useSignal<{ startTime: string; endTime: string }[]>(
       [],
     );
@@ -299,8 +304,8 @@ export const HomeBookingModal = component$<HomeBookingModalProps>(
         return;
       }
       ctx.track(() => selectedPitchId.value);
-      dateStr.value = "";
-      timeStr.value = "";
+      dateStr.value = initialDate?.value || "";
+      timeStr.value = initialTime?.value || "";
       durationStr.value = "60";
       occupiedSlots.value = [];
       selectedExtras.value = [];

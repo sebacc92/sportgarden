@@ -136,8 +136,19 @@ export default component$(() => {
 
   const isModalOpen = useSignal(false);
   const selectedPitchId = useSignal("");
+  const prefilledDate = useSignal("");
+  const prefilledTime = useSignal("");
 
   const openBookingModal = $((pitchId: string) => {
+    prefilledDate.value = "";
+    prefilledTime.value = "";
+    selectedPitchId.value = pitchId;
+    isModalOpen.value = true;
+  });
+
+  const openBookingModalWithTime = $((pitchId: string, dateStr: string, time: string) => {
+    prefilledDate.value = dateStr;
+    prefilledTime.value = time;
     selectedPitchId.value = pitchId;
     isModalOpen.value = true;
   });
@@ -165,6 +176,9 @@ export default component$(() => {
       <PitchesGrid
         pitches={activePitches.value}
         onReserve={openBookingModal}
+        onReserveWithTime$={openBookingModalWithTime}
+        operatingHours={aiSettings.value?.operatingHours || []}
+        holidays={aiSettings.value?.holidays || []}
         theme="light"
       />
 
@@ -221,6 +235,8 @@ export default component$(() => {
         guestAction={guestAction}
         userAction={userAction}
         confirmarPagoPaywayAction={confirmarPagoPaywayAction}
+        initialDate={prefilledDate}
+        initialTime={prefilledTime}
       />
 
       <HomeFooter settings={aiSettings.value ?? {}} />

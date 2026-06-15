@@ -7,6 +7,10 @@ interface PitchTableViewProps {
   pitches: any[];
   onEdit$: PropFunction<(pitch: any) => void>;
   toggleStatusAction: any;
+  draggedIndex?: number | null;
+  onDragStart$?: PropFunction<(index: number) => void>;
+  onDragOver$?: PropFunction<(event: any) => void>;
+  onDrop$?: PropFunction<(index: number) => void>;
 }
 
 export const PitchTableView = component$((props: PitchTableViewProps) => {
@@ -30,15 +34,21 @@ export const PitchTableView = component$((props: PitchTableViewProps) => {
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            {pitches.map((pitch) => {
+            {pitches.map((pitch, index) => {
               const isToggling =
                 toggleStatusAction.isRunning &&
                 toggleStatusAction.formData?.get("id") === pitch.id;
               return (
                 <tr
                   key={pitch.id}
+                  draggable={!!props.onDragStart$}
+                  onDragStart$={props.onDragStart$ ? () => props.onDragStart$!(index) : undefined}
+                  onDragOver$={props.onDragOver$ ? (e) => props.onDragOver$!(e) : undefined}
+                  onDrop$={props.onDrop$ ? () => props.onDrop$!(index) : undefined}
                   class={[
                     "transition-colors hover:bg-slate-50/50",
+                    props.onDragStart$ && "cursor-move",
+                    props.draggedIndex === index && "opacity-40 bg-emerald-50/50",
                     !pitch.isActive && "opacity-70",
                   ]}
                 >

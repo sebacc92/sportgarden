@@ -20,10 +20,6 @@ export const PromoPopup = component$((props: PromoPopupProps) => {
   useVisibleTask$(() => {
     if (!popup || !popup.isActive) return;
 
-    // Check if user has already closed/seen the popup in this session
-    const hasSeen = sessionStorage.getItem("sg_seen_promo");
-    if (hasSeen === "true") return;
-
     // Open popup with a nice premium delay
     const timer = setTimeout(() => {
       isVisible.value = true;
@@ -34,7 +30,6 @@ export const PromoPopup = component$((props: PromoPopupProps) => {
 
   const closePopup = $(() => {
     isVisible.value = false;
-    sessionStorage.setItem("sg_seen_promo", "true");
   });
 
   if (!popup || !popup.isActive || !isVisible.value) return null;

@@ -1,0 +1,201 @@
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+  .no-print { display: none !important; }
+  .print-day-view, .print-day-view * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+}
+
+.print-day-view {
+  color: #0f172a;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 11px;
+  line-height: 1.3;
+  background: #fff;
+  padding: 4mm;
+}
+.print-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  border-bottom: 1.5px solid #0f172a;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+.print-day-club { font-size: 16px; font-weight: 900; letter-spacing: -0.01em; }
+.print-day-club-sub { font-size: 10px; color: #475569; }
+.print-day-header-right { text-align: right; }
+.print-day-date {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+.print-day-meta { font-size: 9px; color: #64748b; }
+
+.print-day-grid-wrap {
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.print-day-grid {
+  display: grid;
+  grid-template-rows: 26px auto;
+  width: 100%;
+}
+.print-day-corner {
+  background: #f1f5f9;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1.5px solid #cbd5e1;
+}
+.print-day-pitch-head {
+  background: #f1f5f9;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1.5px solid #cbd5e1;
+  text-align: center;
+  padding: 2px;
+}
+.print-day-pitch-head:last-child { border-right: 0; }
+.print-day-pitch-name { font-size: 11px; font-weight: 800; }
+.print-day-pitch-sub { font-size: 8px; color: #64748b; font-weight: 700; }
+
+.print-day-hours {
+  position: relative;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+}
+.print-day-hour-label {
+  position: absolute;
+  right: 4px;
+  transform: translateY(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+.print-day-col {
+  position: relative;
+  border-right: 1px solid #e2e8f0;
+}
+.print-day-col:last-child { border-right: 0; }
+.print-day-gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed #e2e8f0;
+}
+.print-day-booking {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-left: 3px solid #3b82f6;
+  border-radius: 3px;
+  padding: 2px 4px;
+  overflow: hidden;
+  font-size: 9px;
+}
+.print-day-booking-time { font-weight: 700; color: #334155; font-size: 8px; }
+.print-day-booking-tag {
+  display: inline-block;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 7px;
+  font-weight: 800;
+  margin-left: 2px;
+}
+.print-day-booking-name {
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.print-day-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 9px;
+  color: #475569;
+  margin: 4px 0 8px;
+}
+.print-day-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.print-day-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.print-day-legend-note { font-style: italic; color: #64748b; }
+
+.print-day-detail-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+  color: #334155;
+}
+.print-day-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.print-day-table th {
+  text-align: left;
+  background: #f1f5f9;
+  padding: 3px 6px;
+  border-bottom: 1px solid #cbd5e1;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 8px;
+  color: #475569;
+  letter-spacing: 0.04em;
+}
+.print-day-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid #e2e8f0;
+  vertical-align: top;
+}
+.print-day-row-school td { color: #9a3412; background: #fff7ed; }
+.print-day-row-tag {
+  background: #e2e8f0;
+  color: #334155;
+  padding: 0 3px;
+  border-radius: 2px;
+  font-size: 8px;
+  font-weight: 800;
+}
+.print-day-paid { font-weight: 800; color: #047857; }
+.print-day-owes { font-weight: 800; color: #b45309; }
+.print-day-empty { padding: 16px; color: #94a3b8; font-style: italic; }
+
+.print-day-totals {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1.5px solid #0f172a;
+  font-size: 10px;
+}
+.print-day-totals span { margin-right: 10px; }
+.print-day-totals strong { font-size: 11px; }

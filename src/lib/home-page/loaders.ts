@@ -104,6 +104,56 @@ export const useGalleryLoader = routeLoader$(async (requestEvent) => {
   return (settings?.galleryImages as string[] | null) ?? [];
 });
 
+export const getAllPitchesBookings = server$(async function (
+  this: RequestEventBase,
+  dateStr: string,
+): Promise<Record<string, { startTime: string; endTime: string }[]>> {
+  const db = getDB(this);
+  if (!dateStr) return {};
+
+  const startOfDay = new Date(`${dateStr}T00:00:00`);
+  const endOfDay = new Date(`${dateStr}T23:59:59`);
+
+  const [{ data: bookingsData, error: bookingsErr }, { data: overlapsData, error: overlapsErr }] =
+    await Promise.all([
+      db
+        .from(bookings)
+        .select("pitch_id, start_time, end_time")
+        .gte("start_time", startOfDay.toISOString())
+        .lt("start_time", endOfDay.toISOString())
+        .in("status", ["CONFIRMED", "PENDING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"]),
+      db.from(pitchOverlaps).select("pitch_id, overlap_pitch_id"),
+    ]);
+
+  if (bookingsErr) throw new Error(bookingsErr.message);
+  if (overlapsErr) throw new Error(overlapsErr.message);
+
+  const rawBookings = camelize<{ pitchId: string; startTime: string; endTime: string }[]>(
+    bookingsData || [],
+  );
+  const overlaps = camelize<{ pitchId: string; overlapPitchId: string }[]>(overlapsData || []);
+
+  const result: Record<string, { startTime: string; endTime: string }[]> = {};
+
+  const addSlot = (pitchId: string, slot: { startTime: string; endTime: string }) => {
+    if (!result[pitchId]) result[pitchId] = [];
+    if (!result[pitchId].some((s) => s.startTime === slot.startTime)) {
+      result[pitchId].push(slot);
+    }
+  };
+
+  for (const booking of rawBookings) {
+    const slot = { startTime: booking.startTime, endTime: booking.endTime };
+    addSlot(booking.pitchId, slot);
+    for (const o of overlaps) {
+      if (o.pitchId === booking.pitchId) addSlot(o.overlapPitchId, slot);
+      if (o.overlapPitchId === booking.pitchId) addSlot(o.pitchId, slot);
+    }
+  }
+
+  return result;
+});
+
 export const getDailyBookings = server$(async function (this: RequestEventBase, pitchId: string, dateStr: string) {
   const db = getDB(this);
   if (!pitchId || !dateStr) return [];
