@@ -1371,12 +1371,12 @@ export default component$(() => {
                             </div>
                             <div class="flex flex-wrap gap-2">
                               {selectedMovement.value.booking.extras.map(
-                                (extra: string) => (
+                                (extra: { name: string; price: number }) => (
                                   <span
-                                    key={extra}
+                                    key={extra.name}
                                     class="rounded-lg border border-blue-100 bg-blue-50 px-2 py-1 text-[10px] font-black tracking-tight text-blue-600 uppercase"
                                   >
-                                    {extra}
+                                    {extra.name} +${Math.round(Number(extra.price))}
                                   </span>
                                 ),
                               )}

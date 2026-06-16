@@ -310,6 +310,21 @@ export const BookingDetailsModal = component$<BookingDetailsModalProps>(
                       </div>
                     </div>
                   </div>
+                  {/* Extras breakdown */}
+                  {Array.isArray(selectedBookingDetails.booking.extras) &&
+                    selectedBookingDetails.booking.extras.length > 0 && (
+                      <div class="space-y-1.5 border-b border-white/10 py-3">
+                        <div class="mb-2 text-[9px] font-black tracking-widest text-slate-400 uppercase">
+                          Servicios Adicionales
+                        </div>
+                        {selectedBookingDetails.booking.extras.map((extra: any) => (
+                          <div key={extra.name} class="flex justify-between text-xs">
+                            <span class="text-slate-300">{extra.name}</span>
+                            <span class="font-bold text-white">+${Math.round(Number(extra.price))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   <div class="space-y-3 border-t border-white/10 pt-4">
                     <div class="flex items-baseline justify-between">
                       <span class="text-[10px] font-black tracking-widest text-slate-400 uppercase">

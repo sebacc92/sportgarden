@@ -334,7 +334,7 @@ export default component$(() => {
   const adminApplyDiscount = useSignal(false);
   const adminDiscountAmount = useSignal<number | "">(0);
   const adminDiscountType = useSignal<"FIXED" | "PERCENTAGE">("FIXED");
-  const adminSelectedExtras = useSignal<string[]>([]);
+  const adminSelectedExtras = useSignal<{ name: string; price: number }[]>([]);
   const adminIsFullPayment = useSignal(false);
   const adminPaidAmount = useSignal<number | "">("");
 

@@ -49,7 +49,7 @@ interface CreateBookingModalProps {
   adminApplyDiscount: Signal<boolean>;
   adminDiscountAmount: Signal<number | "">;
   adminDiscountType: Signal<"FIXED" | "PERCENTAGE">;
-  adminSelectedExtras: Signal<string[]>;
+  adminSelectedExtras: Signal<{ name: string; price: number }[]>;
   adminIsFullPayment: Signal<boolean>;
   adminPaidAmount: Signal<number | "">;
 }
@@ -312,12 +312,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>(
               }
 
               const extrasCost = adminSelectedExtras.value.reduce(
-                (acc, name) => {
-                  const extra = calendarData.extraServices.find(
-                    (e: any) => e.name === name,
-                  );
-                  return acc + (extra ? extra.price : 0);
-                },
+                (acc, e) => acc + (Number(e.price) || 0),
                 0,
               );
               const discount =
@@ -1161,8 +1156,8 @@ export const CreateBookingModal = component$<CreateBookingModalProps>(
                             <div class="flex flex-wrap gap-2">
                               {calendarData.extraServices.map((extra: any) => {
                                 const isSelected =
-                                  adminSelectedExtras.value.includes(
-                                    extra.name,
+                                  adminSelectedExtras.value.some(
+                                    (e) => e.name === extra.name,
                                   );
                                 return (
                                   <button
@@ -1172,12 +1167,12 @@ export const CreateBookingModal = component$<CreateBookingModalProps>(
                                       if (isSelected) {
                                         adminSelectedExtras.value =
                                           adminSelectedExtras.value.filter(
-                                            (e) => e !== extra.name,
+                                            (e) => e.name !== extra.name,
                                           );
                                       } else {
                                         adminSelectedExtras.value = [
                                           ...adminSelectedExtras.value,
-                                          extra.name,
+                                          { name: extra.name, price: Number(extra.price) },
                                         ];
                                       }
                                     }}

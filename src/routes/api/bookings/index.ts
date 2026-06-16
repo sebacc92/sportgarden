@@ -152,7 +152,7 @@ export const useGuestBookingAction = routeAction$(
     const holidays =
       (settings?.holidays as any[])?.map((h: any) => h.date) || [];
 
-    const totalPrice = calculateProportionalPrice(
+    const pitchPrice = calculateProportionalPrice(
       data.date,
       data.time,
       data.duration,
@@ -160,6 +160,13 @@ export const useGuestBookingAction = routeAction$(
       pitch.pricingRules,
       holidays,
     );
+
+    const parsedExtras: { name: string; price: number }[] = data.extras
+      ? data.extras.map((e: string) => JSON.parse(e))
+      : [];
+
+    const extrasTotal = parsedExtras.reduce((sum, e) => sum + (Number(e.price) || 0), 0);
+    const totalPrice = pitchPrice + extrasTotal;
 
     const bookingId = crypto.randomUUID();
 
@@ -175,9 +182,7 @@ export const useGuestBookingAction = routeAction$(
         paidAmount: 0,
         paymentStatus: "PENDING",
         paymentMethod: data.paymentMethod || "CASH",
-        extras: data.extras
-          ? data.extras.map((e: string) => JSON.parse(e))
-          : null,
+        extras: parsedExtras.length > 0 ? parsedExtras : null,
       })
     );
 
@@ -289,7 +294,7 @@ export const useUserBookingAction = routeAction$(
     const holidays =
       (settings?.holidays as any[])?.map((h: any) => h.date) || [];
 
-    const totalPrice = calculateProportionalPrice(
+    const pitchPrice = calculateProportionalPrice(
       data.date,
       data.time,
       data.duration,
@@ -297,6 +302,13 @@ export const useUserBookingAction = routeAction$(
       pitch.pricingRules,
       holidays,
     );
+
+    const parsedExtras: { name: string; price: number }[] = data.extras
+      ? data.extras.map((e: string) => JSON.parse(e))
+      : [];
+
+    const extrasTotal = parsedExtras.reduce((sum, e) => sum + (Number(e.price) || 0), 0);
+    const totalPrice = pitchPrice + extrasTotal;
 
     let amountToCharge = 0;
     let paymentMethod = "CASH";
@@ -413,9 +425,7 @@ export const useUserBookingAction = routeAction$(
         paidAmount: 0,
         paymentStatus: "PENDING",
         paymentMethod: paymentMethod,
-        extras: data.extras
-          ? data.extras.map((e: string) => JSON.parse(e))
-          : null,
+        extras: parsedExtras.length > 0 ? parsedExtras : null,
       })
     );
 
