@@ -157,7 +157,7 @@ export const PrintDayView = component$<PrintDayViewProps>((props) => {
               ? `${todaySchedule.openTime} a ${todaySchedule.closeTime}`
               : "—"}
             {"  ·  "}
-            Generado: {new Date().toLocaleString("es-AR")}
+            Generado: {new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}
           </div>
         </div>
       </div>
