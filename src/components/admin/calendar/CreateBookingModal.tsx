@@ -566,7 +566,7 @@ export const CreateBookingModal = component$<CreateBookingModalProps>(
                                 (adminSelectedUserPhone.value = el.value)
                               }
                               readOnly={!!adminSelectedUserId.value}
-                              placeholder="Ej: 1123456789"
+                              placeholder="Ej: 1144796321"
                               class={[
                                 "w-full rounded-xl border px-4 py-2.5 text-sm font-medium focus:outline-none",
                                 adminSelectedUserId.value

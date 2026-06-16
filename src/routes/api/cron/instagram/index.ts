@@ -57,13 +57,13 @@ export const onGet: RequestHandler = async (requestEvent) => {
         return {
           id: post.id,
           permalink: post.permalink || "",
-          mediaUrl: imageUrl || "",
-          mediaType: post.mediaType || "IMAGE",
+          media_url: imageUrl || "",
+          media_type: post.mediaType || "IMAGE",
           caption: post.caption || "",
           timestamp: post.timestamp || new Date().toISOString(),
         };
       })
-      .filter((p) => p.id && p.mediaUrl && p.permalink);
+      .filter((p) => p.id && p.media_url && p.permalink);
 
     if (postsToInsert.length === 0) {
       json(200, {

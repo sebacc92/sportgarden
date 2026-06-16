@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS = {
     "Hola! Soy el Asistente de GardenClubFutbol, ¿en qué te puedo ayudar hoy?",
   aiCallToAction:
     "Para más info o reservas directas, escribinos a nuestro WhatsApp:",
-  whatsappNumber: "5491112345678",
+  whatsappNumber: "5491144796321",
   aiAvatarUrl: null,
   updatedAt: null,
 };
@@ -133,7 +133,7 @@ export const useUpdateAiSettingsAction = routeAction$(
             aiKnowledge: data.aiKnowledge || null,
             aiInitialGreeting: data.aiInitialGreeting || null,
             aiCallToAction: data.aiCallToAction || null,
-            whatsappNumber: data.whatsappNumber || "5491112345678",
+            whatsappNumber: data.whatsappNumber || "5491144796321",
             aiAvatarUrl: uploadedImageUrl,
             updatedAt: new Date().toISOString(),
           })

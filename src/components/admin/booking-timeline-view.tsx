@@ -45,100 +45,87 @@ type Props = {
   >;
 };
 
+// TYPES use a spread-out palette (blue/violet/fuchsia/teal/pink) — intentionally
+// disjoint from the STATUS "traffic-light" palette (green/amber/orange/red/grey)
+// so a card's type tint never collides with its status badge. Eventual (blue)
+// and Fijo (violet) are kept far apart since they're the two most common types.
 const ALL_TYPES = [
   {
     key: "EVENTUAL",
     label: "Eventual",
     dot: "bg-blue-500",
-    chip: "bg-blue-50 text-blue-800 border-blue-200",
-    active: "bg-blue-500 text-white border-blue-600",
+    chip: "bg-blue-50 text-blue-700 border-blue-300",
   },
   {
     key: "FIXED",
     label: "Fijo",
-    dot: "bg-emerald-500",
-    chip: "bg-emerald-50 text-emerald-800 border-emerald-200",
-    active: "bg-emerald-500 text-white border-emerald-600",
+    dot: "bg-violet-500",
+    chip: "bg-violet-50 text-violet-700 border-violet-300",
   },
   {
     key: "BIRTHDAY",
     label: "Cumpleaños",
-    dot: "bg-violet-500",
-    chip: "bg-violet-50 text-violet-800 border-violet-200",
-    active: "bg-violet-500 text-white border-violet-600",
+    dot: "bg-fuchsia-500",
+    chip: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-300",
   },
   {
     key: "SCHOOL",
     label: "Escuelita",
-    dot: "bg-orange-500",
-    chip: "bg-orange-50 text-orange-800 border-orange-200",
-    active: "bg-orange-500 text-white border-orange-600",
+    dot: "bg-teal-500",
+    chip: "bg-teal-50 text-teal-700 border-teal-300",
   },
   {
     key: "TOURNAMENT",
     label: "Torneo",
     dot: "bg-pink-500",
-    chip: "bg-pink-50 text-pink-800 border-pink-200",
-    active: "bg-pink-500 text-white border-pink-600",
+    chip: "bg-pink-50 text-pink-700 border-pink-300",
   },
 ] as const;
 
+// STATUSES keep semantic traffic-light colors (green/amber/orange/red/grey).
 const ALL_STATUSES = [
   {
     key: "CONFIRMED",
     label: "Confirmado",
     dot: "bg-emerald-500",
-    chip: "bg-emerald-100 text-emerald-800 border-emerald-300",
-    active: "bg-emerald-500 text-white border-emerald-600",
+    chip: "bg-emerald-50 text-emerald-700 border-emerald-300",
   },
   {
     key: "PENDING_APPROVAL",
     label: "Pendiente",
     dot: "bg-amber-400",
-    chip: "bg-amber-100 text-amber-800 border-amber-300",
-    active: "bg-amber-400 text-white border-amber-500",
+    chip: "bg-amber-50 text-amber-700 border-amber-300",
   },
   {
     key: "PENDING_PAYMENT",
     label: "Pendiente Pago",
     dot: "bg-orange-500",
-    chip: "bg-orange-100 text-orange-800 border-orange-300",
-    active: "bg-orange-500 text-white border-orange-600",
+    chip: "bg-orange-50 text-orange-700 border-orange-300",
   },
   {
     key: "CANCELLED",
     label: "Cancelado",
-    dot: "bg-red-400",
-    chip: "bg-red-100 text-red-800 border-red-300",
-    active: "bg-red-500 text-white border-red-600",
+    dot: "bg-red-500",
+    chip: "bg-red-50 text-red-700 border-red-300",
   },
   {
     key: "COMPLETED",
     label: "Completado",
     dot: "bg-slate-400",
-    chip: "bg-slate-100 text-slate-700 border-slate-300",
-    active: "bg-slate-600 text-white border-slate-700",
+    chip: "bg-slate-100 text-slate-600 border-slate-300",
   },
 ] as const;
 
-const STATUS_ACTIVE_STYLE: Record<
-  string,
-  { bg: string; text: string; border: string }
-> = {
-  CONFIRMED: { bg: "#10b981", text: "#fff", border: "#059669" },
-  PENDING_APPROVAL: { bg: "#fbbf24", text: "#fff", border: "#f59e0b" },
-  PENDING_PAYMENT: { bg: "#f97316", text: "#fff", border: "#ea580c" },
-  CANCELLED: { bg: "#ef4444", text: "#fff", border: "#dc2626" },
-  COMPLETED: { bg: "#475569", text: "#fff", border: "#334155" },
+const TYPE_CARD: Record<string, string> = {
+  EVENTUAL:   "bg-blue-50    border-l-blue-500    border-y-blue-200    border-r-blue-200",
+  FIXED:      "bg-violet-50  border-l-violet-500  border-y-violet-200  border-r-violet-200",
+  BIRTHDAY:   "bg-fuchsia-50 border-l-fuchsia-500 border-y-fuchsia-200 border-r-fuchsia-200",
+  TOURNAMENT: "bg-pink-50    border-l-pink-500    border-y-pink-200    border-r-pink-200",
+  SCHOOL:     "bg-teal-50    border-l-teal-500    border-y-teal-200    border-r-teal-200",
 };
 
-const TYPE_CARD: Record<string, string> = {
-  EVENTUAL:   "bg-white border-l-blue-500   border-y-blue-100   border-r-blue-100",
-  FIXED:      "bg-white border-l-emerald-500 border-y-emerald-100 border-r-emerald-100",
-  BIRTHDAY:   "bg-white border-l-violet-500  border-y-violet-100  border-r-violet-100",
-  TOURNAMENT: "bg-white border-l-rose-500    border-y-rose-100    border-r-rose-100",
-  SCHOOL:     "bg-white border-l-orange-500  border-y-orange-100  border-r-orange-100",
-};
+const CANCELLED_CARD =
+  "bg-slate-50 border-l-slate-300 border-y-slate-200 border-r-slate-200 opacity-70";
 
 const STATUS_CARD: Record<string, string> = {
   PENDING_APPROVAL: "bg-amber-50  border-l-amber-500  border-y-amber-100  border-r-amber-100",
@@ -148,20 +135,22 @@ const STATUS_CARD: Record<string, string> = {
   COMPLETED:        "bg-slate-50  border-l-slate-400   border-y-slate-100  border-r-slate-100",
 };
 
-const TYPE_META: Record<string, { abbr: string; nameColor: string; pillBg: string; pillText: string }> = {
-  EVENTUAL:   { abbr: "EVT",  nameColor: "text-blue-900",    pillBg: "bg-blue-100",    pillText: "text-blue-700" },
-  FIXED:      { abbr: "FIJO", nameColor: "text-emerald-900", pillBg: "bg-emerald-100", pillText: "text-emerald-700" },
-  BIRTHDAY:   { abbr: "CUMP", nameColor: "text-violet-900",  pillBg: "bg-violet-100",  pillText: "text-violet-700" },
-  TOURNAMENT: { abbr: "TORN", nameColor: "text-rose-900",    pillBg: "bg-rose-100",    pillText: "text-rose-700" },
-  SCHOOL:     { abbr: "ESC",  nameColor: "text-orange-900",  pillBg: "bg-orange-100",  pillText: "text-orange-700" },
+// Type pill = solid color of the type → the unambiguous "what kind" label.
+const TYPE_META: Record<string, { label: string; nameColor: string; pillBg: string; pillText: string }> = {
+  EVENTUAL:   { label: "Eventual",   nameColor: "text-blue-900",    pillBg: "bg-blue-500",    pillText: "text-white" },
+  FIXED:      { label: "Fijo",       nameColor: "text-violet-900",  pillBg: "bg-violet-500",  pillText: "text-white" },
+  BIRTHDAY:   { label: "Cumpleaños", nameColor: "text-fuchsia-900", pillBg: "bg-fuchsia-500", pillText: "text-white" },
+  TOURNAMENT: { label: "Torneo",     nameColor: "text-pink-900",    pillBg: "bg-pink-500",    pillText: "text-white" },
+  SCHOOL:     { label: "Escuelita",  nameColor: "text-teal-900",    pillBg: "bg-teal-500",    pillText: "text-white" },
 };
 
+// Status badge = solid saturated traffic-light color → the "what state" label.
 const STATUS_BADGE: Record<string, string> = {
   PENDING_APPROVAL: "bg-amber-400 text-white",
   PENDING_PAYMENT:  "bg-orange-500 text-white",
-  CONFIRMED:        "bg-emerald-100 text-emerald-700",
-  CANCELLED:        "bg-red-100 text-red-700",
-  COMPLETED:        "bg-slate-200 text-slate-600",
+  CONFIRMED:        "bg-emerald-500 text-white",
+  CANCELLED:        "bg-red-500 text-white",
+  COMPLETED:        "bg-slate-400 text-white",
 };
 
 const STATUS_LABEL_SHORT: Record<string, string> = {
@@ -340,16 +329,18 @@ export const BookingTimelineView = component$<Props>(
               <button
                 key={t.key}
                 onClick$={() => toggleType(t.key)}
+                title={isActive ? `Ocultar ${t.label}` : `Mostrar ${t.label}`}
                 class={[
                   "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-black transition-all",
-                  isActive ? t.active : t.chip,
-                  isActive ? "" : "opacity-50",
+                  isActive
+                    ? t.chip
+                    : "border-slate-200 bg-white text-slate-400 opacity-60 hover:opacity-100",
                 ]}
               >
                 <span
                   class={[
-                    "h-2 w-2 shrink-0 rounded-full",
-                    isActive ? "bg-white/80" : t.dot,
+                    "h-2 w-2 shrink-0 rounded-full transition-colors",
+                    isActive ? t.dot : "bg-slate-300",
                   ]}
                 />
                 {t.label}
@@ -362,38 +353,40 @@ export const BookingTimelineView = component$<Props>(
           <span class="mr-1 text-[10px] font-black tracking-widest text-slate-400 uppercase">
             Estados:
           </span>
+
+          <button
+            onClick$={() => {
+              activeStatuses.value = new Set(ALL_STATUSES.map((s) => s.key));
+            }}
+            class={[
+              "rounded-full border px-3 py-1 text-[11px] font-black transition-all",
+              activeStatuses.value.size === ALL_STATUSES.length
+                ? "border-slate-900 bg-slate-800 text-white"
+                : "border-slate-300 bg-white text-slate-500 hover:border-slate-500",
+            ]}
+          >
+            Todos
+          </button>
+
           {ALL_STATUSES.map((s) => {
             const isActive = activeStatuses.value.has(s.key);
-            const activeStyle = STATUS_ACTIVE_STYLE[s.key];
             return (
               <button
                 key={s.key}
                 onClick$={() => toggleStatus(s.key)}
+                title={isActive ? `Ocultar ${s.label}` : `Mostrar ${s.label}`}
                 class={cn(
                   "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-black transition-all",
-                  !isActive && s.chip,
-                  !isActive && "opacity-60",
-                )}
-                style={
                   isActive
-                    ? {
-                        backgroundColor: activeStyle.bg,
-                        color: activeStyle.text,
-                        borderColor: activeStyle.border,
-                      }
-                    : undefined
-                }
+                    ? s.chip
+                    : "border-slate-200 bg-white text-slate-400 opacity-60 hover:opacity-100",
+                )}
               >
                 <span
                   class={cn(
-                    "h-2 w-2 shrink-0 rounded-full",
-                    !isActive && s.dot,
+                    "h-2 w-2 shrink-0 rounded-full transition-colors",
+                    isActive ? s.dot : "bg-slate-300",
                   )}
-                  style={
-                    isActive
-                      ? { backgroundColor: "rgba(255,255,255,0.7)" }
-                      : undefined
-                  }
                 />
                 {s.label}
               </button>
@@ -652,12 +645,15 @@ export const BookingTimelineView = component$<Props>(
 
                             const name = guest?.name || user?.name || "—";
                             const isSubscription = booking.isSubscription;
+                            const isCancelled = booking.status === "CANCELLED";
                             const typeKey = booking.bookingType || (isSubscription ? "FIXED" : null);
                             const meta = typeKey ? TYPE_META[typeKey] : null;
                             const balance = booking.totalPrice - booking.paidAmount;
-                            const cardClass = typeKey
-                              ? TYPE_CARD[typeKey]
-                              : STATUS_CARD[booking.status] || "border-slate-200 bg-white";
+                            const cardClass = isCancelled
+                              ? CANCELLED_CARD
+                              : typeKey
+                                ? TYPE_CARD[typeKey]
+                                : STATUS_CARD[booking.status] || "border-slate-200 bg-white";
 
                             return (
                               <div
@@ -678,11 +674,11 @@ export const BookingTimelineView = component$<Props>(
                                 <div class="flex items-start justify-between gap-1 min-w-0">
                                   <div class="flex min-w-0 flex-1 flex-col gap-0.5">
                                     {meta && (
-                                      <span class={["w-max rounded px-1 py-0 text-[8px] font-black tracking-widest uppercase", meta.pillBg, meta.pillText]}>
-                                        {meta.abbr}
+                                      <span class={["w-max max-w-full truncate rounded px-1.5 py-0.5 text-[9px] font-black tracking-wide uppercase", meta.pillBg, meta.pillText]}>
+                                        {meta.label}
                                       </span>
                                     )}
-                                    <span class={["truncate text-[12px] leading-tight font-black", meta ? meta.nameColor : "text-slate-800"]}>
+                                    <span class={["truncate text-[12px] leading-tight font-black", isCancelled ? "text-slate-500 line-through" : meta ? meta.nameColor : "text-slate-800"]}>
                                       {name}
                                     </span>
                                   </div>

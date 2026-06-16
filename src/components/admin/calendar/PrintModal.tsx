@@ -9,6 +9,8 @@ interface PrintModalProps {
   pitches: any[];
   settings: any;
   todaySchedule: any;
+  /** Inlined calendar.css so the print window is fully styled. */
+  printCss: string;
 }
 
 export const PrintModal = component$<PrintModalProps>((props) => {
@@ -76,7 +78,41 @@ export const PrintModal = component$<PrintModalProps>((props) => {
             </Button>
             <Button
               onClick$={() => {
-                window.print();
+                // Print from a dedicated window: the agenda renders in normal
+                // document flow there, so the timeline + long detail table
+                // paginate correctly instead of being clipped inside the modal.
+                const source = document.querySelector(
+                  ".print-area .print-day-view",
+                );
+                if (!source) {
+                  window.print();
+                  return;
+                }
+                const win = window.open("", "_blank", "width=1200,height=850");
+                if (!win) {
+                  // Popup blocked → fall back to in-place print.
+                  window.print();
+                  return;
+                }
+                // Used as the default PDF filename → include the day's date.
+                const dateLabel = props.selectedDateStr
+                  .split("-")
+                  .reverse()
+                  .join("-");
+                win.document.open();
+                win.document.write(
+                  `<!doctype html><html lang="es"><head><meta charset="utf-8" />` +
+                    `<title>Reservas Garden Club ${dateLabel}</title>` +
+                    `<style>${props.printCss}</style>` +
+                    `<style>@page{size:A4 landscape;margin:8mm}` +
+                    `html,body{margin:0;padding:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}` +
+                    `</style></head><body>${source.outerHTML}</body></html>`,
+                );
+                win.document.close();
+                win.focus();
+                win.onafterprint = () => win.close();
+                // Let the new document lay out before invoking the print dialog.
+                setTimeout(() => win.print(), 350);
                 props.isPrintModalOpen.value = false;
               }}
               class="flex items-center gap-2 rounded-xl bg-slate-800 px-8 py-3 font-black text-white shadow-lg transition-all hover:bg-slate-900"

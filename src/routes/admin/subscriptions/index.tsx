@@ -1781,7 +1781,7 @@ export default component$(() => {
                         name="phone"
                         value={newOwnerPhone.value}
                         onInput$={(_, el) => (newOwnerPhone.value = el.value)}
-                        placeholder="Ej: 1123456789"
+                        placeholder="Ej: 1144796321"
                         class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                       />
                     </div>

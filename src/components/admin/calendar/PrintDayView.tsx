@@ -12,8 +12,6 @@ interface PrintDayViewProps {
   todaySchedule: any;
 }
 
-const ROW_HEIGHT_PX = 28;
-
 const fmt2 = (n: number) => String(n).padStart(2, "0");
 
 const fmtHHMM = (date: Date) => {
@@ -63,13 +61,13 @@ const bookingKindLabel = (b: any) => {
 };
 
 const accentColor = (b: any): string => {
-  if (b.isSchool) return "#fb923c"; // orange-400
-  if (b.bookingType === "FIXED" || b.isSubscription) return "#10b981"; // emerald-500
-  if (b.bookingType === "BIRTHDAY") return "#8b5cf6"; // violet-500
-  if (b.bookingType === "TOURNAMENT") return "#ec4899"; // pink-500
+  if (b.isSchool) return "#14b8a6"; // teal-500 (Escuelita)
+  if (b.bookingType === "FIXED" || b.isSubscription) return "#8b5cf6"; // violet-500 (Fijo)
+  if (b.bookingType === "BIRTHDAY") return "#d946ef"; // fuchsia-500 (Cumpleaños)
+  if (b.bookingType === "TOURNAMENT") return "#ec4899"; // pink-500 (Torneo)
   if (b.status === "PENDING_APPROVAL") return "#f59e0b"; // amber-500
   if (b.status === "PENDING_PAYMENT") return "#f97316"; // orange-500
-  return "#3b82f6"; // blue-500
+  return "#3b82f6"; // blue-500 (Eventual)
 };
 
 export const PrintDayView = component$<PrintDayViewProps>((props) => {
@@ -79,6 +77,11 @@ export const PrintDayView = component$<PrintDayViewProps>((props) => {
   const dayEnd = Math.ceil(parseHour(todaySchedule?.closeTime, 23));
   const totalHours = Math.max(1, dayEnd - dayStart);
   const hours = Array.from({ length: totalHours + 1 }, (_, i) => dayStart + i);
+
+  // Stretch each hour row so the timeline fills ~one printed A4 landscape page
+  // instead of leaving the lower half blank. We divide the page height left for
+  // the grid by the number of open hours, keeping a readable minimum.
+  const ROW_HEIGHT_PX = Math.max(30, Math.floor(580 / totalHours));
 
   const activePitches = pitches.filter((p: any) => p.isActive !== false);
 
@@ -263,10 +266,16 @@ export const PrintDayView = component$<PrintDayViewProps>((props) => {
           <i style={{ background: "#3b82f6" }}></i> Eventual
         </span>
         <span>
-          <i style={{ background: "#10b981" }}></i> Abono fijo
+          <i style={{ background: "#8b5cf6" }}></i> Abono fijo
         </span>
         <span>
-          <i style={{ background: "#fb923c" }}></i> Escuelita
+          <i style={{ background: "#d946ef" }}></i> Cumpleaños
+        </span>
+        <span>
+          <i style={{ background: "#14b8a6" }}></i> Escuelita
+        </span>
+        <span>
+          <i style={{ background: "#ec4899" }}></i> Torneo
         </span>
         <span>
           <i style={{ background: "#f59e0b" }}></i> Sin confirmar

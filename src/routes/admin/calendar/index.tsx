@@ -695,6 +695,7 @@ export default component$(() => {
         pitches={calendarData.value.pitches}
         settings={calendarData.value.settings}
         todaySchedule={todaySchedule}
+        printCss={printStyles}
       />
 
       <CreateBookingModal

@@ -223,7 +223,7 @@ export default component$(() => {
       )}
 
       <WhatsAppButton
-        phone={aiSettings.value?.clubPhone || aiSettings.value?.whatsappNumber || "5491112345678"}
+        phone={aiSettings.value?.clubPhone || aiSettings.value?.whatsappNumber || "5491144796321"}
       />
 
       <PromoPopup popup={aiSettings.value?.promoPopup} />

@@ -1,17 +1,19 @@
+/* Printing is done from a dedicated window (see PrintModal); these print rules
+   apply there so the agenda flows naturally across pages. */
 @media print {
-  @page { size: A4 landscape; margin: 10mm; }
-  body * { visibility: hidden; }
-  .print-area, .print-area * { visibility: visible; }
-  .print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    border: none !important;
-    box-shadow: none !important;
-    background: #fff !important;
+  @page { size: A4 landscape; margin: 8mm; }
+
+  /* Keep the timeline grid and each detail row from splitting across pages. */
+  .print-day-grid-wrap { break-inside: avoid; }
+  .print-day-table tr { break-inside: avoid; }
+  thead { display: table-header-group; }
+
+  /* Grid + legend stay on page 1; the booking detail starts on page 2. */
+  .print-day-detail {
+    break-before: page;
+    page-break-before: always;
   }
-  .no-print { display: none !important; }
+
   .print-day-view, .print-day-view * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;

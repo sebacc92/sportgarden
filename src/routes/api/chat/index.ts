@@ -178,11 +178,11 @@ INSTRUCCIONES Y REGLAS DE COMPORTAMIENTO PARA LA IA:
 - WhatsApp de Contacto: ${settings?.whatsappNumber || "No especificado"}.
 - NUNCA compartas balances, estado de caja, ingresos, egresos ni información de transacciones internas con los usuarios generales. Usa el sentido común.
 - Mantén tus respuestas claras, profesionales y enfocadas en la experiencia del cliente y la pasión por el fútbol.
-- Si te consultan por disponibilidad exacta o reservas específicas que no figuran aquí, invítalos cordialmente a usar el sistema interactivo de reservas de nuestra web o a contactarnos por WhatsApp: ${settings?.whatsappNumber || "5491112345678"}.
+- Si te consultan por disponibilidad exacta o reservas específicas que no figuran aquí, invítalos cordialmente a usar el sistema interactivo de reservas de nuestra web o a contactarnos por WhatsApp: ${settings?.whatsappNumber || "5491144796321"}.
 ${settings?.aiInstructions || "1. TRATO NEUTRO E INCLUSIVO.\n2. CERO ALUCINACIONES: Si preguntan disponibilidad exacta para una fecha, indícales que usen el sistema de reservas de la web o el WhatsApp."}
 
 LLAMADO A LA ACCIÓN:
-${settings?.aiCallToAction || "Para reservar tu turno, usá nuestra web o escribinos al WhatsApp:"} ${settings?.whatsappNumber || "5491112345678"}`;
+${settings?.aiCallToAction || "Para reservar tu turno, usá nuestra web o escribinos al WhatsApp:"} ${settings?.whatsappNumber || "5491144796321"}`;
 
     const openaiApiKey = env.get("OPENAI_API_KEY");
     if (!openaiApiKey) {
