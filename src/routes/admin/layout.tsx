@@ -32,9 +32,12 @@ export const useAdminUser = routeLoader$(async (requestEvent) => {
 
 export const useSiteSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
+  // This loader runs on EVERY navigation within /admin/*. The sidebar only
+  // needs the club status indicator, so select just those two columns instead
+  // of the full (heavy + credential-bearing) site_settings row.
   const { data, error } = await db
     .from(siteSettings)
-    .select("*")
+    .select("club_status, operating_hours")
     .eq("id", 1)
     .maybeSingle();
 

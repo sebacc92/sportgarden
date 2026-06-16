@@ -13,11 +13,17 @@ import { LuSave, LuGlobe, LuImage, LuTrash2 } from "@qwikest/icons/lucide";
 import { put } from "@vercel/blob";
 import imageCompression from "browser-image-compression";
 
+// Only the columns this page actually edits. Avoid `select("*")`: the full
+// site_settings row carries heavy fields (aiKnowledge, galleryImages, reels)
+// and sensitive payment credentials (mpAccessToken, paywayPrivateKey) that
+// would otherwise be serialized into the page HTML for Qwik resumability.
+const CONTENT_COLUMNS = "landing_texts, hero_slides, promo_popup";
+
 export const useSiteContentSettings = routeLoader$(async (requestEvent) => {
   const db = getDB(requestEvent);
   const { data, error } = await db
     .from(siteSettings)
-    .select("*")
+    .select(CONTENT_COLUMNS)
     .eq("id", 1)
     .maybeSingle();
 
@@ -32,7 +38,7 @@ export const useSiteContentSettings = routeLoader$(async (requestEvent) => {
         id: 1,
         club_name: "GardenClubFutbol",
       })
-      .select()
+      .select(CONTENT_COLUMNS)
       .maybeSingle();
 
     if (insError) throw insError;
